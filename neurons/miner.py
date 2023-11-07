@@ -341,6 +341,56 @@ def main(config):
         synapse.merkle_root = merkle_tree.get_merkle_root()
         return synapse
 
+    def GetSynapse(config):
+        # Setup CRS for this round of validation
+        g, h = setup_CRS(curve=config.curve)
+
+        # Make a random bytes file to test the miner
+        random_data = make_random_file(maxsize=config.maxsize)
+
+        # Random encryption key for now (never will decrypt)
+        key = get_random_bytes(32)  # 256-bit key
+
+        # Encrypt the data
+        encrypted_data, nonce, tag = encrypt_data(
+            random_data,
+            key,  # TODO: Use validator key as the encryption key?
+        )
+
+        # Convert to base64 for compactness
+        b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
+
+        # Hash the encrypted data
+        data_hash = hash_data(encrypted_data)
+
+        syn = synapse = storage.protocol.Store(
+            data_hash=data_hash,
+            encrypted_data=b64_encrypted_data,
+            curve=config.curve,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+        )
+        return synapse
+
+    if True:  # (debugging)
+        syn = GetSynapse(config)
+        print("syn:", syn)
+        response = store(syn)
+        cyn = storage.protocol.Challenge(
+            challenge_hash=hash_data(base64.b64decode(syn.encrypted_data)),
+            challenge_index=0,
+            chunk_size=111,
+            curve="P-256",
+            g=syn.g,
+            h=syn.h,
+        )
+        response = challenge(cyn)
+        verified = verify_challenge(response)
+        print(f"Is verified: {verified}")
+        import pdb
+
+        pdb.set_trace()
+
     # TODO: Validator code to update storage after challenge is successful
     # TODO: Encoding and decoding of merkle proofs on challenege
     # TODO: Defensive programming and error-handling around all functions
