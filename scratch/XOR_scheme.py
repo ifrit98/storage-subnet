@@ -80,3 +80,79 @@ if verify_commitment(proof, new_seed, subsequent_commitment):
     print("Commitment verified successfully.")
 else:
     print("Commitment verification failed.")
+
+
+# USE THIS ONE!*************
+"""
+In each round, the prover XORs the data D with the new seed Sn and then concatenates the result 
+with the previous commitment C(n-1) before hashing to produce the new commitment Cn.
+
+This makes Cn dependent on D, Sn, and C(n-1), meaning it requires knowledge of the original 
+data and all previous seeds up to S(n-1).
+
+For verification, the verifier would still only need the immediate previous seed and commitment.
+"""
+
+import hashlib
+import os
+
+
+def hash_data(data):
+    """Hash the data using SHA-256."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def generate_random_seed():
+    """Generate a random seed."""
+    return os.urandom(16)  # 128-bit random seed
+
+
+def xor_data(data, seed):
+    """XOR the data with the seed."""
+    return bytes([_a ^ _b for _a, _b in zip(data, seed)])
+
+
+def compute_initial_commitment(data, seed):
+    """Compute the initial commitment from the data and seed."""
+    xor_result = xor_data(data, seed)
+    return hash_data(xor_result)
+
+
+def compute_subsequent_commitment(data, previous_seed, new_seed, previous_commitment):
+    """Compute a subsequent commitment based on the original data, previous seed, new seed, and previous commitment."""
+    xor_result = xor_data(data, new_seed)
+    return hash_data(previous_commitment.encode("utf-8") + xor_result)
+
+
+def verify_commitment(
+    data, previous_seed, new_seed, previous_commitment, new_commitment
+):
+    """Verify a commitment using the data, previous seed, new seed, previous commitment, and new commitment."""
+    xor_result = xor_data(data, new_seed)
+    expected_commitment = hash_data(previous_commitment.encode("utf-8") + xor_result)
+    return expected_commitment == new_commitment
+
+
+# Example usage
+# Verifier side
+data = b"The original data to be committed to."
+initial_seed = generate_random_seed()
+initial_commitment = compute_initial_commitment(data, initial_seed)
+print(f"Initial Commitment: {initial_commitment}")
+
+# Prover side
+# Subsequent commitment, assuming the prover receives a new seed from the verifier
+new_seed = generate_random_seed()
+subsequent_commitment = compute_subsequent_commitment(
+    data, initial_seed, new_seed, initial_commitment
+)
+print(f"Subsequent Commitment: {subsequent_commitment}")
+
+# Verifier side
+# Verifier verifies the new commitment using the data, previous seed, new seed, and previous commitment
+if verify_commitment(
+    data, initial_seed, new_seed, initial_commitment, subsequent_commitment
+):
+    print("Commitment verified successfully.")
+else:
+    print("Commitment verification failed.")

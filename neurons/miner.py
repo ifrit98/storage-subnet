@@ -332,7 +332,9 @@ def main(config):
         synapse.signature = wallet.hotkey.sign(
             str(m_val)
         )  # NOTE: Does this add anything of value?
-        synapse.commitment_hash = str(m_val) # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
+        synapse.commitment_hash = str(
+            m_val
+        )  # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
 
         return synapse
 
