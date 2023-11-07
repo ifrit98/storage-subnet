@@ -35,6 +35,8 @@ class Store(bt.Synapse):
     g: str  # base point   (hex string representation)
     h: str  # random point (hex string representation)
 
+    seed: typing.Union[str, int] # random seed for the commitment
+    
     # Return signature of received data
     randomness: typing.Optional[int] = None
     commitment: typing.Optional[str] = None
@@ -43,13 +45,19 @@ class Store(bt.Synapse):
 
 
 class Challenge(bt.Synapse):
-    # Receives
+    # TODO: write deserialize
+
+    # Query parameters
     challenge_hash: str  # hash of the data to challenge
     challenge_index: int  # block indices to challenge
     chunk_size: int  # bytes (e.g. 1024) for how big the chunks should be
+
+    # Setup parameters
     g: str  # base point   (hex string representation)
     h: str  # random point (hex string representation)
     curve: str
+    seed: typing.Union[str, int] # random seed for the commitment
+
     # Returns
     # - commitment (point represented as hex string)
     # - data chunk (base64 encoded string of bytes)

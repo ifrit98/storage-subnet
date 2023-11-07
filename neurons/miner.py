@@ -375,7 +375,7 @@ def main(config):
             committer,
             data_chunks,
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
-            seed="123",
+            synapse.seed,
         )
 
         # Prepare return values to validator
@@ -416,6 +416,7 @@ def main(config):
             curve=config.curve,
             g=ecc_point_to_hex(g),
             h=ecc_point_to_hex(h),
+            seed="123",
         )
         return synapse
 
@@ -430,9 +431,10 @@ def main(config):
             curve="P-256",
             g=syn.g,
             h=syn.h,
+            seed=syn.seed,
         )
         response = challenge(cyn)
-        verified = verify_challenge_with_seed(response, seed="123")
+        verified = verify_challenge_with_seed(response, seed=syn.seed)
         print(f"Is verified: {verified}")
 
         data = database.get(syn.data_hash)
