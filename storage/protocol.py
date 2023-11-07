@@ -39,6 +39,7 @@ class Store(bt.Synapse):
     randomness: typing.Optional[int] = None
     commitment: typing.Optional[str] = None
     signature: typing.Optional[bytes] = None
+    data_hash: typing.Optional[str] = None
 
 
 class Challenge(bt.Synapse):

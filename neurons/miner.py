@@ -265,7 +265,6 @@ def main(config):
             "curve": synapse.curve,
             "data": synapse.encrypted_data,
         }
-        dumped = json.dumps(miner_store).encode()
 
         # Commit to the entire data block
         committer = ECCommitment(
@@ -276,6 +275,8 @@ def main(config):
         c, m_val, r = committer.commit(encrypted_byte_data)
 
         # Store the data with the hash as the key
+        miner_store["size"] = sys.getsizeof(encrypted_byte_data)
+        dumped = json.dumps(miner_store).encode()
         database.set(m_val, dumped)
 
         # Send back some proof that we stored the data
@@ -284,6 +285,7 @@ def main(config):
         synapse.signature = wallet.hotkey.sign(
             str(m_val)
         )  # NOTE: Does this add anything of value?
+        synapse.data_hash = str(m_val)
 
         return synapse
 
@@ -387,6 +389,11 @@ def main(config):
         response = challenge(cyn)
         verified = verify_challenge(response)
         print(f"Is verified: {verified}")
+
+        data = database.get(syn.data_hash)
+        print("fetched data:", data)
+        size = json.loads(data.decode("utf-8"))["size"]
+        print("size:", size)
         import pdb
 
         pdb.set_trace()

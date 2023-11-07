@@ -129,6 +129,11 @@ def Challenge(database):
     # - (3) the data chunk signature to verify they also have the data (redundant with 1?)
 
 
+# TODO: select a subset of miners to store given the redundancy factor N
+def select_subset_uids(uids: list, N: int):
+    pass
+
+
 def StoreRandomData():
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=config.curve)
@@ -148,21 +153,11 @@ def StoreRandomData():
     # Convert to base64 for compactness
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
 
-    # Hash the encrypted data
-    data_hash = hash_data(encrypted_data)
-
-    # Chunk the data
-    chunk_size = get_random_chunksize()
-    # chunks = list(chunk_data(encrypted_data, chunksize))
-
     syn = synapse = protocol.Store(
-        chunk_size=chunk_size,
         encrypted_data=b64_encrypted_data,
-        data_hash=data_hash,
         curve=config.curve,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        size=sys.getsizeof(encrypted_data),
     )
 
     # TODO: select subset of miners to query (e.g. redunancy factor of N)
@@ -176,34 +171,23 @@ def StoreRandomData():
     # Log the results for monitoring purposes.
     bt.logging.info(f"Received responses: {responses}")
 
-    # TODO: Store data params in GUNdb instead of Redis
-    setup_params = {"g": g, "h": h, "curve": config.curve}
-    setup_params_base64 = base64.b64encode(
-        serialize_dict_with_bytes([setup_params]).encode()
-    ).decode("utf-8")
-
     for response in responses:
-        # TODO: come up with better key mapping (merkle root based?)
-        key = f"{response.data_hash}.{response.axon.hotkey}"  # or UUID?
-        # Package up the required data into a dict
+        # Store the hash->hotkey->size mapping in DB
+        key = f"{response.data_hash}.{response.axon.hotkey}"
         response_storage = {
-            "commitments": response.commitments,
-            "merkle_root": response.merkle_root,
-            "params": setup_params_base64,
+            "size": sys.getsizeof(encrypted_data),
         }
-        # encode the response_storage dict as base64
-        response_storage_encoded = base64.b64encode(
-            json.dumps(response_storage).encode()
-        ).decode("utf-8")
         # Store in the database according to the data hash and the miner hotkey
-        database.set(key, response_storage_encoded)
+        database.set(key, json.dumps(response_storage).encode())
 
 
-def ChallengeAndUpdate():
+def Challenge():
     # TODO: come up with an algorithm for properly challenging miners and
     # ensure an even spread statistically of which miners are queried, and
     # which indices are queried (gaussian randomness?)
-    pass
+    data = database.get(
+        "30518686483869704633066135949246239848860686372051495933946806371172998919539"
+    )
 
 
 # Step 2: Set up the configuration parser
