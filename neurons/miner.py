@@ -51,6 +51,7 @@ from storage.utils import (
     decode_miner_storage,
     verify_challenge,
     verify_challenge_with_seed,
+    xor_bytes,
 )
 from storage.utils import *
 
@@ -316,7 +317,7 @@ def main(config):
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
-        c, m_val, r = committer.commit(encrypted_byte_data)
+        c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
 
         # Store the data with the hash as the key
         miner_store["size"] = sys.getsizeof(encrypted_byte_data)
@@ -423,9 +424,13 @@ def main(config):
     if True:  # (debugging)
         syn = GetSynapse(config)
         print("syn:", syn)
-        response = store(syn)
+        response_store = store(syn)
+        # TODO: Verify the initial store
+        # pprint(response_store.dict())
+        verified = verify_store_with_seed(response_store)
+        print("Store verified: ", verified)
         cyn = storage.protocol.Challenge(
-            challenge_hash=hash_data(base64.b64decode(syn.encrypted_data)),
+            challenge_hash=syn.data_hash, #hash_data(base64.b64decode(syn.encrypted_data)),
             challenge_index=0,
             chunk_size=111,
             curve="P-256",
@@ -433,14 +438,18 @@ def main(config):
             h=syn.h,
             seed=syn.seed,
         )
-        response = challenge(cyn)
-        verified = verify_challenge_with_seed(response, seed=syn.seed)
+        response_challenge = challenge(cyn)
+        pprint(response_challenge.dict())
+        import pdb; pdb.set_trace()
+        verified = verify_challenge_with_seed(response_challenge)
         print(f"Is verified: {verified}")
 
         data = database.get(syn.data_hash)
         print("fetched data:", data)
         size = json.loads(data.decode("utf-8"))["size"]
         print("size:", size)
+        # TODO: Write the challenge function (validator side)
+        # WHAT DOES THE VALIDATOR NEED TO STORE?
         import pdb
 
         pdb.set_trace()

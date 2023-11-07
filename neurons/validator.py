@@ -158,6 +158,7 @@ def StoreRandomData():
         curve=config.curve,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
+        seed=123456789,
     )
 
     # TODO: select subset of miners to query (e.g. redunancy factor of N)
