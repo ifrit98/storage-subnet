@@ -50,6 +50,7 @@ from storage.utils import (
     encode_miner_storage,
     decode_miner_storage,
     verify_challenge,
+    verify_challenge_with_seed,
 )
 from storage.utils import *
 
@@ -138,6 +139,49 @@ def commit_data(committer, data_chunks, n_chunks):
     for index, chunk in enumerate(data_chunks):
         print("index:", index)
         c, m_val, r = committer.commit(chunk)
+        c_hex = ecc_point_to_hex(c)
+        randomness[index] = r
+        chunks[index] = chunk
+        points[index] = c_hex
+        merkle_tree.add_leaf(c_hex)
+
+    # Create the tree from the leaves
+    merkle_tree.make_tree()
+    return randomness, chunks, points, merkle_tree
+
+
+def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
+    """
+    Commits a list of data chunks to a new Merkle tree and generates the associated randomness and ECC points.
+
+    This function takes a 'committer' object which should have a 'commit' method, a list of 'data_chunks', and
+    an integer 'n_chunks' specifying the number of chunks to commit. It commits each chunk of data to the Merkle tree,
+    collecting the ECC points and randomness values for each commitment, and then constructs the Merkle tree from
+    all committed chunks.
+
+    Args:
+        committer: An object that has a 'commit' method for committing data chunks.
+        data_chunks (list): A list of data chunks to be committed.
+        n_chunks (int): The number of data chunks expected to be committed.
+
+    Returns:
+        tuple: A tuple containing four elements:
+            - randomness (list): A list of randomness values for each committed chunk.
+            - chunks (list): The original list of data chunks that were committed.
+            - points (list): A list of hex strings representing the ECC points for each commitment.
+            - merkle_tree (MerkleTree): A Merkle tree object that contains the commitments as leaves.
+
+    Raises:
+        ValueError: If the length of data_chunks is not equal to n_chunks.
+    """
+    merkle_tree = MerkleTree()
+
+    # Commit each chunk of data
+    randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
+    print("n_chunks:", n_chunks)
+    for index, chunk in enumerate(data_chunks):
+        print("index:", index)
+        c, m_val, r = committer.commit(chunk + str(seed).encode())
         c_hex = ecc_point_to_hex(c)
         randomness[index] = r
         chunks[index] = chunk
@@ -327,10 +371,11 @@ def main(config):
 
         # Commit the data chunks based on the provided curve points
         committer = ECCommitment(g, h)
-        randomness, chunks, commitments, merkle_tree = commit_data(
+        randomness, chunks, commitments, merkle_tree = commit_data_with_seed(
             committer,
             data_chunks,
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
+            seed="123",
         )
 
         # Prepare return values to validator
@@ -387,7 +432,7 @@ def main(config):
             h=syn.h,
         )
         response = challenge(cyn)
-        verified = verify_challenge(response)
+        verified = verify_challenge_with_seed(response, seed="123")
         print(f"Is verified: {verified}")
 
         data = database.get(syn.data_hash)
