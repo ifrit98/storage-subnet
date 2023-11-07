@@ -35,13 +35,15 @@ class Store(bt.Synapse):
     g: str  # base point   (hex string representation)
     h: str  # random point (hex string representation)
 
-    seed: typing.Union[str, int] # random seed for the commitment
-    
+    seed: typing.Union[
+        str, int, bytes
+    ]  # random seed (bytes stored as hex) for the commitment
+
     # Return signature of received data
     randomness: typing.Optional[int] = None
     commitment: typing.Optional[str] = None
     signature: typing.Optional[bytes] = None
-    data_hash: typing.Optional[str] = None
+    commitment_hash: typing.Optional[str] = None  # includes seed
 
 
 class Challenge(bt.Synapse):
@@ -56,7 +58,7 @@ class Challenge(bt.Synapse):
     g: str  # base point   (hex string representation)
     h: str  # random point (hex string representation)
     curve: str
-    seed: typing.Union[str, int] # random seed for the commitment
+    seed: typing.Union[str, int]  # random seed for the commitment
 
     # Returns
     # - commitment (point represented as hex string)

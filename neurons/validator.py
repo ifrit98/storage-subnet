@@ -134,7 +134,7 @@ def select_subset_uids(uids: list, N: int):
     pass
 
 
-def StoreRandomData():
+def store_random_data(metagraph):
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=config.curve)
 
@@ -158,7 +158,7 @@ def StoreRandomData():
         curve=config.curve,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        seed=123456789,
+        seed=get_random_bytes(32).hex(),  # 256-bit seed
     )
 
     # TODO: select subset of miners to query (e.g. redunancy factor of N)
@@ -172,23 +172,89 @@ def StoreRandomData():
     # Log the results for monitoring purposes.
     bt.logging.info(f"Received responses: {responses}")
 
-    for response in responses:
+    # TEMP weights vector
+    weights = [1.0] * len(responses)
+    for uid, response in enumerate(responses):
+        # Verify the commitment
+        if not verify_challenge_with_seed(response):
+            # TODO: flag this miner for 0 weight
+            weights[uid] = 0.0
+            continue
         # Store the hash->hotkey->size mapping in DB
-        key = f"{response.data_hash}.{response.axon.hotkey}"
+        # TODO: update this to store by hotkey rather than pair so we can efficiently
+        # lookup which miners have what data and query them
+        key = f"{hash_data(encrypted_data)}.{response.axon.hotkey}"
         response_storage = {
             "size": sys.getsizeof(encrypted_data),
+            "seed": synapse.seed,
+            "commitment_hash": response.commitment_hash,  # contains the seed
         }
         # Store in the database according to the data hash and the miner hotkey
         database.set(key, json.dumps(response_storage).encode())
 
 
-def Challenge():
+def challenge(metagraph):
     # TODO: come up with an algorithm for properly challenging miners and
     # ensure an even spread statistically of which miners are queried, and
     # which indices are queried (gaussian randomness?)
-    data = database.get(
-        "30518686483869704633066135949246239848860686372051495933946806371172998919539"
-    )
+
+    # For each UID:
+    # - fetch which data they have (list of hashes)
+    # - randomly select a hash
+    # - randomly select a commitment/data_chunk index
+    # - send the challenge to the miner
+    hotkeys = metagraph.hotkeys
+    for hotkey in [None]:
+        # Fetch the list of data hashes this miner has
+        keys = database.keys(f"*.{hotkey}")
+        print(f"all keys for hotkey {hotkey}\n{keys}")
+
+        # Select a specific data hash to query
+        # key = random.choice(keys).decode("utf-8")
+        key = "36572423112117696224165833631177730849457409908727827954083586177537634882175.None"
+        print("key selected:", key)
+        data_hash = key.split(".")[0]
+        print("data_hash:", data_hash)
+
+        # Fetch the associated validator storage information (size, prev_seed, commitment_hash)
+        data = database.get(key)
+        print("data:", data)
+        data = json.loads(data.decode("utf-8"))
+
+        # Get random chunksize given total size
+        chunk_size = (
+            get_random_chunksize(data["size"]) // 4
+        )  # at least 4 chunks # TODO make this a hyperparam
+        print("chunksize:", chunksize)
+
+        # Calculate number of chunks
+        num_chunks = data["size"] // chunk_size
+
+        # Get setup params
+        g, h = setup_CRS()
+
+        # Pre-fill the challenge synapse with required data
+        synapse = protocol.Challenge(
+            challenge_hash=data_hash,
+            chunk_size=chunk_size,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            seed=get_random_bytes(32).hex(),  # 256-bit random seed
+        )
+
+        # Grab the UID to query
+        uid = metagraph.hotkeys.index(hotkey)
+
+        # Send the challenge to the miner
+        response = dendrite.query(
+            [metagraph.axons[uid]],
+            synapse,
+            deserialize=True,
+        )
+
+        # Verify the response
+        verified = verify_challenge_with_seed(response)
+        print(f"Is verified: {verified}")
 
 
 # Step 2: Set up the configuration parser

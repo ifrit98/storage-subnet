@@ -309,6 +309,7 @@ def main(config):
             "h": synapse.h,
             "curve": synapse.curve,
             "data": synapse.encrypted_data,
+            "prev_seed": str(synapse.seed),
         }
 
         # Commit to the entire data block
@@ -322,7 +323,8 @@ def main(config):
         # Store the data with the hash as the key
         miner_store["size"] = sys.getsizeof(encrypted_byte_data)
         dumped = json.dumps(miner_store).encode()
-        database.set(m_val, dumped)
+        data_hash = hash_data(encrypted_byte_data)
+        database.set(data_hash, dumped)
 
         # Send back some proof that we stored the data
         synapse.randomness = r
@@ -330,7 +332,7 @@ def main(config):
         synapse.signature = wallet.hotkey.sign(
             str(m_val)
         )  # NOTE: Does this add anything of value?
-        synapse.data_hash = str(m_val)
+        synapse.commitment_hash = str(m_val) # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
 
         return synapse
 
@@ -379,6 +381,12 @@ def main(config):
             synapse.seed,
         )
 
+        # TODO: update the commitment seed challenge hash
+        # Needs:
+        # - previous seed (S-1)
+        # - current seed  (S)
+        # - previous commitment hash (C-1)
+
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
         synapse.data_chunk = chunks[synapse.challenge_index]
@@ -417,39 +425,92 @@ def main(config):
             curve=config.curve,
             g=ecc_point_to_hex(g),
             h=ecc_point_to_hex(h),
-            seed="123",
+            seed=get_random_bytes(32).hex(),
         )
         return synapse
 
     if True:  # (debugging)
         syn = GetSynapse(config)
-        print("syn:", syn)
+        print("\nsynapse:", syn)
         response_store = store(syn)
         # TODO: Verify the initial store
-        # pprint(response_store.dict())
+        print("\nresponse store:")
+        pprint(response_store.dict())
         verified = verify_store_with_seed(response_store)
-        print("Store verified: ", verified)
-        cyn = storage.protocol.Challenge(
-            challenge_hash=syn.data_hash, #hash_data(base64.b64decode(syn.encrypted_data)),
-            challenge_index=0,
-            chunk_size=111,
-            curve="P-256",
-            g=syn.g,
-            h=syn.h,
-            seed=syn.seed,
+        print("\nStore verified: ", verified)
+        # TODO: Write the challenge function (validator side)
+        # WHAT DOES THE VALIDATOR NEED TO STORE?
+        # - current seed (for challenge verification)
+        # - hash of data (for lookup)
+        # - size of data (for chunking later)
+        # - commitment hash (for lookup and seed chain verification)
+        encrypted_byte_data = base64.b64decode(syn.encrypted_data)
+        lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
+        print("lookup key:", lookup_key)
+        validator_store = {
+            "seed": response_store.seed,
+            "size": sys.getsizeof(encrypted_byte_data),
+            "commitment_hash": response_store.commitment_hash,
+        }
+        dump = json.dumps(validator_store).encode()
+        database.set(lookup_key, dump)
+        retrv = database.get(lookup_key)
+        print("\nretrv:", retrv)
+        print("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
+
+        # data_hash = lookup_key.split(".")[0]
+        # cyn = storage.protocol.Challenge(
+        #     challenge_hash=data_hash,
+        #     challenge_index=0,
+        #     chunk_size=111,
+        #     curve="P-256",
+        #     g=syn.g,
+        #     h=syn.h,
+        #     seed=syn.seed,
+        # )
+        # response_challenge = challenge(cyn)
+        # print("\nchallenge response:")
+        # pprint(response_challenge.dict())
+        # verified = verify_challenge_with_seed(response_challenge)
+        # print(f"Is verified: {verified}")
+
+        # data = database.get(data_hash)
+        # data = json.loads(data.decode("utf-8"))
+        # print("\nfetched data:", data)
+        # print("size:", data["size"])
+
+        print("\n\n------------------------")
+        print("key selected:", lookup_key)
+        data_hash = lookup_key.split(".")[0]
+        print("data_hash:", data_hash)
+        data = database.get(lookup_key)
+        print("data:", data)
+        data = json.loads(data.decode("utf-8"))
+        # Get random chunksize given total size
+        chunk_size = (
+            get_random_chunksize(data["size"]) // 4
+        )  # at least 4 chunks # TODO make this a hyperparam
+        print("chunksize:", chunk_size)
+        # Calculate number of chunks
+        num_chunks = data["size"] // chunk_size
+        # Get setup params
+        g, h = setup_CRS()
+        syn = storage.protocol.Challenge(
+            challenge_hash=data_hash,
+            chunk_size=chunk_size,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            curve=config.curve,
+            challenge_index=random.choice(range(num_chunks)),
+            seed=data["seed"],
         )
-        response_challenge = challenge(cyn)
+        print("\nChallenge synapse:", syn)
+        response_challenge = challenge(syn)
+        print("\nchallenge response:")
         pprint(response_challenge.dict())
-        import pdb; pdb.set_trace()
         verified = verify_challenge_with_seed(response_challenge)
         print(f"Is verified: {verified}")
 
-        data = database.get(syn.data_hash)
-        print("fetched data:", data)
-        size = json.loads(data.decode("utf-8"))["size"]
-        print("size:", size)
-        # TODO: Write the challenge function (validator side)
-        # WHAT DOES THE VALIDATOR NEED TO STORE?
         import pdb
 
         pdb.set_trace()
