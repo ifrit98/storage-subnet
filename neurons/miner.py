@@ -399,6 +399,13 @@ def main(config):
         synapse.merkle_root = merkle_tree.get_merkle_root()
         return synapse
 
+    def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+        data = database.get(synapse.data_hash)
+        decoded = json.loads(data.decode("utf-8"))
+        synapse.data = decoded["data"]
+        # encrypted_data_bytes = base64.b64decode(decoded["data"])
+        return synapse
+
     def GetSynapse(config):
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=config.curve)

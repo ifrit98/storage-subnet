@@ -186,7 +186,7 @@ def store_random_data(metagraph):
         key = f"{hash_data(encrypted_data)}.{response.axon.hotkey}"
         response_storage = {
             "size": sys.getsizeof(encrypted_data),
-            "seed": synapse.seed,
+            "prev_seed": synapse.seed,
             "commitment_hash": response.commitment_hash,  # contains the seed
         }
         # Store in the database according to the data hash and the miner hotkey
@@ -255,6 +255,56 @@ def challenge(metagraph):
         # Verify the response
         verified = verify_challenge_with_seed(response)
         print(f"Is verified: {verified}")
+
+
+def retrieve(dendrite, metagraph, data_hash):
+    # setup a challenge for the data
+    # fetch which miners have the data
+    keys = database.keys(f"{data_hash}.*")
+    axons_to_query = []
+    for key in keys:
+        hotkey = key.split(".")[1]
+        uid = metagraph.hotkeys.index(hotkey)
+        axons_to_query.append(metagraph.axons[uid])
+
+        # issue a challenge to the miners to fetch the data
+        # Fetch the associated validator storage information (size, prev_seed, commitment_hash)
+        data = database.get(key)
+        print("data:", data)
+        data = json.loads(data.decode("utf-8"))
+
+        # Get random chunksize given total size
+        chunk_size = (
+            get_random_chunksize(data["size"]) // 4
+        )  # at least 4 chunks # TODO make this a hyperparam
+        print("chunksize:", chunksize)
+
+        # Calculate number of chunks
+        num_chunks = data["size"] // chunk_size
+
+        # Get setup params
+        g, h = setup_CRS()
+
+        # Pre-fill the challenge synapse with required data
+        synapse = protocol.Challenge(
+            challenge_hash=data_hash,
+            chunk_size=chunk_size,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            seed=get_random_bytes(32).hex(),  # 256-bit random seed
+        )
+
+    # query all N (from redundancy factor) with M challenges (x% of the total data)
+    responses = await dendrite(
+        axons_to_query,
+        protocol.Retrieve(
+            data_hash=data_hash,
+        ),
+        deserialize=True,
+    )
+
+    # verify the challenge
+    # if verified, return the entire data
 
 
 # Step 2: Set up the configuration parser

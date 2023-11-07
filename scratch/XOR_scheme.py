@@ -156,3 +156,76 @@ if verify_commitment(
     print("Commitment verified successfully.")
 else:
     print("Commitment verification failed.")
+
+
+#### MULTIPLE ITERATIONS ####
+import hashlib
+import os
+
+
+def hash_data(data):
+    """Hash the data using SHA-256."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def generate_random_seed():
+    """Generate a random seed."""
+    return os.urandom(16)  # 128-bit random seed
+
+
+def xor_data(data, seed):
+    """XOR the data with the seed."""
+    return bytes([_a ^ _b for _a, _b in zip(data, seed)])
+
+
+def compute_initial_commitment(data, seed):
+    """Compute the initial commitment from the data and seed."""
+    xor_result = xor_data(data, seed)
+    return hash_data(xor_result)
+
+
+def compute_subsequent_commitment(data, new_seed, previous_commitment):
+    """Compute a subsequent commitment based on the original data, new seed, and previous commitment."""
+    xor_result = xor_data(data, new_seed)
+    return hash_data(previous_commitment.encode("utf-8") + xor_result)
+
+
+def verify_commitment(data, new_seed, previous_commitment, new_commitment):
+    """Verify a commitment using the data, new seed, previous commitment, and new commitment."""
+    xor_result = xor_data(data, new_seed)
+    expected_commitment = hash_data(previous_commitment.encode("utf-8") + xor_result)
+    return expected_commitment == new_commitment
+
+
+# Example usage
+# Verifier side
+data = b"The original data to be committed to."
+seeds = [generate_random_seed() for _ in range(5)]  # Let's assume we have 5 seeds
+commitments = []
+
+# Initial Commitment
+initial_seed = seeds[0]
+initial_commitment = compute_initial_commitment(data, initial_seed)
+commitments.append(initial_commitment)
+print(f"Initial Commitment: {initial_commitment}")
+
+# Prover side
+# Generate subsequent commitments
+for i in range(1, len(seeds)):
+    new_seed = seeds[i]
+    previous_commitment = commitments[-1]
+    new_commitment = compute_subsequent_commitment(data, new_seed, previous_commitment)
+    commitments.append(new_commitment)
+    print(f"Commitment {i}: {new_commitment}")
+
+# Verifier side
+# Verify each commitment
+verification_success = True
+for i in range(1, len(seeds)):
+    if not verify_commitment(data, seeds[i], commitments[i - 1], commitments[i]):
+        print(f"Verification of Commitment {i} failed.")
+        verification_success = False
+        break
+
+if verification_success:
+    print("All commitments verified successfully.")
