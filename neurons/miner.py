@@ -109,49 +109,6 @@ def get_config():
     return config
 
 
-def commit_data(committer, data_chunks, n_chunks):
-    """
-    Commits a list of data chunks to a new Merkle tree and generates the associated randomness and ECC points.
-
-    This function takes a 'committer' object which should have a 'commit' method, a list of 'data_chunks', and
-    an integer 'n_chunks' specifying the number of chunks to commit. It commits each chunk of data to the Merkle tree,
-    collecting the ECC points and randomness values for each commitment, and then constructs the Merkle tree from
-    all committed chunks.
-
-    Args:
-        committer: An object that has a 'commit' method for committing data chunks.
-        data_chunks (list): A list of data chunks to be committed.
-        n_chunks (int): The number of data chunks expected to be committed.
-
-    Returns:
-        tuple: A tuple containing four elements:
-            - randomness (list): A list of randomness values for each committed chunk.
-            - chunks (list): The original list of data chunks that were committed.
-            - points (list): A list of hex strings representing the ECC points for each commitment.
-            - merkle_tree (MerkleTree): A Merkle tree object that contains the commitments as leaves.
-
-    Raises:
-        ValueError: If the length of data_chunks is not equal to n_chunks.
-    """
-    merkle_tree = MerkleTree()
-
-    # Commit each chunk of data
-    randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
-    print("n_chunks:", n_chunks)
-    for index, chunk in enumerate(data_chunks):
-        print("index:", index)
-        c, m_val, r = committer.commit(chunk)
-        c_hex = ecc_point_to_hex(c)
-        randomness[index] = r
-        chunks[index] = chunk
-        points[index] = c_hex
-        merkle_tree.add_leaf(c_hex)
-
-    # Create the tree from the leaves
-    merkle_tree.make_tree()
-    return randomness, chunks, points, merkle_tree
-
-
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     """
     Commits a list of data chunks to a new Merkle tree and generates the associated randomness and ECC points.
@@ -180,9 +137,9 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
 
     # Commit each chunk of data
     randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
-    print("n_chunks:", n_chunks)
+    bt.logging.debug("n_chunks:", n_chunks)
     for index, chunk in enumerate(data_chunks):
-        print("index:", index)
+        bt.logging.debug("index:", index)
         c, m_val, r = committer.commit(chunk + str(seed).encode())
         c_hex = ecc_point_to_hex(c)
         randomness[index] = r
@@ -290,7 +247,7 @@ def main(config):
 
         # Filter out keys that contain a period
         filtered_keys = [key for key in all_keys if b"." not in key]
-        print("filtered_keys:", filtered_keys)
+        bt.logging.debug("filtered_keys:", filtered_keys)
 
         # Get the size of each key and sum them up
         total_size = sum([database.memory_usage(key) for key in filtered_keys])
@@ -316,7 +273,6 @@ def main(config):
         Raises:
             Any exception raised by the underlying storage, encoding, or cryptographic functions will be propagated.
         """
-        db = bt.logging.debug
         # Store the data
         miner_store = {
             "data": synapse.encrypted_data,
@@ -328,23 +284,23 @@ def main(config):
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
-        db(f"committer: {committer}")
+        bt.logging.debug(f"committer: {committer}")
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
-        db(f"encrypted_byte_data: {encrypted_byte_data}")
+        bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
-        db(f"c: {c}")
-        db(f"m_val: {m_val}")
-        db(f"r: {r}")
+        bt.logging.debug(f"c: {c}")
+        bt.logging.debug(f"m_val: {m_val}")
+        bt.logging.debug(f"r: {r}")
 
         # Store the data with the hash as the key
         miner_store["size"] = sys.getsizeof(encrypted_byte_data)
 
         dumped = json.dumps(miner_store).encode()
-        db(f"dumped: {dumped}")
+        bt.logging.debug(f"dumped: {dumped}")
         data_hash = hash_data(encrypted_byte_data)
-        db(f"data_hash: {data_hash}")
+        bt.logging.debug(f"data_hash: {data_hash}")
         database.set(data_hash, dumped)
-        db(f"set in database!")
+        bt.logging.debug(f"set in database!")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
@@ -352,11 +308,11 @@ def main(config):
 
         # NOTE: Does this add anything of value?
         synapse.signature = wallet.hotkey.sign(str(m_val)).hex()
-        db(f"signed m_val: {synapse.signature}")
+        bt.logging.debug(f"signed m_val: {synapse.signature}")
 
         # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
         synapse.commitment_hash = str(m_val)
-        db(f"returning synapse: {synapse}")
+        bt.logging.debug(f"returning synapse: {synapse}")
         return synapse
 
     def challenge(synapse: storage.protocol.Challenge) -> storage.protocol.Challenge:
@@ -384,7 +340,6 @@ def main(config):
             with the latest commitments, in case of concurrent challenge requests.
         """
         # Retrieve the data itself from miner storage
-        db = bt.logging.debug
         bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
         data = database.get(synapse.challenge_hash)
         if data is None:
@@ -393,14 +348,14 @@ def main(config):
             return synapse
 
         decoded = json.loads(data.decode("utf-8"))
-        db(f"decoded data: {decoded}")
+        bt.logging.debug(f"decoded data: {decoded}")
 
         # Chunk the data according to the specified (random) chunk size
         encrypted_data_bytes = base64.b64decode(decoded["data"])
-        db(f"encrypted_data_bytes: {encrypted_data_bytes}")
+        bt.logging.debug(f"encrypted_data_bytes: {encrypted_data_bytes}")
 
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
-        db(f"data_chunks: {data_chunks}")
+        bt.logging.debug(f"data_chunks: {data_chunks}")
 
         # Extract setup params
         g = hex_to_ecc_point(synapse.g, synapse.curve)
@@ -414,7 +369,7 @@ def main(config):
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        db(f"merkle_tree: {merkle_tree}")
+        bt.logging.debug(f"merkle_tree: {merkle_tree}")
 
         # TODO: update the commitment seed challenge hash
         # Needs:
@@ -424,47 +379,47 @@ def main(config):
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
-        db(f"commitment: {synapse.commitment}")
+        bt.logging.debug(f"commitment: {synapse.commitment}")
         synapse.data_chunk = base64.b64encode(chunks[synapse.challenge_index])
-        db(f"data_chunk: {synapse.data_chunk}")
+        bt.logging.debug(f"data_chunk: {synapse.data_chunk}")
         synapse.randomness = randomness[synapse.challenge_index]
-        db(f"randomness: {synapse.randomness}")
+        bt.logging.debug(f"randomness: {synapse.randomness}")
         synapse.merkle_proof = b64_encode(
             merkle_tree.get_proof(synapse.challenge_index)
         )
-        db(f"merkle_proof: {synapse.merkle_proof}")
+        bt.logging.debug(f"merkle_proof: {synapse.merkle_proof}")
         synapse.merkle_root = merkle_tree.get_merkle_root()
-        db(f"merkle_root: {synapse.merkle_root}")
+        bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
         return synapse
 
     def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
         # Fetch the data from the miner database
         data = database.get(synapse.data_hash)
-        print("retireved data:", data)
+        bt.logging.debug("retireved data:", data)
         # Decode the data + metadata from bytes to json
         decoded = json.loads(data.decode("utf-8"))
-        print("retrieve decoded data:", decoded)
+        bt.logging.debug("retrieve decoded data:", decoded)
         # Return base64 data (no need to decode here)
         synapse.data = decoded["data"]
         return synapse
 
     def test(config):
-        print("\n\nstore phase------------------------".upper())
+        bt.logging.debug("\n\nstore phase------------------------".upper())
         syn, (encryption_key, nonce, tag) = GetSynapse(
             config.curve, config.maxsize, key=wallet.hotkey.public_key
         )
-        print("\nsynapse:", syn)
+        bt.logging.debug("\nsynapse:", syn)
         response_store = store(syn)
         # TODO: Verify the initial store
-        print("\nresponse store:")
-        pprint(response_store.dict())
+        bt.logging.debug("\nresponse store:")
+        pbt.logging.debug(response_store.dict())
         verified = verify_store_with_seed(response_store)
-        print("\nStore verified: ", verified)
+        bt.logging.debug("\nStore verified: ", verified)
 
         encrypted_byte_data = base64.b64decode(syn.encrypted_data)
         response_store.axon.hotkey = wallet.hotkey.ss58_address
         lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
-        print("lookup key:", lookup_key)
+        bt.logging.debug("lookup key:", lookup_key)
         validator_store = {
             "seed": response_store.seed,
             "size": sys.getsizeof(encrypted_byte_data),
@@ -476,21 +431,21 @@ def main(config):
         dump = json.dumps(validator_store).encode()
         database.set(lookup_key, dump)
         retrv = database.get(lookup_key)
-        print("\nretrv:", retrv)
-        print("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
+        bt.logging.debug("\nretrv:", retrv)
+        bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
 
-        print("\n\nchallenge phase------------------------".upper())
-        print("key selected:", lookup_key)
+        bt.logging.debug("\n\nchallenge phase------------------------".upper())
+        bt.logging.debug("key selected:", lookup_key)
         data_hash = lookup_key.split(".")[0]
-        print("data_hash:", data_hash)
+        bt.logging.debug("data_hash:", data_hash)
         data = database.get(lookup_key)
-        print("data:", data)
+        bt.logging.debug("data:", data)
         data = json.loads(data.decode("utf-8"))
         # Get random chunksize given total size
         chunk_size = (
             get_random_chunksize(data["size"]) // 4
         )  # at least 4 chunks # TODO make this a hyperparam
-        print("chunksize:", chunk_size)
+        bt.logging.debug("chunksize:", chunk_size)
         # Calculate number of chunks
         num_chunks = data["size"] // chunk_size
         # Get setup params
@@ -504,23 +459,23 @@ def main(config):
             challenge_index=random.choice(range(num_chunks)),
             seed=data["seed"],
         )
-        print("\nChallenge synapse:", syn)
+        bt.logging.debug("\nChallenge synapse:", syn)
         response_challenge = challenge(syn)
-        print("\nchallenge response:")
-        pprint(response_challenge.dict())
+        bt.logging.debug("\nchallenge response:")
+        pbt.logging.debug(response_challenge.dict())
         verified = verify_challenge_with_seed(response_challenge)
-        print(f"Is verified: {verified}")
+        bt.logging.debug(f"Is verified: {verified}")
 
-        print("\n\nretrieve phase------------------------".upper())
+        bt.logging.debug("\n\nretrieve phase------------------------".upper())
         ryn = storage.protocol.Retrieve(data_hash=data_hash)
-        print("receive synapse:", ryn)
+        bt.logging.debug("receive synapse:", ryn)
         rdata = retrieve(ryn)
-        print("retrieved data:", rdata)
+        bt.logging.debug("retrieved data:", rdata)
         decoded = base64.b64decode(rdata.data)
-        print("decoded base64 data:", decoded)
+        bt.logging.debug("decoded base64 data:", decoded)
         unencrypted = decrypt_aes_gcm(decoded, encryption_key, nonce, tag)
-        print("decrypted data:", unencrypted)
-        print("keys:", database.keys("*"))
+        bt.logging.debug("decrypted data:", unencrypted)
+        bt.logging.debug("keys:", database.keys("*"))
         import pdb
 
         pdb.set_trace()
