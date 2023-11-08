@@ -228,66 +228,6 @@ def b64_decode(data, decode_hex=False, encrypted=False):
     return decoded_data
 
 
-def encode_miner_storage(**kwargs):
-    """
-    Encodes miner storage data, including randomness, data chunks, commitments, and the Merkle tree into a
-    base64-encoded JSON byte string.
-
-    Args:
-        **kwargs: Keyword arguments containing 'randomness', 'data_chunks', 'commitments', and 'merkle_tree'.
-
-    Returns:
-        bytes: The encoded byte string containing all the miner storage data.
-
-    Note:
-        This function expects the 'commitments' keyword argument to be a list of EccPoint objects, which will be
-        converted to hex strings before encoding.
-    """
-    randomness = kwargs.get("randomness")
-    chunks = kwargs.get("data_chunks")
-    points = kwargs.get("commitments")
-    points = [
-        ecc_point_to_hex(p)
-        for p in points
-        if isinstance(p, Crypto.PublicKey.ECC.EccPoint)
-    ]
-    merkle_tree = kwargs.get("merkle_tree")
-
-    # store (randomness values, merkle tree, commitments, data chunks)
-    miner_store = {
-        "randomness": b64_encode(randomness),
-        "data_chunks": b64_encode(chunks),
-        "commitments": b64_encode(points),
-        "merkle_tree": b64_encode(merkle_tree.serialize()),
-    }
-    return json.dumps(miner_store).encode()
-
-
-def decode_miner_storage(encoded_storage, curve):
-    """
-    Decodes miner storage data from a base64-encoded JSON byte string into its components.
-
-    Args:
-        encoded_storage (bytes): The encoded byte string of the miner storage data.
-        curve (Crypto.PublicKey.ECC.Curve): The elliptic curve used for ECC points.
-
-    Returns:
-        dict: A dictionary containing the decoded 'randomness', 'data_chunks', 'commitments', and 'merkle_tree'.
-
-    Note:
-        This function converts 'commitments' back from hex strings to EccPoint objects and deserializes the
-        'merkle_tree'.
-    """
-    xy = json.loads(encoded_storage.decode("utf-8"))
-    xz = {
-        k: b64_decode(v, decode_hex=True if k != "commitments" else False)
-        for k, v in xy.items()
-    }
-    xz["commitments"] = [hex_to_ecc_point(c, curve) for c in xz["commitments"]]
-    xz["merkle_tree"] = MerkleTree().deserialize(xz["merkle_tree"])
-    return xz
-
-
 def validate_merkle_proof(proof, target_hash, merkle_root):
     """
     Validates a Merkle proof by computing the hash path from the target hash to the expected Merkle root.
