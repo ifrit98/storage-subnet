@@ -47,20 +47,13 @@ from storage.utils import (
     hex_to_ecc_point,
     b64_encode,
     b64_decode,
-    encode_miner_storage,
-    decode_miner_storage,
-    verify_challenge,
     verify_challenge_with_seed,
     xor_bytes,
 )
 
 
 def get_config():
-    # Step 2: Set up the configuration parser
-    # This function initializes the necessary command-line arguments.
-    # Using command-line arguments allows users to customize various miner settings.
     parser = argparse.ArgumentParser()
-    # TODO(developer): Adds your custom miner arguments to the parser.
     parser.add_argument(
         "--custom", default="my_custom_value", help="Adds a custom value to the parser."
     )
@@ -77,22 +70,24 @@ def get_config():
         help="Maximum size of random data to store.",
     )
     parser.add_argument("--test", default=False, action="store_true")
-    # Adds override arguments for network and netuid.
-    parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
-    # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
+    parser.add_argument("--netuid", type=int, default=21, help="The chain subnet uid.")
+    parser.add_argument(
+        "--database_port",
+        type=int,
+        default=6379,
+        help="The port of the redis database.",
+    )
+    parser.add_argument(
+        "--database_index",
+        type=int,
+        default=0,
+        help="The index of the redis database.",
+    )
     bt.subtensor.add_args(parser)
-    # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
     bt.logging.add_args(parser)
-    # Adds wallet specific arguments i.e. --wallet.name ..., --wallet.hotkey ./. or --wallet.path ...
     bt.wallet.add_args(parser)
-    # Adds axon specific arguments i.e. --axon.port ...
     bt.axon.add_args(parser)
-    # Activating the parser to read any command-line inputs.
-    # To print help message, run python3 template/miner.py --help
     config = bt.config(parser)
-
-    # Step 3: Set up logging directory
-    # Logging captures events for diagnosis or understanding miner's behavior.
     config.full_path = os.path.expanduser(
         "{}/{}/{}/netuid{}/{}".format(
             config.logging.logging_dir,
@@ -102,7 +97,6 @@ def get_config():
             "miner",
         )
     )
-    # Ensure the directory for logging exists, else create one.
     if not os.path.exists(config.full_path):
         os.makedirs(config.full_path, exist_ok=True)
     return config
@@ -151,27 +145,18 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     return randomness, chunks, points, merkle_tree
 
 
-# Main takes the config and starts the miner.
 def main(config):
-    # Activating Bittensor's logging with the set configurations.
     bt.logging(config=config, logging_dir=config.full_path)
-
-    # This logs the active configuration to the specified logging directory for review.
     bt.logging.info(config)
 
-    # Step 4: Initialize Bittensor miner objects
-    # These classes are vital to interact and function within the Bittensor network.
     bt.logging.info("Setting up bittensor objects.")
 
-    # Wallet holds cryptographic information, ensuring secure transactions and communication.
     wallet = bt.wallet(config=config)
     bt.logging.info(f"Wallet: {wallet}")
 
-    # subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
     subtensor = bt.subtensor(config=config)
     bt.logging.info(f"Subtensor: {subtensor}")
 
-    # metagraph provides the network's current state, holding state about other participants in a subnet.
     metagraph = subtensor.metagraph(config.netuid)
     bt.logging.info(f"Metagraph: {metagraph}")
 
@@ -185,52 +170,30 @@ def main(config):
         f"Running miner for subnet: {config.netuid} on network: {subtensor.chain_endpoint} with config:"
     )
 
-    # Each miner gets a unique identity (UID) in the network for differentiation.
     my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
     bt.logging.info(f"Running miner on uid: {my_subnet_uid}")
 
-    # Set up the miner's data storage.
-    # This is where the miner will store the data it receives.
-    database = redis.StrictRedis(host="localhost", port=6379, db=0)
+    database = redis.StrictRedis(
+        host="localhost", port=config.database_port, db=config.database_index
+    )
 
-    # Step 5: Set up miner functionalities
-    # The following functions control the miner's response to incoming requests.
-    # The blacklist function decides if a request should be ignored.
     def blacklist_fn(
         synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
     ) -> typing.Tuple[bool, str]:
-        # TODO(developer): Define how miners should blacklist requests. This Function
-        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
-        # The synapse is instead contructed via the headers of the request. It is important to blacklist
-        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
-        # Below: Check that the hotkey is a registered entity in the metagraph.
         if synapse.dendrite.hotkey not in metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        # TODO(developer): In practice it would be wise to blacklist requests from entities that
-        # are not validators, or do not have enough stake. This can be checked via metagraph.S
-        # and metagraph.validator_permit. You can always attain the uid of the sender via a
-        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
-        # Otherwise, allow the request to be processed further.
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
 
-    # The priority function determines the order in which requests are handled.
-    # More valuable or higher-priority requests are processed before others.
     def priority_fn(
         synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
     ) -> float:
-        # TODO(developer): Define how miners should prioritize requests.
-        # Miners may recieve messages from multiple entities at once. This function
-        # determines which request should be processed first. Higher values indicate
-        # that the request should be processed first. Lower values indicate that the
-        # request should be processed later.
-        # Below: simple logic, prioritize requests from entities with more stake.
         caller_uid = metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
@@ -392,6 +355,30 @@ def main(config):
         return synapse
 
     def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+        """
+        Retrieves and decodes data associated with a given data hash from the miner database.
+
+        The function expects a 'Retrieve' object from the 'storage.protocol' which contains
+        a 'data_hash' attribute. It uses this hash to fetch the corresponding data from a
+        database (which is a byte string). It then decodes the byte string into a JSON object.
+
+        Note that the 'data' attribute of the 'Retrieve' object is updated with the base64-encoded
+        data from the decoded JSON, without decoding it into a binary format. The modified 'Retrieve'
+        object is then returned.
+
+        Args:
+            synapse (storage.protocol.Retrieve): An object that includes 'data_hash' used to
+                retrieve data from the database.
+
+        Returns:
+            storage.protocol.Retrieve: The input 'Retrieve' object with the 'data' attribute
+                updated to include the retrieved base64-encoded data.
+
+        Raises:
+            json.JSONDecodeError: If decoding the byte string to JSON fails.
+            KeyError: If the key 'data' is not found in the decoded JSON object.
+            Exception: If the retrieval from the database fails or other unspecified errors occur.
+        """
         # Fetch the data from the miner database
         data = database.get(synapse.data_hash)
         bt.logging.debug("retireved data:", data)
