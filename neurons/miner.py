@@ -53,7 +53,6 @@ from storage.utils import (
     verify_challenge_with_seed,
     xor_bytes,
 )
-from storage.utils import *
 
 
 def get_config():
@@ -412,7 +411,7 @@ def main(config):
         response_store = store(syn)
         # TODO: Verify the initial store
         bt.logging.debug("\nresponse store:")
-        pbt.logging.debug(response_store.dict())
+        bt.logging.debug(response_store.dict())
         verified = verify_store_with_seed(response_store)
         bt.logging.debug("\nStore verified: ", verified)
 
@@ -440,11 +439,14 @@ def main(config):
         bt.logging.debug("data_hash:", data_hash)
         data = database.get(lookup_key)
         bt.logging.debug("data:", data)
+        bt.logging.debug("data size:", sys.getsizeof(data))
         data = json.loads(data.decode("utf-8"))
         # Get random chunksize given total size
         chunk_size = (
             get_random_chunksize(data["size"]) // 4
         )  # at least 4 chunks # TODO make this a hyperparam
+        if chunk_size == 0:
+            chunk_size = 10  # safe default
         bt.logging.debug("chunksize:", chunk_size)
         # Calculate number of chunks
         num_chunks = data["size"] // chunk_size
@@ -462,7 +464,7 @@ def main(config):
         bt.logging.debug("\nChallenge synapse:", syn)
         response_challenge = challenge(syn)
         bt.logging.debug("\nchallenge response:")
-        pbt.logging.debug(response_challenge.dict())
+        bt.logging.debug(response_challenge.dict())
         verified = verify_challenge_with_seed(response_challenge)
         bt.logging.debug(f"Is verified: {verified}")
 
@@ -475,12 +477,19 @@ def main(config):
         bt.logging.debug("decoded base64 data:", decoded)
         unencrypted = decrypt_aes_gcm(decoded, encryption_key, nonce, tag)
         bt.logging.debug("decrypted data:", unencrypted)
-        bt.logging.debug("keys:", database.keys("*"))
         import pdb
 
         pdb.set_trace()
 
     if config.test:  # (debugging)
+        import random
+        from storage.utils import (
+            GetSynapse,
+            verify_store_with_seed,
+            get_random_chunksize,
+            decrypt_aes_gcm,
+        )
+
         test(config)
 
     # TODO: Defensive programming and error-handling around all functions
