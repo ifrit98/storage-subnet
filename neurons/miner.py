@@ -72,6 +72,9 @@ def get_config():
     parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument("--netuid", type=int, default=21, help="The chain subnet uid.")
     parser.add_argument(
+        "--databse_host", default="localhost", help="The host of the redis database."
+    )
+    parser.add_argument(
         "--database_port",
         type=int,
         default=6379,
@@ -174,7 +177,7 @@ def main(config):
     bt.logging.info(f"Running miner on uid: {my_subnet_uid}")
 
     database = redis.StrictRedis(
-        host="localhost", port=config.database_port, db=config.database_index
+        host=config.database_host, port=config.database_port, db=config.database_index
     )
 
     def blacklist_fn(

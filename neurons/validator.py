@@ -39,6 +39,7 @@ from storage.utils import (
     chunk_data,
     MerkleTree,
     encrypt_data,
+    decrypt_aes_gcm,
     ECCommitment,
     make_random_file,
     get_random_chunksize,
@@ -46,13 +47,13 @@ from storage.utils import (
     hex_to_ecc_point,
     serialize_dict_with_bytes,
     deserialize_dict_with_bytes,
-    decode_storage,
+    verify_challenge_with_seed,
+    verify_store_with_seed,
 )
 
 
 # TODO:
 def Challenge(database):
-    database = redis.StrictRedis(host="localhost", port=6379, db=0)
     keys = database.keys("*")
     store_keys = [
         "abc.123",
@@ -356,6 +357,15 @@ def get_config():
         default=3,
         help="Number of miners to store each piece of data on.",
     )
+    parser.add_argument(
+        "--databse_host", default="localhost", help="The host of the redis database."
+    )
+    parser.add_argument(
+        "--databse_port", default=6379, help="The port of the redis database."
+    )
+    parser.add_argument(
+        "--databse_index", default=0, help="The database number of the redis database."
+    )
     # Adds override arguments for network and netuid.
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -422,6 +432,11 @@ def main(config):
             f"\nYour validator: {wallet} if not registered to chain connection: {subtensor} \nRun btcli register and try again."
         )
         exit()
+
+    # Setup database
+    database = redis.StrictRedis(
+        host=config.database_host, port=config.database_port, db=config.database_index
+    )
 
     # Each validator gets a unique identity (UID) in the network for differentiation.
     my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
