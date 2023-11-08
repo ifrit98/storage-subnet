@@ -1,9 +1,17 @@
-def GetSynapse(config):
+import base64
+import storage
+
+from .ecc import setup_CRS, ecc_point_to_hex
+from .util import encrypt_data, make_random_file, hash_data, get_random_bytes
+
+
+def GetSynapse(curve, maxsize):
     # Setup CRS for this round of validation
-    g, h = setup_CRS(curve=config.curve)
+    g, h = setup_CRS(curve=curve)
 
     # Make a random bytes file to test the miner
-    random_data = make_random_file(maxsize=config.maxsize)
+    random_data = b"this is a random bytestring, long enough to be chunked into segments and reconstructed at the end"
+    # random_data = make_random_file(maxsize=maxsize)
 
     # Random encryption key for now (never will decrypt)
     key = get_random_bytes(32)  # 256-bit key
@@ -17,20 +25,15 @@ def GetSynapse(config):
     # Convert to base64 for compactness
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
 
-    # Hash the encrypted data
+    # Hash the encrypted datad
     data_hash = hash_data(encrypted_data)
 
-    # Chunk the data
-    chunk_size = get_random_chunksize()
-    # chunks = list(chunk_data(encrypted_data, chunksize))
-
-    syn = synapse = protocol.Store(
-        chunk_size=chunk_size,
-        encrypted_data=b64_encrypted_data,
+    syn = synapse = storage.protocol.Store(
         data_hash=data_hash,
-        curve=config.curve,
+        encrypted_data=b64_encrypted_data,
+        curve=curve,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        size=sys.getsizeof(encrypted_data),
+        seed=get_random_bytes(32).hex(),
     )
-    return synapse
+    return synapse, (key, nonce, tag)

@@ -73,3 +73,11 @@ class Challenge(bt.Synapse):
         typing.Union[typing.List[typing.Dict[str, str]], str]
     ] = None
     merkle_root: typing.Optional[str] = None
+
+
+class Retrieve(bt.Synapse):
+    # Where to find the data
+    data_hash: str
+
+    # Fetched data
+    data: typing.Optional[str] = None

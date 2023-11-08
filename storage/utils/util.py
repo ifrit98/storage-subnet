@@ -123,6 +123,33 @@ def encrypt_data(filename, key):
     return cipher_text, cipher.nonce, tag
 
 
+def decrypt_aes_gcm(cipher_text, key, nonce, tag):
+    """
+    Decrypt the data using AES-GCM.
+
+    Parameters:
+    - cipher_text: bytes. The encrypted data.
+    - key: bytes. The secret key used for decryption.
+    - nonce: bytes. The nonce used in the GCM mode for encryption.
+    - tag: bytes. The tag for authentication.
+
+    Returns:
+    - data: bytes. The decrypted data.
+    """
+
+    # Initialize AES-GCM cipher with the given key and nonce
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+
+    # Decrypt the data and verify the tag
+    try:
+        data = cipher.decrypt_and_verify(cipher_text, tag)
+    except ValueError:
+        # This is raised if the tag does not match
+        raise ValueError("Incorrect decryption key or corrupted data.")
+
+    return data
+
+
 def decode_storage(encoded_storage):
     """
     Decodes a base64-encoded string that represents storage data. This storage data is expected

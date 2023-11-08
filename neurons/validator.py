@@ -134,6 +134,13 @@ def select_subset_uids(uids: list, N: int):
     pass
 
 
+def store_file_data(directory, metagraph):
+    # TODO: write this to replace store_random_data
+    # it will not be random but use real data from the validator filesystem
+    # possibly textbooks, pdfs, audio files, pictures, etc. to mimick user data
+    pass
+
+
 def store_random_data(metagraph):
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=config.curve)
@@ -142,12 +149,12 @@ def store_random_data(metagraph):
     random_data = make_random_file(maxsize=config.maxsize)
 
     # Random encryption key for now (never will decrypt)
-    key = get_random_bytes(32)  # 256-bit key
+    encryption_key = get_random_bytes(32)  # 256-bit key
 
     # Encrypt the data
     encrypted_data, nonce, tag = encrypt_data(
         random_data,
-        key,  # TODO: Use validator key as the encryption key?
+        encryption_key,  # TODO: Use validator key as the encryption key?
     )
 
     # Convert to base64 for compactness
@@ -166,7 +173,7 @@ def store_random_data(metagraph):
     responses = dendrite.query(
         metagraph.axons,
         synapse,
-        deserialize=True,
+        deserialize=False,
     )
 
     # Log the results for monitoring purposes.
@@ -177,7 +184,7 @@ def store_random_data(metagraph):
     for uid, response in enumerate(responses):
         # Verify the commitment
         if not verify_challenge_with_seed(response):
-            # TODO: flag this miner for 0 weight
+            # TODO: flag this miner for 0 weight (or negative rewards?)
             weights[uid] = 0.0
             continue
         # Store the hash->hotkey->size mapping in DB
@@ -188,12 +195,16 @@ def store_random_data(metagraph):
             "size": sys.getsizeof(encrypted_data),
             "prev_seed": synapse.seed,
             "commitment_hash": response.commitment_hash,  # contains the seed
+            # TODO: these will be private to the validator, not stored in decentralized GUN db
+            "encryption_key": encryption_key.hex(),
+            "encryption_nonce": nonce.hex(),
+            "encryption_tag": tag.hex(),
         }
         # Store in the database according to the data hash and the miner hotkey
         database.set(key, json.dumps(response_storage).encode())
 
 
-def challenge(metagraph):
+def challenge(metagraph):  #
     # TODO: come up with an algorithm for properly challenging miners and
     # ensure an even spread statistically of which miners are queried, and
     # which indices are queried (gaussian randomness?)
@@ -258,7 +269,6 @@ def challenge(metagraph):
 
 
 def retrieve(dendrite, metagraph, data_hash):
-    # setup a challenge for the data
     # fetch which miners have the data
     keys = database.keys(f"{data_hash}.*")
     axons_to_query = []
@@ -266,33 +276,34 @@ def retrieve(dendrite, metagraph, data_hash):
         hotkey = key.split(".")[1]
         uid = metagraph.hotkeys.index(hotkey)
         axons_to_query.append(metagraph.axons[uid])
+        print("appending hotkey:", hotkey)
 
-        # issue a challenge to the miners to fetch the data
-        # Fetch the associated validator storage information (size, prev_seed, commitment_hash)
-        data = database.get(key)
-        print("data:", data)
-        data = json.loads(data.decode("utf-8"))
+        # # TODO: issue a challenge to the miners to fetch the data
+        # # Fetch the associated validator storage information (size, prev_seed, commitment_hash)
+        # data = database.get(key)
+        # print("data:", data)
+        # data = json.loads(data.decode("utf-8"))
 
-        # Get random chunksize given total size
-        chunk_size = (
-            get_random_chunksize(data["size"]) // 4
-        )  # at least 4 chunks # TODO make this a hyperparam
-        print("chunksize:", chunksize)
+        # # Get random chunksize given total size
+        # chunk_size = (
+        #     get_random_chunksize(data["size"]) // 4
+        # )  # at least 4 chunks # TODO make this a hyperparam
+        # print("chunksize:", chunksize)
 
-        # Calculate number of chunks
-        num_chunks = data["size"] // chunk_size
+        # # Calculate number of chunks
+        # num_chunks = data["size"] // chunk_size
 
-        # Get setup params
-        g, h = setup_CRS()
+        # # Get setup params
+        # g, h = setup_CRS()
 
-        # Pre-fill the challenge synapse with required data
-        synapse = protocol.Challenge(
-            challenge_hash=data_hash,
-            chunk_size=chunk_size,
-            g=ecc_point_to_hex(g),
-            h=ecc_point_to_hex(h),
-            seed=get_random_bytes(32).hex(),  # 256-bit random seed
-        )
+        # # Pre-fill the challenge synapse with required data
+        # synapse = protocol.Challenge(
+        #     challenge_hash=data_hash,
+        #     chunk_size=chunk_size,
+        #     g=ecc_point_to_hex(g),
+        #     h=ecc_point_to_hex(h),
+        #     seed=get_random_bytes(32).hex(),  # 256-bit random seed
+        # )
 
     # query all N (from redundancy factor) with M challenges (x% of the total data)
     responses = await dendrite(

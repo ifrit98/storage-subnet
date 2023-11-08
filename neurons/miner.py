@@ -283,6 +283,18 @@ def main(config):
         )
         return prirority
 
+    def total_storage(database):
+        # Fetch all keys from Redis
+        all_keys = database.keys("*")
+
+        # Filter out keys that contain a period
+        filtered_keys = [key for key in all_keys if b"." not in key]
+        print("filtered_keys:", filtered_keys)
+
+        # Get the size of each key and sum them up
+        total_size = sum([database.memory_usage(key) for key in filtered_keys])
+        return total_size
+
     # This is the core miner function, which decides the miner's response to a valid, high-priority request.
     def store(synapse: storage.protocol.Store) -> storage.protocol.Store:
         """
@@ -305,9 +317,6 @@ def main(config):
         """
         # Store the data
         miner_store = {
-            "g": synapse.g,
-            "h": synapse.h,
-            "curve": synapse.curve,
             "data": synapse.encrypted_data,
             "prev_seed": str(synapse.seed),
         }
@@ -400,46 +409,19 @@ def main(config):
         return synapse
 
     def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+        # Fetch the data from the miner database
         data = database.get(synapse.data_hash)
+        print("retireved data:", data)
+        # Decode the data + metadata from bytes to json
         decoded = json.loads(data.decode("utf-8"))
+        print("retrieve decoded data:", decoded)
+        # Return base64 data (no need to decode here)
         synapse.data = decoded["data"]
-        # encrypted_data_bytes = base64.b64decode(decoded["data"])
         return synapse
 
-    def GetSynapse(config):
-        # Setup CRS for this round of validation
-        g, h = setup_CRS(curve=config.curve)
-
-        # Make a random bytes file to test the miner
-        random_data = make_random_file(maxsize=config.maxsize)
-
-        # Random encryption key for now (never will decrypt)
-        key = get_random_bytes(32)  # 256-bit key
-
-        # Encrypt the data
-        encrypted_data, nonce, tag = encrypt_data(
-            random_data,
-            key,  # TODO: Use validator key as the encryption key?
-        )
-
-        # Convert to base64 for compactness
-        b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
-
-        # Hash the encrypted data
-        data_hash = hash_data(encrypted_data)
-
-        syn = synapse = storage.protocol.Store(
-            data_hash=data_hash,
-            encrypted_data=b64_encrypted_data,
-            curve=config.curve,
-            g=ecc_point_to_hex(g),
-            h=ecc_point_to_hex(h),
-            seed=get_random_bytes(32).hex(),
-        )
-        return synapse
-
-    if True:  # (debugging)
-        syn = GetSynapse(config)
+    def test(config):
+        print("\n\nstore phase------------------------".upper())
+        syn, (encryption_key, nonce, tag) = GetSynapse(config.curve, config.maxsize)
         print("\nsynapse:", syn)
         response_store = store(syn)
         # TODO: Verify the initial store
@@ -454,12 +436,16 @@ def main(config):
         # - size of data (for chunking later)
         # - commitment hash (for lookup and seed chain verification)
         encrypted_byte_data = base64.b64decode(syn.encrypted_data)
+        response_store.axon.hotkey = wallet.hotkey.ss58_address
         lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
         print("lookup key:", lookup_key)
         validator_store = {
             "seed": response_store.seed,
             "size": sys.getsizeof(encrypted_byte_data),
             "commitment_hash": response_store.commitment_hash,
+            "encryption_key": encryption_key.hex(),
+            "encryption_nonce": nonce.hex(),
+            "encryption_tag": tag.hex(),
         }
         dump = json.dumps(validator_store).encode()
         database.set(lookup_key, dump)
@@ -467,28 +453,7 @@ def main(config):
         print("\nretrv:", retrv)
         print("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
 
-        # data_hash = lookup_key.split(".")[0]
-        # cyn = storage.protocol.Challenge(
-        #     challenge_hash=data_hash,
-        #     challenge_index=0,
-        #     chunk_size=111,
-        #     curve="P-256",
-        #     g=syn.g,
-        #     h=syn.h,
-        #     seed=syn.seed,
-        # )
-        # response_challenge = challenge(cyn)
-        # print("\nchallenge response:")
-        # pprint(response_challenge.dict())
-        # verified = verify_challenge_with_seed(response_challenge)
-        # print(f"Is verified: {verified}")
-
-        # data = database.get(data_hash)
-        # data = json.loads(data.decode("utf-8"))
-        # print("\nfetched data:", data)
-        # print("size:", data["size"])
-
-        print("\n\n------------------------")
+        print("\n\nchallenge phase------------------------".upper())
         print("key selected:", lookup_key)
         data_hash = lookup_key.split(".")[0]
         print("data_hash:", data_hash)
@@ -520,9 +485,21 @@ def main(config):
         verified = verify_challenge_with_seed(response_challenge)
         print(f"Is verified: {verified}")
 
+        print("\n\nretrieve phase------------------------".upper())
+        ryn = storage.protocol.Retrieve(data_hash=data_hash)
+        print("receive synapse:", ryn)
+        rdata = retrieve(ryn)
+        print("retrieved data:", rdata)
+        decoded = base64.b64decode(rdata.data)
+        print("decoded base64 data:", decoded)
+        unencrypted = decrypt_aes_gcm(decoded, encryption_key, nonce, tag)
+        print("unencrypted data:", unencrypted)
         import pdb
 
         pdb.set_trace()
+
+    if True:  # (debugging)
+        test(config)
 
     # TODO: Validator code to update storage after challenge is successful
     # TODO: Encoding and decoding of merkle proofs on challenege
@@ -545,12 +522,20 @@ def main(config):
         forward_fn=challenge,
         # blacklist_fn=blacklist_fn,
         # priority_fn=priority_fn,
+    ).attach(
+        forward_fn=retrieve,
     )
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
     bt.logging.info(
         f"Serving axon {store} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
+    )
+    bt.logging.info(
+        f"Serving axon {challenge} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
+    )
+    bt.logging.info(
+        f"Serving axon {retrieve} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
     )
     axon.serve(netuid=config.netuid, subtensor=subtensor)
 
