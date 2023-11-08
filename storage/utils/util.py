@@ -321,45 +321,6 @@ def validate_merkle_proof(proof, target_hash, merkle_root):
         return proof_hash == merkle_root
 
 
-def verify_challenge(synapse):
-    """
-    Verifies the validity of a challenge response by opening the commitment and validating the Merkle proof.
-
-    Args:
-        synapse: An object containing challenge data, including the commitment, the data chunk, the random value used
-                 in the commitment, the elliptic curve, and the Merkle proof.
-
-    Returns:
-        bool: True if both the commitment opens correctly and the Merkle proof is valid, False otherwise.
-
-    Raises:
-        Any exceptions raised by the underlying cryptographic functions are propagated.
-    """
-    # TODO: Add checks and defensive programming here to handle all types
-    # (bytes, str, hex, ecc point, etc)
-    committer = ECCommitment(
-        hex_to_ecc_point(synapse.g, synapse.curve),
-        hex_to_ecc_point(synapse.h, synapse.curve),
-    )
-    commitment = hex_to_ecc_point(synapse.commitment, synapse.curve)
-
-    if not committer.open(
-        commitment, hash_data(synapse.data_chunk), synapse.randomness
-    ):
-        print(f"Opening commitment failed")
-        return False
-
-    if not validate_merkle_proof(
-        b64_decode(synapse.merkle_proof),
-        ecc_point_to_hex(commitment),
-        synapse.merkle_root,
-    ):
-        print(f"Merkle proof validation failed")
-        return False
-
-    return True
-
-
 def verify_challenge_with_seed(synapse):
     """
     Verifies the validity of a challenge response by opening the commitment and validating the Merkle proof.
