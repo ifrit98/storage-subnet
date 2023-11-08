@@ -77,6 +77,7 @@ def get_config():
         type=int,
         help="Maximum size of random data to store.",
     )
+    parser.add_argument("--test", default=False, action="store_true")
     # Adds override arguments for network and netuid.
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -315,6 +316,7 @@ def main(config):
         Raises:
             Any exception raised by the underlying storage, encoding, or cryptographic functions will be propagated.
         """
+        db = bt.logging.debug
         # Store the data
         miner_store = {
             "data": synapse.encrypted_data,
@@ -326,25 +328,35 @@ def main(config):
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
+        db(f"committer: {committer}")
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
+        db(f"encrypted_byte_data: {encrypted_byte_data}")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
+        db(f"c: {c}")
+        db(f"m_val: {m_val}")
+        db(f"r: {r}")
 
         # Store the data with the hash as the key
         miner_store["size"] = sys.getsizeof(encrypted_byte_data)
+
         dumped = json.dumps(miner_store).encode()
+        db(f"dumped: {dumped}")
         data_hash = hash_data(encrypted_byte_data)
+        db(f"data_hash: {data_hash}")
         database.set(data_hash, dumped)
+        db(f"set in database!")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
         synapse.commitment = ecc_point_to_hex(c)
-        synapse.signature = wallet.hotkey.sign(
-            str(m_val)
-        )  # NOTE: Does this add anything of value?
-        synapse.commitment_hash = str(
-            m_val
-        )  # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
 
+        # NOTE: Does this add anything of value?
+        synapse.signature = wallet.hotkey.sign(str(m_val)).hex()
+        db(f"signed m_val: {synapse.signature}")
+
+        # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
+        synapse.commitment_hash = str(m_val)
+        db(f"returning synapse: {synapse}")
         return synapse
 
     def challenge(synapse: storage.protocol.Challenge) -> storage.protocol.Challenge:
@@ -372,12 +384,23 @@ def main(config):
             with the latest commitments, in case of concurrent challenge requests.
         """
         # Retrieve the data itself from miner storage
+        db = bt.logging.debug
+        bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
         data = database.get(synapse.challenge_hash)
+        if data is None:
+            bt.logging.error(f"No data found for {synapse.challenge_hash}")
+            bt.logging.error(f"keys found: {database.keys('*')}")
+            return synapse
+
         decoded = json.loads(data.decode("utf-8"))
+        db(f"decoded data: {decoded}")
 
         # Chunk the data according to the specified (random) chunk size
         encrypted_data_bytes = base64.b64decode(decoded["data"])
+        db(f"encrypted_data_bytes: {encrypted_data_bytes}")
+
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
+        db(f"data_chunks: {data_chunks}")
 
         # Extract setup params
         g = hex_to_ecc_point(synapse.g, synapse.curve)
@@ -391,6 +414,7 @@ def main(config):
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
+        db(f"merkle_tree: {merkle_tree}")
 
         # TODO: update the commitment seed challenge hash
         # Needs:
@@ -400,12 +424,17 @@ def main(config):
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
-        synapse.data_chunk = chunks[synapse.challenge_index]
+        db(f"commitment: {synapse.commitment}")
+        synapse.data_chunk = base64.b64encode(chunks[synapse.challenge_index])
+        db(f"data_chunk: {synapse.data_chunk}")
         synapse.randomness = randomness[synapse.challenge_index]
+        db(f"randomness: {synapse.randomness}")
         synapse.merkle_proof = b64_encode(
             merkle_tree.get_proof(synapse.challenge_index)
         )
+        db(f"merkle_proof: {synapse.merkle_proof}")
         synapse.merkle_root = merkle_tree.get_merkle_root()
+        db(f"merkle_root: {synapse.merkle_root}")
         return synapse
 
     def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
@@ -421,7 +450,9 @@ def main(config):
 
     def test(config):
         print("\n\nstore phase------------------------".upper())
-        syn, (encryption_key, nonce, tag) = GetSynapse(config.curve, config.maxsize)
+        syn, (encryption_key, nonce, tag) = GetSynapse(
+            config.curve, config.maxsize, key=wallet.hotkey.public_key
+        )
         print("\nsynapse:", syn)
         response_store = store(syn)
         # TODO: Verify the initial store
@@ -429,12 +460,7 @@ def main(config):
         pprint(response_store.dict())
         verified = verify_store_with_seed(response_store)
         print("\nStore verified: ", verified)
-        # TODO: Write the challenge function (validator side)
-        # WHAT DOES THE VALIDATOR NEED TO STORE?
-        # - current seed (for challenge verification)
-        # - hash of data (for lookup)
-        # - size of data (for chunking later)
-        # - commitment hash (for lookup and seed chain verification)
+
         encrypted_byte_data = base64.b64decode(syn.encrypted_data)
         response_store.axon.hotkey = wallet.hotkey.ss58_address
         lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
@@ -493,18 +519,16 @@ def main(config):
         decoded = base64.b64decode(rdata.data)
         print("decoded base64 data:", decoded)
         unencrypted = decrypt_aes_gcm(decoded, encryption_key, nonce, tag)
-        print("unencrypted data:", unencrypted)
+        print("decrypted data:", unencrypted)
+        print("keys:", database.keys("*"))
         import pdb
 
         pdb.set_trace()
 
-    if True:  # (debugging)
+    if config.test:  # (debugging)
         test(config)
 
-    # TODO: Validator code to update storage after challenge is successful
-    # TODO: Encoding and decoding of merkle proofs on challenege
     # TODO: Defensive programming and error-handling around all functions
-    # TODO: Test over the wire if you can query these endpoints and get the right responses
     # TODO: GUNdb mechanism on validator side for shared database (or first approx/sqlite?)
 
     # Step 6: Build and link miner functions to the axon.

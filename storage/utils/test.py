@@ -5,7 +5,7 @@ from .ecc import setup_CRS, ecc_point_to_hex
 from .util import encrypt_data, make_random_file, hash_data, get_random_bytes
 
 
-def GetSynapse(curve, maxsize):
+def GetSynapse(curve, maxsize, key=None):
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=curve)
 
@@ -14,7 +14,7 @@ def GetSynapse(curve, maxsize):
     # random_data = make_random_file(maxsize=maxsize)
 
     # Random encryption key for now (never will decrypt)
-    key = get_random_bytes(32)  # 256-bit key
+    key = key or get_random_bytes(32)  # 256-bit key
 
     # Encrypt the data
     encrypted_data, nonce, tag = encrypt_data(

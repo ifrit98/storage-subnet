@@ -384,7 +384,7 @@ def verify_challenge_with_seed(synapse):
 
     if not committer.open(
         commitment,
-        hash_data(synapse.data_chunk + str(synapse.seed).encode()),
+        hash_data(base64.b64decode(synapse.data_chunk) + str(synapse.seed).encode()),
         synapse.randomness,
     ):
         print(f"Opening commitment failed")

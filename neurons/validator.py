@@ -141,7 +141,7 @@ def store_file_data(directory, metagraph):
     pass
 
 
-def store_random_data(metagraph):
+def store_random_data(metagraph, key=None):
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=config.curve)
 
@@ -149,7 +149,7 @@ def store_random_data(metagraph):
     random_data = make_random_file(maxsize=config.maxsize)
 
     # Random encryption key for now (never will decrypt)
-    encryption_key = get_random_bytes(32)  # 256-bit key
+    encryption_key = key or get_random_bytes(32)  # 256-bit key
 
     # Encrypt the data
     encrypted_data, nonce, tag = encrypt_data(
@@ -306,6 +306,7 @@ def retrieve(dendrite, metagraph, data_hash):
         # )
 
     # query all N (from redundancy factor) with M challenges (x% of the total data)
+    # TODO: see who returns the data fastest, and reward them highest
     responses = await dendrite(
         axons_to_query,
         protocol.Retrieve(
@@ -314,8 +315,19 @@ def retrieve(dendrite, metagraph, data_hash):
         deserialize=True,
     )
 
-    # verify the challenge
-    # if verified, return the entire data
+    for response in responses:
+        print("response:", response)
+        if hash_data(respnonse.data) != data_hash:
+            print("data hash does not match!")
+            continue
+
+        # Decrypt the data using the validator stored encryption keys
+        response.data = decrypt_aes_gcm(
+            base64.b64decode(response.data),
+            bytes.fromhex(data["encryption_key"]),
+            bytes.fromhex(data["encryption_nonce"]),
+            bytes.fromhex(data["encryption_tag"]),
+        )
 
 
 # Step 2: Set up the configuration parser
