@@ -255,7 +255,6 @@ def main(config):
         bt.logging.debug(f"r: {r}")
 
         # Store the data with the hash as the key
-        # Store the data
         miner_store = {
             "data": synapse.encrypted_data,
             "prev_seed": str(synapse.seed),
@@ -492,6 +491,25 @@ def main(config):
         bt.logging.debug(response_challenge.dict())
         verified = verify_challenge_with_seed(response_challenge)
         bt.logging.debug(f"Is verified: {verified}")
+
+        # Challenge a 2nd time to verify the chain of proofs
+        bt.logging.debug("\n\n2nd challenge phase------------------------".upper())
+        g, h = setup_CRS()
+        syn = storage.protocol.Challenge(
+            challenge_hash=data_hash,
+            chunk_size=chunk_size,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            curve=config.curve,
+            challenge_index=random.choice(range(num_chunks)),
+            seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
+        )
+        bt.logging.debug("\nChallenge 2 synapse:", syn)
+        response_challenge = challenge(syn)
+        bt.logging.debug("\nchallenge 2 response:")
+        bt.logging.debug(response_challenge.dict())
+        verified = verify_challenge_with_seed(response_challenge)
+        bt.logging.debug(f"Is verified 2: {verified}")
 
         bt.logging.debug("\n\nretrieve phase------------------------".upper())
         ryn = storage.protocol.Retrieve(data_hash=data_hash)
