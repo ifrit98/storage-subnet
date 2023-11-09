@@ -277,11 +277,9 @@ def main(config):
         synapse.signature = wallet.hotkey.sign(str(m_val)).hex()
         bt.logging.debug(f"signed m_val: {synapse.signature}")
 
-        # XOR METHOD INITIAlIZE CHAIN
+        # CONCAT METHOD INITIAlIZE CHAIN
         print(f"type(seed): {type(synapse.seed)}")
-        # xor_result = xor_data_and_seed(encrypted_byte_data, synapse.seed.encode())
-        # bt.logging.debug(f"initial xor_result: {xor_result}")
-        synapse.commitment_hash = str(m_val)  # hash_data(xor_result)
+        synapse.commitment_hash = str(m_val)
         bt.logging.debug(f"initial commitment_hash: {synapse.commitment_hash}")
 
         bt.logging.debug(f"returning synapse: {synapse}")
@@ -356,6 +354,12 @@ def main(config):
         synapse.commitment_hash = next_commitment
         synapse.commitment_proof = proof
 
+        # TODO: update the commitment seed challenge hash in storage
+        # - previous seed (S-1)
+        decoded["prev_seed"] = new_seed.decode("utf-8")
+        database.set(synapse.challenge_hash, json.dumps(decoded).encode())
+        bt.logging.debug(f"udpated miner storage: {decoded}")
+
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
         bt.logging.debug(f"data_chunks: {data_chunks}")
 
@@ -372,12 +376,6 @@ def main(config):
             synapse.seed,
         )
         bt.logging.debug(f"merkle_tree: {merkle_tree}")
-
-        # TODO: update the commitment seed challenge hash in storage
-        # Needs:
-        # - previous seed (S-1)
-        # - current seed  (S)
-        # - previous commitment hash (C-1)
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
