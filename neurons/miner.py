@@ -49,6 +49,7 @@ from storage.utils import (
     b64_decode,
     verify_challenge_with_seed,
     xor_bytes,
+    xor_data_and_seed,
 )
 
 
@@ -238,11 +239,8 @@ def main(config):
         Raises:
             Any exception raised by the underlying storage, encoding, or cryptographic functions will be propagated.
         """
-        # Store the data
-        miner_store = {
-            "data": synapse.encrypted_data,
-            "prev_seed": str(synapse.seed),
-        }
+        # Decode the data from base64 to raw bytes
+        encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
 
         # Commit to the entire data block
         committer = ECCommitment(
@@ -250,7 +248,6 @@ def main(config):
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
         bt.logging.debug(f"committer: {committer}")
-        encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
         bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
         bt.logging.debug(f"c: {c}")
@@ -258,7 +255,12 @@ def main(config):
         bt.logging.debug(f"r: {r}")
 
         # Store the data with the hash as the key
-        miner_store["size"] = sys.getsizeof(encrypted_byte_data)
+        # Store the data
+        miner_store = {
+            "data": synapse.encrypted_data,
+            "prev_seed": str(synapse.seed),
+            "size": sys.getsizeof(encrypted_byte_data),
+        }
 
         dumped = json.dumps(miner_store).encode()
         bt.logging.debug(f"dumped: {dumped}")
@@ -275,12 +277,19 @@ def main(config):
         synapse.signature = wallet.hotkey.sign(str(m_val)).hex()
         bt.logging.debug(f"signed m_val: {synapse.signature}")
 
-        # or equivalently hash_data(encrypted_byte_data + str(synapse.seed).encode())
-        synapse.commitment_hash = str(m_val)
+        # XOR METHOD INITIAlIZE CHAIN
+        print(f"type(seed): {type(synapse.seed)}")
+        # xor_result = xor_data_and_seed(encrypted_byte_data, synapse.seed.encode())
+        # bt.logging.debug(f"initial xor_result: {xor_result}")
+        synapse.commitment_hash = str(m_val)  # hash_data(xor_result)
+        bt.logging.debug(f"initial commitment_hash: {synapse.commitment_hash}")
+
         bt.logging.debug(f"returning synapse: {synapse}")
         return synapse
 
-    def challenge(synapse: storage.protocol.Challenge) -> storage.protocol.Challenge:
+    def challenge(
+        synapse: storage.protocol.Challenge, verbose=False
+    ) -> storage.protocol.Challenge:
         """
         Responds to a challenge by providing a specific data chunk, its randomness, and a Merkle proof from the storage.
 
@@ -319,6 +328,34 @@ def main(config):
         encrypted_data_bytes = base64.b64decode(decoded["data"])
         bt.logging.debug(f"encrypted_data_bytes: {encrypted_data_bytes}")
 
+        # Construct the next commitment hash using previous commitment and hash
+        # of the data to prove storage over time
+        def compute_subsequent_commitment(data, previous_seed, new_seed):
+            """Compute a subsequent commitment based on the original data, previous seed, and new seed."""
+            if verbose:
+                print("IN COMPUTE SUBESEQUENT COMMITMENT")
+                print("type of data     :", type(data))
+                print("type of prev_seed:", type(previous_seed))
+                print("type of new_seed :", type(new_seed))
+            proof = hash_data(data + previous_seed)
+            return hash_data(str(proof).encode("utf-8") + new_seed), proof
+
+        prev_seed = decoded["prev_seed"].encode()
+        new_seed = synapse.seed.encode()
+        next_commitment, proof = compute_subsequent_commitment(
+            encrypted_data_bytes, prev_seed, new_seed
+        )
+        if verbose:
+            print(
+                f"types: prev_seed {str(type(prev_seed))}, new_seed {str(type(new_seed))}, proof {str(type(proof))}"
+            )
+            print(f"prev seed : {prev_seed}")
+            print(f"new seed  : {new_seed}")
+            print(f"proof     : {proof}")
+            print(f"commitment: {next_commitment}\n")
+        synapse.commitment_hash = next_commitment
+        synapse.commitment_proof = proof
+
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
         bt.logging.debug(f"data_chunks: {data_chunks}")
 
@@ -336,7 +373,7 @@ def main(config):
         )
         bt.logging.debug(f"merkle_tree: {merkle_tree}")
 
-        # TODO: update the commitment seed challenge hash
+        # TODO: update the commitment seed challenge hash in storage
         # Needs:
         # - previous seed (S-1)
         # - current seed  (S)
@@ -403,12 +440,12 @@ def main(config):
         bt.logging.debug("\nresponse store:")
         bt.logging.debug(response_store.dict())
         verified = verify_store_with_seed(response_store)
-        bt.logging.debug("\nStore verified: ", verified)
+        bt.logging.debug(f"\nStore verified: {verified}")
 
         encrypted_byte_data = base64.b64decode(syn.encrypted_data)
         response_store.axon.hotkey = wallet.hotkey.ss58_address
         lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
-        bt.logging.debug("lookup key:", lookup_key)
+        bt.logging.debug(f"lookup key: {lookup_key}")
         validator_store = {
             "seed": response_store.seed,
             "size": sys.getsizeof(encrypted_byte_data),
@@ -424,7 +461,7 @@ def main(config):
         bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
 
         bt.logging.debug("\n\nchallenge phase------------------------".upper())
-        bt.logging.debug("key selected:", lookup_key)
+        bt.logging.debug(f"key selected: {lookup_key}")
         data_hash = lookup_key.split(".")[0]
         bt.logging.debug("data_hash:", data_hash)
         data = database.get(lookup_key)
@@ -449,7 +486,7 @@ def main(config):
             h=ecc_point_to_hex(h),
             curve=config.curve,
             challenge_index=random.choice(range(num_chunks)),
-            seed=data["seed"],
+            seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
         )
         bt.logging.debug("\nChallenge synapse:", syn)
         response_challenge = challenge(syn)

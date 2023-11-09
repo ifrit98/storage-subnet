@@ -61,11 +61,14 @@ class Challenge(bt.Synapse):
     seed: typing.Union[str, int]  # random seed for the commitment
 
     # Returns
+    # - commitment hash (hex string) hash( hash( data + prev_seed ) + seed )
     # - commitment (point represented as hex string)
     # - data chunk (base64 encoded string of bytes)
     # - random value (int)
     # - merkle proof (List[Dict[<left|right>, hex strings])
     # - merkle root (hex string)
+    commitment_hash: typing.Optional[str] = None
+    commitment_proof: typing.Optional[str] = None
     commitment: typing.Optional[str] = None
     data_chunk: typing.Optional[bytes] = None
     randomness: typing.Optional[int] = None

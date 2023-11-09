@@ -130,9 +130,10 @@ class ECCommitment:
     The `commit` method will print the commitment process, and the `open` method will print the verification process.
     """
 
-    def __init__(self, g, h):
+    def __init__(self, g, h, verbose=False):
         self.g = g  # Base point of the curve
         self.h = h  # Another random point on the curve
+        self.verbose = verbose
 
     def commit(self, m):  # AKA Seal.
         """
@@ -158,9 +159,10 @@ class ECCommitment:
         c1 = self.g.__mul__(m_val)
         c2 = self.h.__mul__(r)
         c = c1.__add__(c2)
-        print(
-            f"Committing: Data = {m}\nHashed Value = {m_val}\nRandom Value = {r}\nComputed Commitment = {c}\n"
-        )
+        if self.verbose:
+            print(
+                f"Committing: Data = {m}\nHashed Value = {m_val}\nRandom Value = {r}\nComputed Commitment = {c}\n"
+            )
         return c, m_val, r
 
     def open(self, c, m_val, r):
@@ -187,7 +189,8 @@ class ECCommitment:
         c1 = self.g.__mul__(m_val)
         c2 = self.h.__mul__(r)
         computed_c = c1.__add__(c2)
-        print(
-            f"\nOpening: Hashed Value = {m_val}\nRandom Value = {r}\nRecomputed Commitment = {computed_c}\nOriginal Commitment = {c}"
-        )
+        if self.verbose:
+            print(
+                f"\nOpening: Hashed Value = {m_val}\nRandom Value = {r}\nRecomputed Commitment = {computed_c}\nOriginal Commitment = {c}"
+            )
         return computed_c == c
