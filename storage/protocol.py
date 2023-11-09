@@ -81,6 +81,9 @@ class Challenge(bt.Synapse):
 class Retrieve(bt.Synapse):
     # Where to find the data
     data_hash: str
+    seed: str
 
-    # Fetched data
+    # Fetched data and proof
     data: typing.Optional[str] = None
+    commitment_hash: typing.Optional[str] = None
+    commitment_proof: typing.Optional[str] = None
