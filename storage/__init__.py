@@ -29,3 +29,4 @@ __spec_version__ = (
 from . import protocol
 from . import reward
 from . import utils
+from . import validator

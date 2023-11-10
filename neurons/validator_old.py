@@ -45,8 +45,6 @@ from storage.utils import (
     get_random_chunksize,
     ecc_point_to_hex,
     hex_to_ecc_point,
-    serialize_dict_with_bytes,
-    deserialize_dict_with_bytes,
     verify_challenge_with_seed,
     verify_store_with_seed,
     verify_retrieve_with_seed,
