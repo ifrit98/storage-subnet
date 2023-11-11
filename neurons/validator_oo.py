@@ -45,7 +45,7 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
-    ttl_get_block,   
+    ttl_get_block,
 )
 
 from storage.validator.weights import (
@@ -53,8 +53,30 @@ from storage.validator.weights import (
     set_weights,
 )
 
-class neuron:
 
+def check_uid_availability(
+    metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
+) -> bool:
+    """Check if uid is available. The UID should be available if it is serving and has less than vpermit_tao_limit stake
+    Args:
+        metagraph (:obj: bt.metagraph.Metagraph): Metagraph object
+        uid (int): uid to be checked
+        vpermit_tao_limit (int): Validator permit tao limit
+    Returns:
+        bool: True if uid is available, False otherwise
+    """
+    # Filter non serving axons.
+    if not metagraph.axons[uid].is_serving:
+        return False
+    # Filter validator permit > 1024 stake.
+    if metagraph.validator_permit[uid]:
+        if metagraph.S[uid] > vpermit_tao_limit:
+            return False
+    # Available otherwise.
+    return True
+
+
+class neuron:
     @classmethod
     def check_config(cls, config: "bt.Config"):
         check_config(cls, config)
@@ -66,7 +88,6 @@ class neuron:
     @classmethod
     def config(cls):
         return config(cls)
-
 
     subtensor: "bt.subtensor"
     wallet: "bt.wallet"
@@ -115,7 +136,9 @@ class neuron:
 
         # Setup database
         self.database = redis.StrictRedis(
-            host=self.config.database_host, port=self.config.database_port, db=self.config.database_index
+            host=self.config.database_host,
+            port=self.config.database_port,
+            db=self.config.database_index,
         )
 
         # Init Weights.
@@ -169,6 +192,39 @@ class neuron:
         self.prev_block = ttl_get_block(self)
         self.step = 0
 
+    def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
+        """Returns k available random uids from the metagraph.
+        Args:
+            k (int): Number of uids to return.
+            exclude (List[int]): List of uids to exclude from the random sampling.
+        Returns:
+            uids (torch.LongTensor): Randomly sampled available uids.
+        Notes:
+            If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
+        """
+        candidate_uids = []
+        avail_uids = []
+
+        for uid in range(self.metagraph.n.item()):
+            uid_is_available = check_uid_availability(
+                self.metagraph, uid, self.config.neuron.vpermit_tao_limit
+            )
+            uid_is_not_excluded = exclude is None or uid not in exclude
+
+            if uid_is_available:
+                avail_uids.append(uid)
+                if uid_is_not_excluded:
+                    candidate_uids.append(uid)
+
+        # Check if candidate_uids contain enough for querying, if not grab all avaliable uids
+        available_uids = candidate_uids
+        if len(candidate_uids) < k:
+            available_uids += random.sample(
+                [uid for uid in avail_uids if uid not in candidate_uids],
+                k - len(candidate_uids),
+            )
+        uids = torch.tensor(random.sample(available_uids, k))
+        return uids
 
     def update_index(self, synapse: protocol.Update):
         """Update the validator index with the new data"""
@@ -199,21 +255,56 @@ class neuron:
                 # Update the index to the latest data
                 self.database.set(synapse.key, json.dumps(entry).encode())
 
-
     def store_file_data(self, metagraph, directory=None, file_bytes=None):
         # TODO: write this to be a mirror of store_random_data
         # it will not be random but use real data from the validator filesystem or client data
         # possibly textbooks, pdfs, audio files, pictures, etc. to mimick user data
         pass
 
+    # def get_sorted_response_times(queried_axons, responses):
+    #     axon_times = []
+    #     for idx, response in enumerate(responses):
+    #         axon_times.append((queried_axons[idx], response.axon.process_time))
+    #     sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
+    #     return sorted_axon_times
 
-    def get_sorted_response_times(queried_axons, responses):
-        axon_times = []
-        for idx, response in enumerate(responses):
-            axon_times.append((queried_axons[idx], response.axon.process_time))
-        sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
+    # def get_sorted_response_times(uids, responses):
+    #     axon_times = []
+    #     for idx, response in enumerate(responses):
+    #         axon_times.append((uids[idx], response.axon.process_time))
+    #     sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
+    #     return sorted_axon_times
+
+    def get_sorted_response_times(uids, responses):
+        axon_times = [
+            (uids[idx], response.axon.process_time)
+            for idx, response in enumerate(responses)
+        ]
+        # Sorting in ascending order since lower process time is better
+        sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
         return sorted_axon_times
 
+    def scale_rewards_by_response_time(uids, responses, rewards):
+        sorted_axon_times = get_sorted_response_times(uids, responses)
+
+        # Extract only the process times
+        process_times = [proc_time for _, proc_time in sorted_axon_times]
+
+        # Find min and max values for normalization
+        min_time = min(process_times)
+        max_time = max(process_times)
+
+        # Normalize these times to a scale of 0 to 1 (inverted)
+        normalized_scores = [
+            (max_time - proc_time) / (max_time - min_time)
+            for proc_time in process_times
+        ]
+
+        # Scale the rewards by these normalized scores
+        for idx, (uid, _) in enumerate(sorted_axon_times):
+            rewards[uid] *= normalized_scores[idx]
+
+        return rewards
 
     async def broadcast(self, key, data, metagraph, dendrite, stake_threshold=10000):
         """Send updates to all validators on the network when creating or updating in index value"""
@@ -248,11 +339,7 @@ class neuron:
 
         # TODO: Check the responses to ensure all validaors are updated
 
-
     async def store_data(self, key=None):
-        # TODO: Make this asynchronous so we can await dendrite() instead
-        # and then score miners based on who responds fastest with correct proof
-
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.curve)
 
@@ -301,7 +388,6 @@ class neuron:
             bt.logging.info(f"Received responses: {responses}")
 
             # TEMP weights vector
-            weights = [1.0] * len(metagraph.uids)
             for uid, response in zip(uids, responses):
                 # Verify the commitment
                 if not verify_challenge_with_seed(response):
@@ -336,10 +422,11 @@ class neuron:
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
-                uids = select_subset_uids(retry_uids, N=len(retry_uids))
+                uids = select_subset_uids(metagraph.uids, N=len(retry_uids))
+                bt.logging.debug(f"Retrying with new uids: {uids}")
                 axons = [metagraph.axons[uid] for uid in uids]
+                retry_uids = []  # reset retry uids
                 retries += 1
-
 
     async def handle_challenge(self, hotkey):
         keys = safe_key_search(self.database, f"*.{hotkey}")
@@ -347,7 +434,9 @@ class neuron:
         data_hash = key.split(".")[0]
 
         data = json.loads(self.database.get(key).decode("utf-8"))
-        chunk_size = get_random_chunksize(data["size"]) // self.config.neuron.chunk_factor
+        chunk_size = (
+            get_random_chunksize(data["size"]) // self.config.neuron.chunk_factor
+        )
         num_chunks = data["size"] // chunk_size
         g, h = setup_CRS()
 
@@ -361,7 +450,6 @@ class neuron:
             seed=get_random_bytes(32).hex(),
         )
 
-        uid = self.metagraph.hotkeys.index(hotkey)
         axon = self.metagraph.axons[uid]
 
         response = await self.dendrite(
@@ -383,14 +471,43 @@ class neuron:
         # fastest (passes verification), and rank them highest
         # We create each challenge as a coroutine and then
         # await the results of each challenge asynchronously
-        for hotkey in self.metegraph.hotkeys: # ["5C86aJ2uQawR6P6veaJQXNK9HaWh6NMbUhTiLs65kq4ZW3NH"]
-            tasks.append(asyncio.create_task(handle_challenge(hotkey)))
-        results = await asyncio.gather(*tasks)
+        tasks = []
+        uids = self.get_random_uids(k=self.config.neuron.challenge_k)
+        for uid in uids:
+            tasks.append(
+                asyncio.create_task(handle_challenge(self.metagraph.hotkeys[uid]))
+            )
+        responses = await asyncio.gather(*tasks)
 
-        # TODO: calculate reward scores based on axon response times and verification
-        for (verified, response) in results:
+        # Compute the rewards for the responses given the prompt.
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
+
+        # Set 0 weight if unverified
+        for uid, (verified, response) in zip(uids, responses):
             if verified:
-                pass
+                rewards[uid] = 1.0
+            else:
+                rewards[uid] = 0.0
+
+        # Scale reward by the ranking of the response time
+        # If the response time is faster, the reward is higher
+        # This should reflect the distribution of axon response times (minmax norm)
+        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+
+        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
+        # shape: [ metagraph.n ]
+        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
+            0, uids, scaled_rewards
+        ).to(self.device)
+
+        # Update moving_averaged_scores with rewards produced by this step.
+        # shape: [ metagraph.n ]
+        alpha: float = self.config.neuron.moving_average_alpha
+        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
+            1 - alpha
+        ) * self.moving_averaged_scores.to(self.device)
 
     async def retrieve(self, data_hash):
         # fetch which miners have the data
@@ -419,9 +536,7 @@ class neuron:
         )
 
         datas = []
-        axon_times = []
         for idx, response in enumerate(responses):
-
             bt.logging.debug(f"response: {response}")
             decoded_data = base64.b64decode(respnonse.data)
             if hash_data(decoded_data) != data_hash:
@@ -432,24 +547,44 @@ class neuron:
                 bt.logging.error(f"data verification failed! {response}")
                 continue
 
-            axon_times.append((axons_to_query[idx], response.axon.process_time))
-
-            # Decrypt the data using the validator stored encryption keys
-            decrypted_data = decrypt_aes_gcm(
-                decoded_data,
-                bytes.fromhex(data["encryption_key"]),
-                bytes.fromhex(data["encryption_nonce"]),
-                bytes.fromhex(data["encryption_tag"]),
-            )
-            datas.append(decrypted_data)
+            try:
+                bt.logging.debug(f"Decrypting from UID: {uids[idx]}")
+                # Decrypt the data using the validator stored encryption keys
+                decrypted_data = decrypt_aes_gcm(
+                    decoded_data,
+                    bytes.fromhex(data["encryption_key"]),
+                    bytes.fromhex(data["encryption_nonce"]),
+                    bytes.fromhex(data["encryption_tag"]),
+                )
+                datas.append(decrypted_data)
+            except:
+                pass
 
             # TODO: return this to the user
             # TODO: get a temp link from the server to send back to the client
 
-        # Get a sorted list of the fastest miners to return the data
-        sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
+        # Compute the rewards for the responses given the prompt.
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
 
-        # TODO: score weights based on descending list of axon times
+        # Compute scaled rewards based on response time (higher == better)
+        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+
+        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
+        # shape: [ metagraph.n ]
+        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
+            0, uids, scaled_rewards
+        ).to(self.device)
+
+        # Update moving_averaged_scores with rewards produced by this step.
+        # shape: [ metagraph.n ]
+        alpha: float = self.config.neuron.moving_average_alpha
+        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
+            1 - alpha
+        ) * self.moving_averaged_scores.to(self.device)
+
+        return datas
 
     async def forward(self) -> torch.Tensor:
         self.counter += 1

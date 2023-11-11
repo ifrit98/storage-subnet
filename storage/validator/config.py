@@ -67,9 +67,7 @@ def check_config(cls, config: "bt.Config"):
 
 def add_args(cls, parser):
     # Netuid Arg
-    parser.add_argument(
-        "--netuid", type=int, help="Storage network netuid", default=21
-    )
+    parser.add_argument("--netuid", type=int, help="Storage network netuid", default=21)
 
     parser.add_argument(
         "--neuron.name",
@@ -101,6 +99,13 @@ def add_args(cls, parser):
         type=int,
         default=3,
         help="Number of miners to store each piece of data on.",
+    )
+
+    parser.add_argument(
+        "--neuron.challenge_k",
+        type=int,
+        default=5,
+        help="Number of miners to challenge at a time.",
     )
 
     parser.add_argument(
