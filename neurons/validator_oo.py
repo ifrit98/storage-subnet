@@ -387,14 +387,20 @@ class neuron:
             # Log the results for monitoring purposes.
             bt.logging.info(f"Received responses: {responses}")
 
-            # TEMP weights vector
-            for uid, response in zip(uids, responses):
+            # Compute the rewards for the responses given proc time.
+            rewards: torch.FloatTensor = torch.zeros(
+                len(responses), dtype=torch.float32
+            ).to(self.device)
+
+            for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
                 if not verify_challenge_with_seed(response):
                     # TODO: flag this miner for 0 weight (or negative rewards?)
-                    weights[uid] = 0.0
+                    rewards[idx] = 0.0
                     retry_uids.append(uid)
-                    continue
+                    continue  # Skip trying to store the data
+                else:
+                    rewards[idx] = 1.0
 
                 data_hash = hash_data(encrypted_data)
 
@@ -418,7 +424,24 @@ class neuron:
 
                 # Broadcast the update to all other validators
                 # TODO: ensure this will not block
+                # TODO: potentially batch update after all miners have responded?
                 broadcast(key, dumped_data)
+
+            # TODO: Abstract a function for this (Used 3 times already)
+            scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+
+            # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
+            # shape: [ metagraph.n ]
+            scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
+                0, uids, scaled_rewards
+            ).to(self.device)
+
+            # Update moving_averaged_scores with rewards produced by this step.
+            # shape: [ metagraph.n ]
+            alpha: float = self.config.neuron.moving_average_alpha
+            self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
+                1 - alpha
+            ) * self.moving_averaged_scores.to(self.device)
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
@@ -535,6 +558,10 @@ class neuron:
             deserialize=True,
         )
 
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
+
         datas = []
         for idx, response in enumerate(responses):
             bt.logging.debug(f"response: {response}")
@@ -545,7 +572,10 @@ class neuron:
 
             if not verify_retrieve_with_seed(response):
                 bt.logging.error(f"data verification failed! {response}")
-                continue
+                rewards[idx] = 0.0
+                continue  # skip trying to decode the data
+            else:
+                rewards[idx] = 1.0
 
             try:
                 bt.logging.debug(f"Decrypting from UID: {uids[idx]}")
@@ -560,13 +590,7 @@ class neuron:
             except:
                 pass
 
-            # TODO: return this to the user
             # TODO: get a temp link from the server to send back to the client
-
-        # Compute the rewards for the responses given the prompt.
-        rewards: torch.FloatTensor = torch.zeros(
-            len(responses), dtype=torch.float32
-        ).to(self.device)
 
         # Compute scaled rewards based on response time (higher == better)
         scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
