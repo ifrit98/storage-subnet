@@ -2,13 +2,13 @@ import os
 import json
 import bittensor as bt
 
-from ..utils import (
-    safe_key_search,
+from ..shared.ecc import (
     ecc_point_to_hex,
     hex_to_ecc_point,
-    MerkleTree,
-    MerkleTreeException,
     hash_data,
+)
+from ..shared.merkle import (
+    MerkleTree,
 )
 
 
@@ -46,24 +46,6 @@ def load_from_filesystem(filepath):
     with open(os.path.expanduser(filepath), "rb") as file:
         data = file.read()
     return data
-
-
-def total_storage(database):
-    # Fetch all keys from Redis
-    all_keys = safe_key_search(database, "*")
-
-    # Filter out keys that contain a period (temporary, remove later)
-    filtered_keys = [key for key in all_keys if b"." not in key]
-    bt.logging.debug("filtered_keys:", filtered_keys)
-
-    # Get the size of each data object and sum them up
-    total_size = sum(
-        [
-            json.loads(database.get(key).decode("utf-8")).get("size", 0)
-            for key in filtered_keys
-        ]
-    )
-    return total_size
 
 
 def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):

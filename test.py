@@ -21,12 +21,16 @@ import base64
 import storage
 import bittensor as bt
 
-from .miner import store, challenge, retrieve
 
-from .ecc import setup_CRS, ecc_point_to_hex
-from .util import encrypt_data, make_random_file, hash_data, get_random_bytes
-from .util import get_random_chunksize, decrypt_data
-from .util import (
+from storage.utils.ecc import setup_CRS, ecc_point_to_hex
+from storage.utils.util import (
+    encrypt_data,
+    make_random_file,
+    hash_data,
+    get_random_bytes,
+)
+from storage.utils.shared import get_random_chunksize, decrypt_data
+from storage.utils.validator import (
     verify_store_with_seed,
     verify_challenge_with_seed,
     verify_retrieve_with_seed,
@@ -61,10 +65,10 @@ def GetSynapse(curve, maxsize, wallet):
     return synapse, encryption_payload
 
 
-def test(miner, config, database):
+def test(miner):
     bt.logging.debug("\n\nstore phase------------------------".upper())
     syn, encryption_payload = GetSynapse(
-        config.curve, config.maxsize, wallet=miner.wallet
+        miner.config.curve, miner.config.maxsize, wallet=miner.wallet
     )
     bt.logging.debug("\nsynapse:", syn)
     response_store = miner.store(syn)
@@ -76,7 +80,7 @@ def test(miner, config, database):
     bt.logging.debug(f"Store verified: {verified}")
 
     encrypted_byte_data = base64.b64decode(syn.encrypted_data)
-    response_store.axon.hotkey = wallet.hotkey.ss58_address
+    response_store.axon.hotkey = miner.wallet.hotkey.ss58_address
     lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
     bt.logging.debug(f"lookup key: {lookup_key}")
     validator_store = {
@@ -86,8 +90,8 @@ def test(miner, config, database):
         "encryption_payload": encryption_payload,
     }
     dump = json.dumps(validator_store).encode()
-    database.set(lookup_key, dump)
-    retrv = database.get(lookup_key)
+    miner.database.set(lookup_key, dump)
+    retrv = miner.database.get(lookup_key)
     bt.logging.debug("\nretrv:", retrv)
     bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
 
@@ -95,7 +99,7 @@ def test(miner, config, database):
     bt.logging.debug(f"key selected: {lookup_key}")
     data_hash = lookup_key.split(".")[0]
     bt.logging.debug("data_hash:", data_hash)
-    data = database.get(lookup_key)
+    data = miner.database.get(lookup_key)
     bt.logging.debug("data:", data)
     data = json.loads(data.decode("utf-8"))
     bt.logging.debug(f"data size: {data['size']}")
@@ -119,7 +123,7 @@ def test(miner, config, database):
         chunk_size=chunk_size,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        curve=config.curve,
+        curve=miner.config.curve,
         challenge_index=random.choice(range(num_chunks)),
         seed=get_random_bytes(32).hex(),
     )
@@ -133,7 +137,7 @@ def test(miner, config, database):
     data["prev_seed"] = response_challenge.seed
     data["counter"] += 1
     dump = json.dumps(data).encode()
-    database.set(lookup_key, dump)
+    miner.database.set(lookup_key, dump)
 
     # Challenge a 2nd time to verify the chain of proofs
     bt.logging.debug("\n\n2nd challenge phase------------------------".upper())
@@ -143,7 +147,7 @@ def test(miner, config, database):
         chunk_size=chunk_size,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        curve=config.curve,
+        curve=miner.config.curve,
         challenge_index=random.choice(range(num_chunks)),
         seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
     )
@@ -157,7 +161,7 @@ def test(miner, config, database):
     data["prev_seed"] = response_challenge.seed
     data["counter"] += 1
     dump = json.dumps(data).encode()
-    database.set(lookup_key, dump)
+    miner.database.set(lookup_key, dump)
 
     bt.logging.debug("\n\nretrieve phase------------------------".upper())
     ryn = storage.protocol.Retrieve(
@@ -181,9 +185,9 @@ def test(miner, config, database):
     data["prev_seed"] = ryn.seed
     data["counter"] += 1
     dump = json.dumps(data).encode()
-    database.set(lookup_key, dump)
+    miner.database.set(lookup_key, dump)
 
-    print("final validator store:", database.get(lookup_key))
+    print("final validator store:", miner.database.get(lookup_key))
     import pdb
 
     pdb.set_trace()

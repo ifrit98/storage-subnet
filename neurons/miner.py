@@ -24,11 +24,13 @@ import sys
 import copy
 import json
 import time
+import torch
 import redis
 import typing
 import base64
 import asyncio
 import argparse
+import threading
 import traceback
 import bittensor as bt
 from collections import defaultdict
@@ -38,28 +40,43 @@ from pprint import pprint, pformat
 
 # import this repo
 import storage
-from storage.utils import (
+from storage.shared.ecc import (
     hash_data,
     setup_CRS,
-    chunk_data,
-    MerkleTree,
     ECCommitment,
     ecc_point_to_hex,
     hex_to_ecc_point,
-    b64_encode,
-    b64_decode,
 )
 
+from storage.shared.merkle import (
+    MerkleTree,
+)
 
-from stroage.utils.miner import (
+from storage.shared.utils import (
+    b64_encode,
+    b64_decode,
+    chunk_data,
+)
+
+from storage.miner import (
+    run,
+    set_weights,
+)
+
+from storage.miner.utils import (
     compute_subsequent_commitment,
     save_data_to_filesystem,
     load_from_filesystem,
-    total_storage,
+)
+
+from storage.miner.config import (
+    config,
+    check_config,
+    add_args,
 )
 
 
-class neuron:
+class miner:
     @classmethod
     def check_config(cls, config: "bt.Config"):
         check_config(cls, config)
@@ -77,16 +94,16 @@ class neuron:
     metagraph: "bt.metagraph"
 
     def __init__(self):
-        self.config = neuron.config()
+        self.config = miner.config()
         self.check_config(self.config)
-        bt.logging(config=self.config, logging_dir=self.config.neuron.full_path)
-        bt.logging.info(config)
+        bt.logging(config=self.config, logging_dir=self.config.miner.full_path)
+        bt.logging.info(f"{self.config}")
 
-        bt.logging.info("neuron.__init__()")
+        bt.logging.info("miner.__init__()")
 
         # Init device.
         bt.logging.debug("loading", "device")
-        self.device = torch.device(self.config.neuron.device)
+        self.device = torch.device(self.config.miner.device)
         bt.logging.debug(str(self.device))
 
         # Init subtensor
@@ -174,8 +191,32 @@ class neuron:
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
 
-        self.prev_block = ttl_get_block(self)
+        # Instantiate runners
+        self.should_exit: bool = False
+        self.is_running: bool = False
+        self.thread: threading.Thread = None
+        self.lock = asyncio.Lock()
+        self.request_timestamps: Dict = {}
+
         self.step = 0
+
+    @property
+    def total_storage(self):
+        # Fetch all keys from Redis
+        all_keys = safe_key_search(database, "*")
+
+        # Filter out keys that contain a period (temporary, remove later)
+        filtered_keys = [key for key in all_keys if b"." not in key]
+        bt.logging.debug("filtered_keys:", filtered_keys)
+
+        # Get the size of each data object and sum them up
+        total_size = sum(
+            [
+                json.loads(self.database.get(key).decode("utf-8")).get("size", 0)
+                for key in filtered_keys
+            ]
+        )
+        return total_size
 
     def blacklist_fn(
         self, synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
@@ -226,7 +267,7 @@ class neuron:
         data_hash = hash_data(encrypted_byte_data)
         bt.logging.debug(f"data_hash: {data_hash}")
         filepath = save_data_to_filesystem(
-            encrypted_byte_data, config.data_directory, str(data_hash)
+            encrypted_byte_data, self.config.database.directory, str(data_hash)
         )
         bt.logging.debug(f"stored data in filepath: {filepath}")
         miner_store = {
@@ -238,7 +279,7 @@ class neuron:
         # Dump the metadata to json and store in redis
         dumped = json.dumps(miner_store).encode()
         bt.logging.debug(f"dumped: {dumped}")
-        database.set(data_hash, dumped)
+        self.database.set(data_hash, dumped)
         bt.logging.debug(f"set in database!")
 
         # Send back some proof that we stored the data
@@ -246,7 +287,7 @@ class neuron:
         synapse.commitment = ecc_point_to_hex(c)
 
         # NOTE: Does this add anything of value?
-        synapse.signature = wallet.hotkey.sign(str(m_val)).hex()
+        synapse.signature = self.wallet.hotkey.sign(str(m_val)).hex()
         bt.logging.debug(f"signed m_val: {synapse.signature.hex()}")
 
         # CONCAT METHOD INITIAlIZE CHAIN
@@ -258,14 +299,14 @@ class neuron:
         return synapse
 
     def challenge(
-        self, synapse: storage.protocol.Challenge, verbose=False
+        self, synapse: storage.protocol.Challenge
     ) -> storage.protocol.Challenge:
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
-        data = database.get(synapse.challenge_hash)
+        data = self.database.get(synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
-            bt.logging.error(f"keys found: {database.keys('*')}")
+            bt.logging.error(f"keys found: {self.database.keys('*')}")
             return synapse
 
         decoded = json.loads(data.decode("utf-8"))
@@ -283,7 +324,7 @@ class neuron:
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed
         )
-        if verbose:
+        if self.config.verbose:
             print(
                 f"types: prev_seed {str(type(prev_seed))}, new_seed {str(type(new_seed))}, proof {str(type(proof))}"
             )
@@ -296,7 +337,7 @@ class neuron:
 
         # update the commitment seed challenge hash in storage
         decoded["prev_seed"] = new_seed.decode("utf-8")
-        database.set(synapse.challenge_hash, json.dumps(decoded).encode())
+        self.database.set(synapse.challenge_hash, json.dumps(decoded).encode())
         bt.logging.debug(f"udpated miner storage: {decoded}")
 
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
@@ -333,7 +374,7 @@ class neuron:
 
     def retrieve(self, synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
         # Fetch the data from the miner database
-        data = database.get(synapse.data_hash)
+        data = self.database.get(synapse.data_hash)
         bt.logging.debug("retireved data:", data)
 
         # Decode the data + metadata from bytes to json
@@ -355,7 +396,7 @@ class neuron:
 
         # store new seed
         decoded["prev_seed"] = synapse.seed
-        database.set(synapse.data_hash, json.dumps(decoded).encode())
+        self.database.set(synapse.data_hash, json.dumps(decoded).encode())
         bt.logging.debug(f"udpated retrieve miner storage: {decoded}")
 
         # Return base64 data
@@ -373,41 +414,10 @@ class neuron:
                 decrypt_aes_gcm,
             )
 
-            test(self, config, database)
+            test(self)
 
-        # Step 7: Keep the miner alive
-        # This loop maintains the miner's operations until intentionally stopped.
-        bt.logging.info(f"Starting main loop")
-        step = 0
-        while True:
-            try:
-                # TODO(developer): Define any additional operations to be performed by the miner.
-                # Below: Periodically update our knowledge of the network graph.
-                if step % 5 == 0:
-                    metagraph = subtensor.metagraph(config.netuid)
-                    log = (
-                        f"Step:{step} | "
-                        f"Block:{metagraph.block.item()} | "
-                        f"Stake:{metagraph.S[my_subnet_uid]} | "
-                        f"Rank:{metagraph.R[my_subnet_uid]} | "
-                        f"Trust:{metagraph.T[my_subnet_uid]} | "
-                        f"Consensus:{metagraph.C[my_subnet_uid] } | "
-                        f"Incentive:{metagraph.I[my_subnet_uid]} | "
-                        f"Emission:{metagraph.E[my_subnet_uid]}"
-                    )
-                    bt.logging.info(log)
-                step += 1
-                time.sleep(1)
-
-            # If someone intentionally stops the miner, it'll safely terminate operations.
-            except KeyboardInterrupt:
-                axon.stop()
-                bt.logging.success("Miner killed by keyboard interrupt.")
-                break
-            # In case of unforeseen errors, the miner will log the error and continue operations.
-            except Exception as e:
-                bt.logging.error(traceback.format_exc())
-                continue
+    def run(self):
+        run(self)
 
     def run_in_background_thread(self):
         """
@@ -457,7 +467,7 @@ class neuron:
 
 
 def main():
-    neuron().run()
+    miner().run()
 
 
 if __name__ == "__main__":
