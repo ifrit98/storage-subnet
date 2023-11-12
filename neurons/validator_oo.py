@@ -54,6 +54,42 @@ from storage.validator.weights import (
 )
 
 
+def safe_key_search(database, pattern):
+    return [key for key in database.scan_iter(pattern)]
+
+
+def get_sorted_response_times(uids, responses):
+    axon_times = [
+        (uids[idx], response.axon.process_time)
+        for idx, response in enumerate(responses)
+    ]
+    # Sorting in ascending order since lower process time is better
+    sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
+    return sorted_axon_times
+
+
+def scale_rewards_by_response_time(uids, responses, rewards):
+    sorted_axon_times = get_sorted_response_times(uids, responses)
+
+    # Extract only the process times
+    process_times = [proc_time for _, proc_time in sorted_axon_times]
+
+    # Find min and max values for normalization
+    min_time = min(process_times)
+    max_time = max(process_times)
+
+    # Normalize these times to a scale of 0 to 1 (inverted)
+    normalized_scores = [
+        (max_time - proc_time) / (max_time - min_time) for proc_time in process_times
+    ]
+
+    # Scale the rewards by these normalized scores
+    for idx, (uid, _) in enumerate(sorted_axon_times):
+        rewards[uid] *= normalized_scores[idx]
+
+    return rewards
+
+
 def check_uid_availability(
     metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
 ) -> bool:
@@ -226,6 +262,25 @@ class neuron:
         uids = torch.tensor(random.sample(available_uids, k))
         return uids
 
+    def apply_reward_scores(self, uids, responses, rewards):
+        # Scale reward by the ranking of the response time
+        # If the response time is faster, the reward is higher
+        # This should reflect the distribution of axon response times (minmax norm)
+        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+
+        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
+        # shape: [ metagraph.n ]
+        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
+            0, uids, scaled_rewards
+        ).to(self.device)
+
+        # Update moving_averaged_scores with rewards produced by this step.
+        # shape: [ metagraph.n ]
+        alpha: float = self.config.neuron.moving_average_alpha
+        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
+            1 - alpha
+        ) * self.moving_averaged_scores.to(self.device)
+
     def update_index(self, synapse: protocol.Update):
         """Update the validator index with the new data"""
         data = self.database.get(synapse.key)
@@ -237,9 +292,7 @@ class neuron:
                 "prev_seed",
                 "size",
                 "counter",
-                "encryption_key",
-                "encryption_nonce",
-                "encryption_tag",
+                "encryption_payload",
             ]
         }
         if not data:
@@ -255,38 +308,9 @@ class neuron:
                 # Update the index to the latest data
                 self.database.set(synapse.key, json.dumps(entry).encode())
 
-    def get_sorted_response_times(uids, responses):
-        axon_times = [
-            (uids[idx], response.axon.process_time)
-            for idx, response in enumerate(responses)
-        ]
-        # Sorting in ascending order since lower process time is better
-        sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
-        return sorted_axon_times
-
-    def scale_rewards_by_response_time(uids, responses, rewards):
-        sorted_axon_times = get_sorted_response_times(uids, responses)
-
-        # Extract only the process times
-        process_times = [proc_time for _, proc_time in sorted_axon_times]
-
-        # Find min and max values for normalization
-        min_time = min(process_times)
-        max_time = max(process_times)
-
-        # Normalize these times to a scale of 0 to 1 (inverted)
-        normalized_scores = [
-            (max_time - proc_time) / (max_time - min_time)
-            for proc_time in process_times
-        ]
-
-        # Scale the rewards by these normalized scores
-        for idx, (uid, _) in enumerate(sorted_axon_times):
-            rewards[uid] *= normalized_scores[idx]
-
-        return rewards
-
-    async def broadcast(self, key, data, metagraph, dendrite, stake_threshold=10000):
+    async def broadcast(
+        self, lookup_key, data, metagraph, dendrite, stake_threshold=10000
+    ):
         """Send updates to all validators on the network when creating or updating in index value"""
 
         # Determine axons to query from metagraph
@@ -301,13 +325,11 @@ class neuron:
 
         # Create synapse store
         synapse = protocol.Update(
-            key=key,
+            lookup_key=lookup_key,
             prev_seed=data["prev_seed"],
             size=data["size"],
             counter=data["counter"],
-            encryption_key=data["encryption_key"],
-            encryption_nonce=data["encryption_nonce"],
-            encryption_tag=data["encryption_tag"],
+            encryption_payload=data["encryption_payload"],
         )
 
         # Send synapse to all validator axons
@@ -405,22 +427,7 @@ class neuron:
                 # TODO: potentially batch update after all miners have responded?
                 broadcast(key, dumped_data)
 
-            # TODO: Abstract a function for this (Used 3 times already)
-            scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
-
-            # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
-            # shape: [ metagraph.n ]
-            scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-                0, uids, scaled_rewards
-            ).to(self.device)
-
-            # Update moving_averaged_scores with rewards produced by this step.
-            # shape: [ metagraph.n ]
-            alpha: float = self.config.neuron.moving_average_alpha
-            self.moving_averaged_scores: torch.FloatTensor = (
-                alpha * scattered_rewards
-                + (1 - alpha) * self.moving_averaged_scores.to(self.device)
-            )
+            self.apply_reward_scores(uids, responses, rewards)
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
@@ -430,7 +437,9 @@ class neuron:
                 retry_uids = []  # reset retry uids
                 retries += 1
 
-    async def handle_challenge(self, hotkey):
+    async def handle_challenge(
+        self, hotkey: str
+    ) -> typing.Tuple[bool, protocol.Challenge]:
         keys = safe_key_search(self.database, f"*.{hotkey}")
         key = random.choice(keys)
         data_hash = key.split(".")[0]
@@ -477,7 +486,7 @@ class neuron:
         uids = self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
             tasks.append(
-                asyncio.create_task(handle_challenge(self.metagraph.hotkeys[uid]))
+                asyncio.create_task(self.handle_challenge(self.metagraph.hotkeys[uid]))
             )
         responses = await asyncio.gather(*tasks)
 
@@ -493,23 +502,7 @@ class neuron:
             else:
                 rewards[uid] = 0.0
 
-        # Scale reward by the ranking of the response time
-        # If the response time is faster, the reward is higher
-        # This should reflect the distribution of axon response times (minmax norm)
-        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
-
-        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
-        # shape: [ metagraph.n ]
-        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, uids, scaled_rewards
-        ).to(self.device)
-
-        # Update moving_averaged_scores with rewards produced by this step.
-        # shape: [ metagraph.n ]
-        alpha: float = self.config.neuron.moving_average_alpha
-        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-            1 - alpha
-        ) * self.moving_averaged_scores.to(self.device)
+        self.apply_reward_scores(uids, responses, rewards)
 
     async def retrieve(self, data_hash):
         # fetch which miners have the data

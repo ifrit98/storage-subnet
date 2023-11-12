@@ -43,6 +43,22 @@ class Store(bt.Synapse):
     signature: typing.Optional[bytes] = None
     commitment_hash: typing.Optional[str] = None  # includes seed
 
+    required_hash_fields: List[str] = pydantic.Field(
+        [
+            "curve",
+            "g",
+            "h",
+            "seed",
+            "randomness",
+            "commitment",
+            "signature",
+            "commitment_hash",
+        ],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
 
 class Challenge(bt.Synapse):
     # Query parameters
@@ -73,28 +89,58 @@ class Challenge(bt.Synapse):
     ] = None
     merkle_root: typing.Optional[str] = None
 
+    required_hash_fields: List[str] = pydantic.Field(
+        [  # TODO: can this be done? I want to verify that these values haven't changed, but
+            # they are None intially...
+            "commitment_hash",
+            "commitment_proof",
+            "commitment",
+            "data_chunk",
+            "randomness",
+            "merkle_proof",
+            "merkle_root",
+        ],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
 
 class Retrieve(bt.Synapse):
     # Where to find the data
-    data_hash: str
-    seed: str
+    data_hash: str  # Miner storage lookup key
+    seed: str  # New random seed to hash the data with
 
     # Fetched data and proof
     data: typing.Optional[str] = None
     commitment_hash: typing.Optional[str] = None
     commitment_proof: typing.Optional[str] = None
 
+    required_hash_fields: List[str] = pydantic.Field(
+        ["data", "data_hash", "seed", "commtiment_proof", "commitment_hash"],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
 
 class Update(bt.Synapse):
-    # Lookup key
-    key: str  # key = f"{data_hash}.{hotkey}"
+    # Lookup key for where metadata is stored in validator index
+    lookup_key: str  # key = f"{data_hash}.{hotkey}"
 
     # Data to update
     prev_seed: str  # hex string
     size: int  # size of data (bytes)
     counter: int  # version of data (last-write-wins)
 
-    # TODO: make these private (do not share in production)
-    encryption_key: str  # hex string
-    encryption_nonce: str  # hex string
-    encryption_tag: str  # hex string
+    encryption_payload: str  # encrypted json serialized bytestring of encryption params
+    # These parameters are used to decrypt user data given the originating wallet coldkey
+    # This bytestring is itself encrypted by the originating wallet's coldkey and can only
+    # be decrypted by the originating wallet.
+
+    required_hash_fields: List[str] = pydantic.Field(
+        ["encryption_payload", "prev_seed", "size", "counter"],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
