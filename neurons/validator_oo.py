@@ -544,7 +544,7 @@ class neuron:
 
             if not verify_retrieve_with_seed(response):
                 bt.logging.error(f"data verification failed! {response}")
-                rewards[idx] = 0.0
+                rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
                 continue  # skip trying to decode the data
             else:
                 rewards[idx] = 1.0
@@ -552,35 +552,18 @@ class neuron:
             try:
                 bt.logging.debug(f"Decrypting from UID: {uids[idx]}")
                 # Decrypt the data using the validator stored encryption keys
-                decrypted_data = decrypt_aes_gcm(
-                    decoded_data,
-                    bytes.fromhex(data["encryption_key"]),
-                    bytes.fromhex(data["encryption_nonce"]),
-                    bytes.fromhex(data["encryption_tag"]),
-                )
+                decrypted_data = decrypt_data(decoded_data, data["encryption_payload"])
                 datas.append(decrypted_data)
-            except:
-                pass
+            except Exception as e:
+                bt.logging.error(f"Failed to decrypt data from UID: {uids[idx]} {e}")
 
             # TODO: get a temp link from the server to send back to the client
 
-        # Compute scaled rewards based on response time (higher == better)
-        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+        self.apply_reward_scores(uids, responses, rewards)
 
-        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
-        # shape: [ metagraph.n ]
-        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, uids, scaled_rewards
-        ).to(self.device)
-
-        # Update moving_averaged_scores with rewards produced by this step.
-        # shape: [ metagraph.n ]
-        alpha: float = self.config.neuron.moving_average_alpha
-        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-            1 - alpha
-        ) * self.moving_averaged_scores.to(self.device)
-
-        return datas
+        return datas[
+            0
+        ]  # Return only first element of data, incase only 1 response is valid
 
     async def forward(self) -> torch.Tensor:
         self.counter += 1
