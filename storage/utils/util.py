@@ -34,6 +34,14 @@ from .ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from .merkle import MerkleTree
 
 
+def safe_key_search(database, pattern):
+    """
+    Safely search for keys in the database that doesn't block.
+    `scan_iter` uses cursor under the hood.
+    """
+    return [key for key in database.scan_iter(pattern)]
+
+
 def generate_file_size_with_lognormal(
     mu: float = np.log(10 * 1024**2), sigma: float = 1.5
 ) -> float:

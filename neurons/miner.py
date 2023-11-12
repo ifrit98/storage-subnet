@@ -27,6 +27,7 @@ import time
 import redis
 import typing
 import base64
+import asyncio
 import argparse
 import traceback
 import bittensor as bt
@@ -50,124 +51,136 @@ from storage.utils import (
 )
 
 
-def get_config():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--custom", default="my_custom_value", help="Adds a custom value to the parser."
-    )
-    parser.add_argument(
-        "--curve",
-        default="P-256",
-        help="Curve for elliptic curve cryptography.",
-        choices=["P-256"],  # TODO: expand this list
-    )
-    parser.add_argument(
-        "--maxsize",
-        default=128,
-        type=int,
-        help="Maximum size of random data to store.",
-    )
-    parser.add_argument("--test", default=False, action="store_true")
-    parser.add_argument("--netuid", type=int, default=21, help="The chain subnet uid.")
-    parser.add_argument(
-        "--databse_host", default="localhost", help="The host of the redis database."
-    )
-    parser.add_argument(
-        "--database_port",
-        type=int,
-        default=6379,
-        help="The port of the redis database.",
-    )
-    parser.add_argument(
-        "--database_index",
-        type=int,
-        default=0,
-        help="The index of the redis database.",
-    )
-    parser.add_argument(
-        "--data_directory",
-        default="~/.data",
-        help="The directory to store data in.",
-    )
-    bt.subtensor.add_args(parser)
-    bt.logging.add_args(parser)
-    bt.wallet.add_args(parser)
-    bt.axon.add_args(parser)
-    config = bt.config(parser)
-    config.full_path = os.path.expanduser(
-        "{}/{}/{}/netuid{}/{}".format(
-            config.logging.logging_dir,
-            config.wallet.name,
-            config.wallet.hotkey,
-            config.netuid,
-            "miner",
+from stroage.utils.miner import (
+    compute_subsequent_commitment,
+    save_data_to_filesystem,
+    load_from_filesystem,
+    total_storage,
+)
+
+
+class neuron:
+    @classmethod
+    def check_config(cls, config: "bt.Config"):
+        check_config(cls, config)
+
+    @classmethod
+    def add_args(cls, parser):
+        add_args(cls, parser)
+
+    @classmethod
+    def config(cls):
+        return config(cls)
+
+    subtensor: "bt.subtensor"
+    wallet: "bt.wallet"
+    metagraph: "bt.metagraph"
+
+    def __init__(self):
+        self.config = neuron.config()
+        self.check_config(self.config)
+        bt.logging(config=self.config, logging_dir=self.config.neuron.full_path)
+        bt.logging.info(config)
+
+        bt.logging.info("neuron.__init__()")
+
+        # Init device.
+        bt.logging.debug("loading", "device")
+        self.device = torch.device(self.config.neuron.device)
+        bt.logging.debug(str(self.device))
+
+        # Init subtensor
+        bt.logging.debug("loading", "subtensor")
+        self.subtensor = bt.subtensor(config=self.config)
+        bt.logging.debug(str(self.subtensor))
+
+        # Init wallet.
+        bt.logging.debug("loading", "wallet")
+        self.wallet = bt.wallet(config=self.config)
+        self.wallet.create_if_non_existent()
+        if not self.config.wallet._mock:
+            if not self.subtensor.is_hotkey_registered_on_subnet(
+                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
+            ):
+                raise Exception(
+                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
+                )
+
+        bt.logging.debug(f"wallet: {str(self.wallet)}")
+
+        # Init metagraph.
+        bt.logging.debug("loading", "metagraph")
+        self.metagraph = bt.metagraph(
+            netuid=self.config.netuid, network=self.subtensor.network, sync=False
+        )  # Make sure not to sync without passing subtensor
+        self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
+        self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
+        bt.logging.debug(str(self.metagraph))
+
+        # Setup database
+        self.database = redis.StrictRedis(
+            host=self.config.database_host,
+            port=self.config.database_port,
+            db=self.config.database_index,
         )
-    )
-    if not os.path.exists(config.full_path):
-        os.makedirs(config.full_path, exist_ok=True)
-    return config
 
-
-def safe_key_search(database, pattern):
-    return [key for key in database.scan_iter(pattern)]
-
-
-def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
-    merkle_tree = MerkleTree()
-
-    # Commit each chunk of data
-    randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
-    bt.logging.debug("n_chunks:", n_chunks)
-    for index, chunk in enumerate(data_chunks):
-        bt.logging.debug("index:", index)
-        c, m_val, r = committer.commit(chunk + str(seed).encode())
-        c_hex = ecc_point_to_hex(c)
-        randomness[index] = r
-        chunks[index] = chunk
-        points[index] = c_hex
-        merkle_tree.add_leaf(c_hex)
-
-    # Create the tree from the leaves
-    merkle_tree.make_tree()
-    return randomness, chunks, points, merkle_tree
-
-
-def main(config):
-    bt.logging(config=config, logging_dir=config.full_path)
-    bt.logging.info(config)
-
-    bt.logging.info("Setting up bittensor objects.")
-
-    wallet = bt.wallet(config=config)
-    bt.logging.info(f"Wallet: {wallet}")
-
-    subtensor = bt.subtensor(config=config)
-    bt.logging.info(f"Subtensor: {subtensor}")
-
-    metagraph = subtensor.metagraph(config.netuid)
-    bt.logging.info(f"Metagraph: {metagraph}")
-
-    if wallet.hotkey.ss58_address not in metagraph.hotkeys:
-        bt.logging.error(
-            f"\nYour miner: {wallet} is not registered to chain connection: {subtensor} \nRun btcli register and try again. "
+        self.my_subnet_uid = self.metagraph.hotkeys.index(
+            self.wallet.hotkey.ss58_address
         )
-        exit()
+        bt.logging.info(f"Running miner on uid: {self.my_subnet_uid}")
 
-    bt.logging.info(
-        f"Running miner for subnet: {config.netuid} on network: {subtensor.chain_endpoint} with config:"
-    )
+        # Init wandb.
+        if not self.config.wandb.off:
+            bt.logging.debug("loading", "wandb")
+            init_wandb(self)
 
-    my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
-    bt.logging.info(f"Running miner on uid: {my_subnet_uid}")
+        # The axon handles request processing, allowing validators to send this process requests.
+        self.axon = bt.axon(wallet=self.wallet, config=self.config)
+        bt.logging.info(f"Axon {self.axon}")
 
-    database = redis.StrictRedis(
-        host=config.database_host, port=config.database_port, db=config.database_index
-    )
+        # Attach determiners which functions are called when servicing a request.
+        bt.logging.info(f"Attaching forward functions to axon.")
+        self.axon.attach(
+            forward_fn=self.store,
+            # blacklist_fn=blacklist_fn,
+            # priority_fn=priority_fn,
+        ).attach(
+            forward_fn=self.challenge,
+            # blacklist_fn=blacklist_fn,
+            # priority_fn=priority_fn,
+        ).attach(
+            forward_fn=self.retrieve,
+            # blacklist_fn=blacklist_fn,
+            # priority_fn=priority_fn,
+        )
+
+        # Serve passes the axon information to the network + netuid we are hosting on.
+        # This will auto-update if the axon port of external ip have changed.
+        bt.logging.info(
+            f"Serving axon {self.store} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
+        bt.logging.info(
+            f"Serving axon {self.challenge} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
+        bt.logging.info(
+            f"Serving axon {self.retrieve} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
+        self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
+
+        # Start  starts the miner's axon, making it active on the network.
+        bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
+        self.axon.start()
+
+        # Init the event loop.
+        self.loop = asyncio.get_event_loop()
+
+        self.prev_block = ttl_get_block(self)
+        self.step = 0
 
     def blacklist_fn(
-        synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
+        self, synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
     ) -> typing.Tuple[bool, str]:
-        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+        if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
@@ -179,60 +192,21 @@ def main(config):
         return False, "Hotkey recognized!"
 
     def priority_fn(
-        synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
+        self, synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
     ) -> float:
-        caller_uid = metagraph.hotkeys.index(
+        caller_uid = self.metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
-        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        prirority = float(
+            self.metagraph.S[caller_uid]
+        )  # Return the stake as the priority.
         bt.logging.trace(
             f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
         )
         return prirority
 
-    def save_data_to_filesystem(data, directory, filename):
-        # Ensure the directory exists
-        directory = os.path.expanduser(directory)
-        os.makedirs(directory, exist_ok=True)
-        file_path = os.path.join(directory, filename)
-        with open(file_path, "wb") as file:
-            file.write(data)
-        return file_path
-
-    def load_from_filesystem(filepath):
-        with open(os.path.expanduser(filepath), "rb") as file:
-            data = file.read()
-        return data
-
-    def total_storage(database):
-        # Fetch all keys from Redis
-        all_keys = safe_key_search(database, "*")
-
-        # Filter out keys that contain a period (temporary, remove later)
-        filtered_keys = [key for key in all_keys if b"." not in key]
-        bt.logging.debug("filtered_keys:", filtered_keys)
-
-        # Get the size of each data object and sum them up
-        total_size = sum(
-            [
-                json.loads(database.get(key).decode("utf-8")).get("size", 0)
-                for key in filtered_keys
-            ]
-        )
-        return total_size
-
-    def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):
-        """Compute a subsequent commitment based on the original data, previous seed, and new seed."""
-        if verbose:
-            print("IN COMPUTE SUBESEQUENT COMMITMENT")
-            print("type of data     :", type(data))
-            print("type of prev_seed:", type(previous_seed))
-            print("type of new_seed :", type(new_seed))
-        proof = hash_data(data + previous_seed)
-        return hash_data(str(proof).encode("utf-8") + new_seed), proof
-
     # This is the core miner function, which decides the miner's response to a valid, high-priority request.
-    def store(synapse: storage.protocol.Store) -> storage.protocol.Store:
+    def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
 
@@ -284,7 +258,7 @@ def main(config):
         return synapse
 
     def challenge(
-        synapse: storage.protocol.Challenge, verbose=False
+        self, synapse: storage.protocol.Challenge, verbose=False
     ) -> storage.protocol.Challenge:
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
@@ -320,8 +294,7 @@ def main(config):
         synapse.commitment_hash = next_commitment
         synapse.commitment_proof = proof
 
-        # TODO: update the commitment seed challenge hash in storage
-        # - previous seed (S-1)
+        # update the commitment seed challenge hash in storage
         decoded["prev_seed"] = new_seed.decode("utf-8")
         database.set(synapse.challenge_hash, json.dumps(decoded).encode())
         bt.logging.debug(f"udpated miner storage: {decoded}")
@@ -358,7 +331,7 @@ def main(config):
         bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
         return synapse
 
-    def retrieve(synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+    def retrieve(self, synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
         # Fetch the data from the miner database
         data = database.get(synapse.data_hash)
         bt.logging.debug("retireved data:", data)
@@ -389,220 +362,103 @@ def main(config):
         synapse.data = base64.b64encode(encrypted_data_bytes)
         return synapse
 
-    def test(config):
-        bt.logging.debug("\n\nstore phase------------------------".upper())
-        syn, (encryption_key, nonce, tag) = GetSynapse(
-            config.curve, config.maxsize, key=wallet.hotkey.public_key
-        )
-        bt.logging.debug("\nsynapse:", syn)
-        response_store = store(syn)
+        if config.test:  # (debugging)
+            import random
+            from storage.utils import (
+                GetSynapse,
+                verify_store_with_seed,
+                verify_challenge_with_seed,
+                verify_retrieve_with_seed,
+                get_random_chunksize,
+                decrypt_aes_gcm,
+            )
 
-        # Verify the initial store
-        bt.logging.debug("\nresponse store:")
-        bt.logging.debug(response_store.dict())
-        verified = verify_store_with_seed(response_store)
-        bt.logging.debug(f"Store verified: {verified}")
+            test(self, config, database)
 
-        encrypted_byte_data = base64.b64decode(syn.encrypted_data)
-        response_store.axon.hotkey = wallet.hotkey.ss58_address
-        lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
-        bt.logging.debug(f"lookup key: {lookup_key}")
-        validator_store = {
-            "prev_seed": response_store.seed,
-            "size": sys.getsizeof(encrypted_byte_data),
-            "counter": 0,
-            "encryption_key": encryption_key.hex(),
-            "encryption_nonce": nonce.hex(),
-            "encryption_tag": tag.hex(),
-        }
-        dump = json.dumps(validator_store).encode()
-        database.set(lookup_key, dump)
-        retrv = database.get(lookup_key)
-        bt.logging.debug("\nretrv:", retrv)
-        bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
+        # Step 7: Keep the miner alive
+        # This loop maintains the miner's operations until intentionally stopped.
+        bt.logging.info(f"Starting main loop")
+        step = 0
+        while True:
+            try:
+                # TODO(developer): Define any additional operations to be performed by the miner.
+                # Below: Periodically update our knowledge of the network graph.
+                if step % 5 == 0:
+                    metagraph = subtensor.metagraph(config.netuid)
+                    log = (
+                        f"Step:{step} | "
+                        f"Block:{metagraph.block.item()} | "
+                        f"Stake:{metagraph.S[my_subnet_uid]} | "
+                        f"Rank:{metagraph.R[my_subnet_uid]} | "
+                        f"Trust:{metagraph.T[my_subnet_uid]} | "
+                        f"Consensus:{metagraph.C[my_subnet_uid] } | "
+                        f"Incentive:{metagraph.I[my_subnet_uid]} | "
+                        f"Emission:{metagraph.E[my_subnet_uid]}"
+                    )
+                    bt.logging.info(log)
+                step += 1
+                time.sleep(1)
 
-        bt.logging.debug("\n\nchallenge phase------------------------".upper())
-        bt.logging.debug(f"key selected: {lookup_key}")
-        data_hash = lookup_key.split(".")[0]
-        bt.logging.debug("data_hash:", data_hash)
-        data = database.get(lookup_key)
-        bt.logging.debug("data:", data)
-        data = json.loads(data.decode("utf-8"))
-        bt.logging.debug(f"data size: {data['size']}")
+            # If someone intentionally stops the miner, it'll safely terminate operations.
+            except KeyboardInterrupt:
+                axon.stop()
+                bt.logging.success("Miner killed by keyboard interrupt.")
+                break
+            # In case of unforeseen errors, the miner will log the error and continue operations.
+            except Exception as e:
+                bt.logging.error(traceback.format_exc())
+                continue
 
-        # Get random chunksize given total size
-        chunk_size = (
-            get_random_chunksize(data["size"]) // 4
-        )  # at least 4 chunks # TODO make this a hyperparam
+    def run_in_background_thread(self):
+        """
+        Starts the miner's operations in a separate background thread.
+        This is useful for non-blocking operations.
+        """
+        if not self.is_running:
+            bt.logging.debug("Starting miner in background thread.")
+            self.should_exit = False
+            self.thread = threading.Thread(target=self.run, daemon=True)
+            self.thread.start()
+            self.is_running = True
+            bt.logging.debug("Started")
 
-        if chunk_size == 0:
-            chunk_size = 10  # safe default
-        bt.logging.debug("chunksize:", chunk_size)
+    def stop_run_thread(self):
+        """
+        Stops the miner's operations that are running in the background thread.
+        """
+        if self.is_running:
+            bt.logging.debug("Stopping miner in background thread.")
+            self.should_exit = True
+            self.thread.join(5)
+            self.is_running = False
+            bt.logging.debug("Stopped")
 
-        # Calculate number of chunks
-        num_chunks = data["size"] // chunk_size
+    def __enter__(self):
+        """
+        Starts the miner's operations in a background thread upon entering the context.
+        This method facilitates the use of the miner in a 'with' statement.
+        """
+        self.run_in_background_thread()
 
-        # Get setup params
-        g, h = setup_CRS()
-        syn = storage.protocol.Challenge(
-            challenge_hash=data_hash,
-            chunk_size=chunk_size,
-            g=ecc_point_to_hex(g),
-            h=ecc_point_to_hex(h),
-            curve=config.curve,
-            challenge_index=random.choice(range(num_chunks)),
-            seed=get_random_bytes(32).hex(),
-        )
-        bt.logging.debug("\nChallenge synapse:", syn)
-        response_challenge = challenge(syn)
-        bt.logging.debug("\nchallenge response:")
-        bt.logging.debug(response_challenge.dict())
-        verified = verify_challenge_with_seed(response_challenge)
-        bt.logging.debug(f"Is verified: {verified}")
-        # Update validator storage
-        data["prev_seed"] = response_challenge.seed
-        data["counter"] += 1
-        dump = json.dumps(data).encode()
-        database.set(lookup_key, dump)
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Stops the miner's background operations upon exiting the context.
+        This method facilitates the use of the miner in a 'with' statement.
 
-        # Challenge a 2nd time to verify the chain of proofs
-        bt.logging.debug("\n\n2nd challenge phase------------------------".upper())
-        g, h = setup_CRS()
-        syn = storage.protocol.Challenge(
-            challenge_hash=data_hash,
-            chunk_size=chunk_size,
-            g=ecc_point_to_hex(g),
-            h=ecc_point_to_hex(h),
-            curve=config.curve,
-            challenge_index=random.choice(range(num_chunks)),
-            seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
-        )
-        bt.logging.debug("\nChallenge 2 synapse:", syn)
-        response_challenge = challenge(syn)
-        bt.logging.debug("\nchallenge 2 response:")
-        bt.logging.debug(response_challenge.dict())
-        verified = verify_challenge_with_seed(response_challenge)
-        bt.logging.debug(f"Is verified 2: {verified}")
-        # Update validator storage
-        data["prev_seed"] = response_challenge.seed
-        data["counter"] += 1
-        dump = json.dumps(data).encode()
-        database.set(lookup_key, dump)
-
-        bt.logging.debug("\n\nretrieve phase------------------------".upper())
-        ryn = storage.protocol.Retrieve(
-            data_hash=data_hash, seed=get_random_bytes(32).hex()
-        )
-        bt.logging.debug("receive synapse:", ryn)
-        rdata = retrieve(ryn)
-
-        verified = verify_retrieve_with_seed(rdata)
-        bt.logging.debug(f"Retreive is verified: {verified}")
-
-        bt.logging.debug("retrieved data:", rdata)
-        decoded = base64.b64decode(rdata.data)
-        bt.logging.debug("decoded base64 data:", decoded)
-        unencrypted = decrypt_aes_gcm(decoded, encryption_key, nonce, tag)
-        bt.logging.debug("decrypted data:", unencrypted)
-
-        # Update validator storage
-        data["prev_seed"] = ryn.seed
-        data["counter"] += 1
-        dump = json.dumps(data).encode()
-        database.set(lookup_key, dump)
-
-        print("final validator store:", database.get(lookup_key))
-        import pdb
-
-        pdb.set_trace()
-
-    if config.test:  # (debugging)
-        import random
-        from storage.utils import (
-            GetSynapse,
-            verify_store_with_seed,
-            verify_challenge_with_seed,
-            verify_retrieve_with_seed,
-            get_random_chunksize,
-            decrypt_aes_gcm,
-        )
-
-        test(config)
-
-    # TODO: Defensive programming and error-handling around all functions
-    # TODO: GUNdb mechanism on validator side for shared database (or first approx/sqlite?)
-
-    # Step 6: Build and link miner functions to the axon.
-    # The axon handles request processing, allowing validators to send this process requests.
-    axon = bt.axon(wallet=wallet, config=config)
-    bt.logging.info(f"Axon {axon}")
-
-    # Attach determiners which functions are called when servicing a request.
-    bt.logging.info(f"Attaching forward function to axon.")
-    axon.attach(
-        forward_fn=store,
-        # blacklist_fn=blacklist_fn,
-        # priority_fn=priority_fn,
-    ).attach(
-        forward_fn=challenge,
-        # blacklist_fn=blacklist_fn,
-        # priority_fn=priority_fn,
-    ).attach(
-        forward_fn=retrieve,
-    )
-
-    # Serve passes the axon information to the network + netuid we are hosting on.
-    # This will auto-update if the axon port of external ip have changed.
-    bt.logging.info(
-        f"Serving axon {store} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
-    )
-    bt.logging.info(
-        f"Serving axon {challenge} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
-    )
-    bt.logging.info(
-        f"Serving axon {retrieve} on network: {subtensor.chain_endpoint} with netuid: {config.netuid}"
-    )
-    axon.serve(netuid=config.netuid, subtensor=subtensor)
-
-    # Start  starts the miner's axon, making it active on the network.
-    bt.logging.info(f"Starting axon server on port: {config.axon.port}")
-    axon.start()
-
-    # Step 7: Keep the miner alive
-    # This loop maintains the miner's operations until intentionally stopped.
-    bt.logging.info(f"Starting main loop")
-    step = 0
-    while True:
-        try:
-            # TODO(developer): Define any additional operations to be performed by the miner.
-            # Below: Periodically update our knowledge of the network graph.
-            if step % 5 == 0:
-                metagraph = subtensor.metagraph(config.netuid)
-                log = (
-                    f"Step:{step} | "
-                    f"Block:{metagraph.block.item()} | "
-                    f"Stake:{metagraph.S[my_subnet_uid]} | "
-                    f"Rank:{metagraph.R[my_subnet_uid]} | "
-                    f"Trust:{metagraph.T[my_subnet_uid]} | "
-                    f"Consensus:{metagraph.C[my_subnet_uid] } | "
-                    f"Incentive:{metagraph.I[my_subnet_uid]} | "
-                    f"Emission:{metagraph.E[my_subnet_uid]}"
-                )
-                bt.logging.info(log)
-            step += 1
-            time.sleep(1)
-
-        # If someone intentionally stops the miner, it'll safely terminate operations.
-        except KeyboardInterrupt:
-            axon.stop()
-            bt.logging.success("Miner killed by keyboard interrupt.")
-            break
-        # In case of unforeseen errors, the miner will log the error and continue operations.
-        except Exception as e:
-            bt.logging.error(traceback.format_exc())
-            continue
+        Args:
+            exc_type: The type of the exception that caused the context to be exited.
+                      None if the context was exited without an exception.
+            exc_value: The instance of the exception that caused the context to be exited.
+                       None if the context was exited without an exception.
+            traceback: A traceback object encoding the stack trace.
+                       None if the context was exited without an exception.
+        """
+        self.stop_run_thread()
 
 
-# This is the main function, which runs the miner.
+def main():
+    neuron().run()
+
+
 if __name__ == "__main__":
-    main(get_config())
+    main()

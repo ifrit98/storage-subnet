@@ -16,14 +16,24 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import json
 import base64
 import storage
+import bittensor as bt
+
+from .miner import store, challenge, retrieve
 
 from .ecc import setup_CRS, ecc_point_to_hex
 from .util import encrypt_data, make_random_file, hash_data, get_random_bytes
+from .util import get_random_chunksize, decrypt_data
+from .util import (
+    verify_store_with_seed,
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+)
 
 
-def GetSynapse(curve, maxsize, key=None):
+def GetSynapse(curve, maxsize, wallet):
     # Setup CRS for this round of validation
     g, h = setup_CRS(curve=curve)
 
@@ -31,14 +41,8 @@ def GetSynapse(curve, maxsize, key=None):
     random_data = b"this is a random bytestring, long enough to be chunked into segments and reconstructed at the end"
     # random_data = make_random_file(maxsize=maxsize)
 
-    # Random encryption key for now (never will decrypt)
-    key = key or get_random_bytes(32)  # 256-bit key
-
     # Encrypt the data
-    encrypted_data, nonce, tag = encrypt_data(
-        random_data,
-        key,  # TODO: Use validator key as the encryption key?
-    )
+    encrypted_data, encrypted_payload = encrypt_data(random_data, wallet)
 
     # Convert to base64 for compactness
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
@@ -54,4 +58,132 @@ def GetSynapse(curve, maxsize, key=None):
         h=ecc_point_to_hex(h),
         seed=get_random_bytes(32).hex(),
     )
-    return synapse, (key, nonce, tag)
+    return synapse, encryption_payload
+
+
+def test(miner, config, database):
+    bt.logging.debug("\n\nstore phase------------------------".upper())
+    syn, encryption_payload = GetSynapse(
+        config.curve, config.maxsize, wallet=miner.wallet
+    )
+    bt.logging.debug("\nsynapse:", syn)
+    response_store = miner.store(syn)
+
+    # Verify the initial store
+    bt.logging.debug("\nresponse store:")
+    bt.logging.debug(response_store.dict())
+    verified = verify_store_with_seed(response_store)
+    bt.logging.debug(f"Store verified: {verified}")
+
+    encrypted_byte_data = base64.b64decode(syn.encrypted_data)
+    response_store.axon.hotkey = wallet.hotkey.ss58_address
+    lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
+    bt.logging.debug(f"lookup key: {lookup_key}")
+    validator_store = {
+        "prev_seed": response_store.seed,
+        "size": sys.getsizeof(encrypted_byte_data),
+        "counter": 0,
+        "encryption_payload": encryption_payload,
+    }
+    dump = json.dumps(validator_store).encode()
+    database.set(lookup_key, dump)
+    retrv = database.get(lookup_key)
+    bt.logging.debug("\nretrv:", retrv)
+    bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
+
+    bt.logging.debug("\n\nchallenge phase------------------------".upper())
+    bt.logging.debug(f"key selected: {lookup_key}")
+    data_hash = lookup_key.split(".")[0]
+    bt.logging.debug("data_hash:", data_hash)
+    data = database.get(lookup_key)
+    bt.logging.debug("data:", data)
+    data = json.loads(data.decode("utf-8"))
+    bt.logging.debug(f"data size: {data['size']}")
+
+    # Get random chunksize given total size
+    chunk_size = (
+        get_random_chunksize(data["size"]) // 4
+    )  # at least 4 chunks # TODO make this a hyperparam
+
+    if chunk_size == 0:
+        chunk_size = 10  # safe default
+    bt.logging.debug("chunksize:", chunk_size)
+
+    # Calculate number of chunks
+    num_chunks = data["size"] // chunk_size
+
+    # Get setup params
+    g, h = setup_CRS()
+    syn = storage.protocol.Challenge(
+        challenge_hash=data_hash,
+        chunk_size=chunk_size,
+        g=ecc_point_to_hex(g),
+        h=ecc_point_to_hex(h),
+        curve=config.curve,
+        challenge_index=random.choice(range(num_chunks)),
+        seed=get_random_bytes(32).hex(),
+    )
+    bt.logging.debug("\nChallenge synapse:", syn)
+    response_challenge = miner.challenge(syn)
+    bt.logging.debug("\nchallenge response:")
+    bt.logging.debug(response_challenge.dict())
+    verified = verify_challenge_with_seed(response_challenge)
+    bt.logging.debug(f"Is verified: {verified}")
+    # Update validator storage
+    data["prev_seed"] = response_challenge.seed
+    data["counter"] += 1
+    dump = json.dumps(data).encode()
+    database.set(lookup_key, dump)
+
+    # Challenge a 2nd time to verify the chain of proofs
+    bt.logging.debug("\n\n2nd challenge phase------------------------".upper())
+    g, h = setup_CRS()
+    syn = storage.protocol.Challenge(
+        challenge_hash=data_hash,
+        chunk_size=chunk_size,
+        g=ecc_point_to_hex(g),
+        h=ecc_point_to_hex(h),
+        curve=config.curve,
+        challenge_index=random.choice(range(num_chunks)),
+        seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
+    )
+    bt.logging.debug("\nChallenge 2 synapse:", syn)
+    response_challenge = miner.challenge(syn)
+    bt.logging.debug("\nchallenge 2 response:")
+    bt.logging.debug(response_challenge.dict())
+    verified = verify_challenge_with_seed(response_challenge)
+    bt.logging.debug(f"Is verified 2: {verified}")
+    # Update validator storage
+    data["prev_seed"] = response_challenge.seed
+    data["counter"] += 1
+    dump = json.dumps(data).encode()
+    database.set(lookup_key, dump)
+
+    bt.logging.debug("\n\nretrieve phase------------------------".upper())
+    ryn = storage.protocol.Retrieve(
+        data_hash=data_hash, seed=get_random_bytes(32).hex()
+    )
+    bt.logging.debug("receive synapse:", ryn)
+    rdata = miner.retrieve(ryn)
+
+    verified = verify_retrieve_with_seed(rdata)
+    bt.logging.debug(f"Retreive is verified: {verified}")
+
+    bt.logging.debug("retrieved data:", rdata)
+    decoded = base64.b64decode(rdata.data)
+    bt.logging.debug("decoded base64 data:", decoded)
+    encryption_payload = json.loads(data["encryption_payload"])
+    bt.logging.debug(f"encryption payload: {encryption_payload}")
+    unencrypted = decrypt_data(decoded, encryption_payload)
+    bt.logging.debug("decrypted data:", unencrypted)
+
+    # Update validator storage
+    data["prev_seed"] = ryn.seed
+    data["counter"] += 1
+    dump = json.dumps(data).encode()
+    database.set(lookup_key, dump)
+
+    print("final validator store:", database.get(lookup_key))
+    import pdb
+
+    pdb.set_trace()

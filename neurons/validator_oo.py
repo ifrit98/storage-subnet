@@ -25,6 +25,7 @@ from storage.utils import (
     decrypt_data,
     ECCommitment,
     make_random_file,
+    safe_key_search,
     get_random_chunksize,
     ecc_point_to_hex,
     hex_to_ecc_point,
@@ -53,10 +54,6 @@ from storage.validator.weights import (
     should_set_weights,
     set_weights,
 )
-
-
-def safe_key_search(database, pattern):
-    return [key for key in database.scan_iter(pattern)]
 
 
 def get_sorted_response_times(uids, responses):
@@ -160,7 +157,6 @@ class neuron:
                 )
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
-        self.counter = 0
 
         # Init metagraph.
         bt.logging.debug("loading", "metagraph")
@@ -311,20 +307,21 @@ class neuron:
                 # Update the index to the latest data
                 self.database.set(synapse.key, json.dumps(entry).encode())
 
-    async def broadcast(
-        self, lookup_key, data, metagraph, dendrite, stake_threshold=10000
-    ):
+    async def broadcast(self, lookup_key, data):
         """Send updates to all validators on the network when creating or updating in index value"""
 
         # Determine axons to query from metagraph
-        vpermits = metagraph.validator_permit
+        vpermits = self.metagraph.validator_permit
         vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
         vpermit_uids = torch.where(vpermits)[0]
 
         # Exclude your own uid
         vpermit_uids = vpermit_uids[vpermit_uids != axon.hotkey.ss58_address]
-        query_uids = torch.where(metagraph.S[vpermit_uids] > stake_threshold)[0]
-        axons = [metagraph.axons[uid] for uid in query_uids]
+        query_uids = torch.where(
+            self.metagraph.S[vpermit_uids]
+            > self.config.neuron.broadcast_stake_threshold
+        )[0]
+        axons = [self.metagraph.axons[uid] for uid in query_uids]
 
         # Create synapse store
         synapse = protocol.Update(
@@ -336,7 +333,7 @@ class neuron:
         )
 
         # Send synapse to all validator axons
-        responses = await dendrite(
+        responses = await self.dendrite(
             axons,
             synapse,
             deserialize=False,

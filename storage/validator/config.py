@@ -1,6 +1,6 @@
 # The MIT License (MIT)
 # Copyright © 2023 Yuma Rao
-# Copyright © 2023 Opentensor Foundation
+# Copyright © 2023 philanthrope
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -21,8 +21,6 @@ import torch
 import argparse
 import bittensor as bt
 from loguru import logger
-from prompting.validators.gating import BaseGatingModel
-from prompting.validators.reward import DefaultRewardFrameworkConfig
 
 
 def check_config(cls, config: "bt.Config"):
@@ -32,9 +30,6 @@ def check_config(cls, config: "bt.Config"):
     # bt.subtensor.check_config(config)
 
     if config.mock:
-        config.neuron.mock_reward_models = True
-        config.neuron.mock_gating_model = True
-        config.neuron.mock_dataset = True
         config.wallet._mock = True
 
     full_path = os.path.expanduser(
@@ -81,7 +76,6 @@ def add_args(cls, parser):
         help="Device to run the validator on.",
         default="cuda" if torch.cuda.is_available() else "cpu",
     )
-
     parser.add_argument(
         "--neuron.curve",
         default="P-256",
@@ -107,14 +101,12 @@ def add_args(cls, parser):
         default=5,
         help="Number of miners to challenge at a time.",
     )
-
     parser.add_argument(
         "--neuron.disable_log_rewards",
         action="store_true",
         help="Disable all reward logging, suppresses reward functions and their values from being logged to wandb.",
         default=False,
     )
-
     parser.add_argument(
         "-neuron.chunk_factor",
         type=int,
@@ -140,7 +132,6 @@ def add_args(cls, parser):
         help="Moving average alpha parameter, how much to add of the new observation.",
         default=0.05,
     )
-
     parser.add_argument(
         "--neuron.followup_timeout",
         type=float,
@@ -153,23 +144,9 @@ def add_args(cls, parser):
         help="How many miners to query for the follow up prompt.",
         default=50,
     )
-
     parser.add_argument(
         "--neuron.answer_timeout", type=float, help="Answer query timeout.", default=10
     )
-    parser.add_argument(
-        "--neuron.answer_sample_size",
-        type=int,
-        help="How many miners to query for the answer.",
-        default=50,
-    )
-    parser.add_argument(
-        "--neuron.num_followup_steps",
-        type=int,
-        help="How many followup steps to take.",
-        default=3,
-    )
-
     parser.add_argument(
         "--neuron.epoch_length_override",
         type=int,
@@ -194,12 +171,17 @@ def add_args(cls, parser):
         help="If set, we dont save events to a log file.",
         default=False,
     )
-
     parser.add_argument(
         "--neuron.vpermit_tao_limit",
         type=int,
         help="The maximum number of TAO allowed to query a validator with a vpermit.",
         default=4096,
+    )
+    parser.add_argument(
+        "--neuron.broadcast_stake_limit",
+        type=int,
+        help="The minimum number of TAO allowed to broadcast index updates to validator with a vpermit.",
+        default=1000,
     )
 
     # Redis arguments
@@ -259,18 +241,11 @@ def add_args(cls, parser):
         "--mock", action="store_true", help="Mock all items.", default=False
     )
     parser.add_argument(
-        "--neuron.blacklist_off",
-        action="store_true",
-        help="Dont apply the blacklist reward model",
-        default=False,
-    )
-    parser.add_argument(
         "--neuron.nsfw_off",
         action="store_true",
         help="Dont apply the nsfw reward model",
         default=False,
     )
-
     parser.add_argument(
         "--neuron.mock_dendrite_pool",
         action="store_true",
