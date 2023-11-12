@@ -21,6 +21,7 @@ import json
 import base64
 import hashlib
 import binascii
+import numpy as np
 from collections import defaultdict
 from typing import Dict, List, Any
 
@@ -33,7 +34,29 @@ from .ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from .merkle import MerkleTree
 
 
-def make_random_file(name=None, maxsize=1024):
+def generate_file_size_with_lognormal(
+    mu: float = np.log(10 * 1024**2), sigma: float = 1.5
+) -> float:
+    """
+    Generate a single file size using a lognormal distribution.
+    Default parameters are set to model a typical file size distribution,
+    but can be overridden for custom distributions.
+
+    :param mu: Mean of the log values, default is set based on medium file size (10 MB).
+    :param sigma: Standard deviation of the log values, default is set to 1.5.
+    :return: File size in bytes.
+    """
+
+    # Generate a file size using the lognormal distribution
+    file_size = np.random.lognormal(mean=mu, sigma=sigma)
+
+    # Scale the file size to a realistic range (e.g., bytes)
+    scaled_file_size = int(file_size)
+
+    return scaled_file_size
+
+
+def make_random_file(name: str = None, maxsize: int = None) -> Union[bytes, str]:
     """
     Creates a file with random binary data or returns a bytes object with random data if no name is provided.
 
@@ -43,22 +66,27 @@ def make_random_file(name=None, maxsize=1024):
 
     Returns:
         bytes: If 'name' is not provided, returns a bytes object containing random data.
-        None: If 'name' is provided, a file is created and nothing is returned.
+        None: If 'name' is provided, a file is created and returns the filepath stored.
 
     Raises:
         OSError: If the function encounters an error while writing to the file.
     """
-    size = random.randint(128, maxsize)
+    size = (
+        random.randint(random.randint(24, 128), maxsize)
+        if maxsize != None
+        else generate_file_size_with_lognormal()
+    )
     data = os.urandom(size)
     if isinstance(name, str):
         with open(name, "wb") as fout:
             fout.write(data)
+        return name  # Return filepath of saved data
     else:
-        return data
+        return data  # Return the data itself
 
 
-# Determine a random chunksize between 2kb-128kb (random sample from this range) store as chunksize_E
-def get_random_chunksize(maxsize=128):
+# Determine a random chunksize between 24kb-512kb (random sample from this range) store as chunksize_E
+def get_random_chunksize(minsize: int = 24, maxsize: int = 512) -> int:
     """
     Determines a random chunk size within a specified range for data chunking.
 
@@ -71,10 +99,10 @@ def get_random_chunksize(maxsize=128):
     Raises:
         ValueError: If maxsize is set to a value less than 2.
     """
-    return random.randint(2, maxsize)
+    return random.randint(minsize, maxsize)
 
 
-def chunk_data(data, chunksize: int):
+def chunk_data(data: bytes, chunksize: int) -> List[bytes]:
     """
     Generator function that chunks the given data into pieces of a specified size.
 
@@ -92,7 +120,7 @@ def chunk_data(data, chunksize: int):
         yield data[i : i + chunksize]
 
 
-def is_hex_str(s):
+def is_hex_str(s: str) -> bool:
     """
     Check if the input string is a valid hexadecimal string.
 
@@ -111,7 +139,7 @@ def is_hex_str(s):
         return False
 
 
-def encrypt_data(filename, key):
+def encrypt_data(filename: typing.Union[bytes, str], key: bytes) -> bytes:
     """
     Encrypt the data in the given filename using AES-GCM.
 
@@ -141,7 +169,7 @@ def encrypt_data(filename, key):
     return cipher_text, cipher.nonce, tag
 
 
-def decrypt_aes_gcm(cipher_text, key, nonce, tag):
+def decrypt_aes_gcm(cipher_text: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
     """
     Decrypt the data using AES-GCM.
 
@@ -166,30 +194,6 @@ def decrypt_aes_gcm(cipher_text, key, nonce, tag):
         raise ValueError("Incorrect decryption key or corrupted data.")
 
     return data
-
-
-def decode_storage(encoded_storage):
-    """
-    Decodes a base64-encoded string that represents storage data. This storage data is expected
-    to contain 'commitments' and 'params', where 'commitments' will be further decoded using
-    a separate function, and 'params' are base64-decoded and then JSON-decoded.
-
-    Args:
-        encoded_storage (str): A base64-encoded string representing storage data.
-
-    Returns:
-        dict: A dictionary with the decoded storage data, including 'commitments' and 'params'.
-
-    Raises:
-        ValueError: If encoded_storage is not a valid base64-encoded string or the JSON decoding fails.
-    """
-    decoded_storage = base64.b64decode(encoded_storage).decode("utf-8")
-    dict_storage = json.loads(decoded_storage)
-    dict_storage["commitments"] = decode_commitments(dict_storage["commitments"])
-    dict_storage["params"] = json.loads(
-        base64.b64decode(dict_storage["params"]).decode("utf-8")
-    )
-    return dict_storage
 
 
 def b64_encode(data):
@@ -246,13 +250,15 @@ def b64_decode(data, decode_hex=False, encrypted=False):
     return decoded_data
 
 
-def xor_data_and_seed(data, seed):
-    """XOR the data and the seed, extending the seed if necessary."""
-    seed = (seed * (len(data) // len(seed))) + seed[: len(data) % len(seed)]
-    return bytes(a ^ b for a, b in zip(data, seed))
+def xor_data(x: bytes, y: bytes):
+    """XOR the x (data) and the y (seed), extending y (seed) if necessary for symmetry."""
+    y = (y * (len(x) // len(y))) + y[: len(x) % len(y)]
+    return bytes(a ^ b for a, b in zip(x, y))
 
 
-def validate_merkle_proof(proof, target_hash, merkle_root):
+def validate_merkle_proof(
+    proof: typing.List[typing.Dict[str, str]], target_hash: str, merkle_root: str
+) -> bool:
     """
     Validates a Merkle proof by computing the hash path from the target hash to the expected Merkle root.
 

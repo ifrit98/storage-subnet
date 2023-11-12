@@ -21,7 +21,7 @@ from storage.utils import (
     chunk_data,
     MerkleTree,
     encrypt_data,
-    decrypt_aes_gcm,
+    decrypt_data,
     ECCommitment,
     make_random_file,
     get_random_chunksize,
@@ -255,26 +255,6 @@ class neuron:
                 # Update the index to the latest data
                 self.database.set(synapse.key, json.dumps(entry).encode())
 
-    def store_file_data(self, metagraph, directory=None, file_bytes=None):
-        # TODO: write this to be a mirror of store_random_data
-        # it will not be random but use real data from the validator filesystem or client data
-        # possibly textbooks, pdfs, audio files, pictures, etc. to mimick user data
-        pass
-
-    # def get_sorted_response_times(queried_axons, responses):
-    #     axon_times = []
-    #     for idx, response in enumerate(responses):
-    #         axon_times.append((queried_axons[idx], response.axon.process_time))
-    #     sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
-    #     return sorted_axon_times
-
-    # def get_sorted_response_times(uids, responses):
-    #     axon_times = []
-    #     for idx, response in enumerate(responses):
-    #         axon_times.append((uids[idx], response.axon.process_time))
-    #     sorted_axon_times = sorted(axon_times, key=lambda x: x[1], reverse=True)
-    #     return sorted_axon_times
-
     def get_sorted_response_times(uids, responses):
         axon_times = [
             (uids[idx], response.axon.process_time)
@@ -339,21 +319,23 @@ class neuron:
 
         # TODO: Check the responses to ensure all validaors are updated
 
-    async def store_data(self, key=None):
+    async def store_user_data(self, data: bytes, wallet: bt.wallet):
+        # Store user data with the user's wallet as encryption key
+        return store_data(data=data, wallet=wallet)
+
+    async def store_validator_data(self, data: bytes):
+        # Store random data using the validator's pubkey as the encryption key
+        return store_data(wallet=self.wallet)
+
+    async def store_data(self, data: bytes = None, wallet: bt.wallet = None):
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.curve)
 
-        # Make a random bytes file to test the miner
-        random_data = make_random_file(maxsize=self.config.maxsize)
-
-        # Random encryption key for now (never will decrypt)
-        encryption_key = key or get_random_bytes(32)
+        # Make a random bytes file to test the miner if none provided
+        data = data or make_random_file(maxsize=self.config.maxsize)
 
         # Encrypt the data
-        encrypted_data, nonce, tag = encrypt_data(
-            random_data,
-            encryption_key,
-        )
+        encrypted_data, encryption_payload = encrypt_data(data, wallet)
 
         # Convert to base64 for compactness
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
@@ -409,11 +391,7 @@ class neuron:
                     "prev_seed": synapse.seed,
                     "size": sys.getsizeof(encrypted_data),
                     "counter": 0,
-                    # TODO: ideally these will be private to the client application,
-                    # not stored in validators because of collusion attacks
-                    "encryption_key": encryption_key.hex(),
-                    "encryption_nonce": nonce.hex(),
-                    "encryption_tag": tag.hex(),
+                    "encryption_payload": encryption_payload,
                 }
                 bt.logging.debug(f"Storing data {response_storage}")
                 dumped_data = json.dumps(response_storage).encode()
@@ -439,9 +417,10 @@ class neuron:
             # Update moving_averaged_scores with rewards produced by this step.
             # shape: [ metagraph.n ]
             alpha: float = self.config.neuron.moving_average_alpha
-            self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-                1 - alpha
-            ) * self.moving_averaged_scores.to(self.device)
+            self.moving_averaged_scores: torch.FloatTensor = (
+                alpha * scattered_rewards
+                + (1 - alpha) * self.moving_averaged_scores.to(self.device)
+            )
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
