@@ -5,6 +5,7 @@ import time
 import redis
 import torch
 import base64
+import typing
 import asyncio
 import argparse
 import traceback
@@ -228,7 +229,9 @@ class neuron:
         self.prev_block = ttl_get_block(self)
         self.step = 0
 
-    def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
+    def get_random_uids(
+        self, k: int, exclude: typing.List[int] = None
+    ) -> torch.LongTensor:
         """Returns k available random uids from the metagraph.
         Args:
             k (int): Number of uids to return.

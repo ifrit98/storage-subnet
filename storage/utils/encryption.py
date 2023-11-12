@@ -1,6 +1,8 @@
 import os
 import json
 import time
+import typing
+
 import bittensor as bt
 from Crypto.Cipher import AES
 from nacl import pwhash, secret

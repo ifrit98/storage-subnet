@@ -23,7 +23,7 @@ import hashlib
 import binascii
 import numpy as np
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union, Optional, Tuple
 
 import Crypto
 from Crypto.Random import random
@@ -139,7 +139,7 @@ def is_hex_str(s: str) -> bool:
         return False
 
 
-def encrypt_data(filename: typing.Union[bytes, str], key: bytes) -> bytes:
+def encrypt_data(filename: Union[bytes, str], key: bytes) -> bytes:
     """
     Encrypt the data in the given filename using AES-GCM.
 
@@ -257,7 +257,7 @@ def xor_data(x: bytes, y: bytes):
 
 
 def validate_merkle_proof(
-    proof: typing.List[typing.Dict[str, str]], target_hash: str, merkle_root: str
+    proof: List[Dict[str, str]], target_hash: str, merkle_root: str
 ) -> bool:
     """
     Validates a Merkle proof by computing the hash path from the target hash to the expected Merkle root.

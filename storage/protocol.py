@@ -18,6 +18,7 @@
 
 import Crypto
 import typing
+import pydantic
 import bittensor as bt
 
 from Crypto.PublicKey import ECC
@@ -43,7 +44,7 @@ class Store(bt.Synapse):
     signature: typing.Optional[bytes] = None
     commitment_hash: typing.Optional[str] = None  # includes seed
 
-    required_hash_fields: List[str] = pydantic.Field(
+    required_hash_fields: typing.List[str] = pydantic.Field(
         [
             "curve",
             "g",
@@ -89,7 +90,7 @@ class Challenge(bt.Synapse):
     ] = None
     merkle_root: typing.Optional[str] = None
 
-    required_hash_fields: List[str] = pydantic.Field(
+    required_hash_fields: typing.List[str] = pydantic.Field(
         [  # TODO: can this be done? I want to verify that these values haven't changed, but
             # they are None intially...
             "commitment_hash",
@@ -116,7 +117,7 @@ class Retrieve(bt.Synapse):
     commitment_hash: typing.Optional[str] = None
     commitment_proof: typing.Optional[str] = None
 
-    required_hash_fields: List[str] = pydantic.Field(
+    required_hash_fields: typing.List[str] = pydantic.Field(
         ["data", "data_hash", "seed", "commtiment_proof", "commitment_hash"],
         title="Required Hash Fields",
         description="A list of required fields for the hash.",
@@ -138,7 +139,7 @@ class Update(bt.Synapse):
     # This bytestring is itself encrypted by the originating wallet's coldkey and can only
     # be decrypted by the originating wallet.
 
-    required_hash_fields: List[str] = pydantic.Field(
+    required_hash_fields: typing.List[str] = pydantic.Field(
         ["encryption_payload", "prev_seed", "size", "counter"],
         title="Required Hash Fields",
         description="A list of required fields for the hash.",
