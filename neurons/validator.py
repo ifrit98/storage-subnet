@@ -76,6 +76,19 @@ from storage.validator.weights import (
 
 
 class neuron:
+    """
+    A Neuron instance represents a node in the Bittensor network that performs validation tasks.
+    It manages the data validation cycle, including storing, challenging, and retrieving data,
+    while also participating in the network consensus.
+
+    Attributes:
+        subtensor (bt.subtensor): The interface to the Bittensor network's blockchain.
+        wallet (bt.wallet): Cryptographic wallet containing keys for transactions and encryption.
+        metagraph (bt.metagraph): Graph structure storing the state of the network.
+        database (redis.StrictRedis): Database instance for storing metadata and proofs.
+        moving_averaged_scores (torch.Tensor): Tensor tracking performance scores of other nodes.
+    """
+
     @classmethod
     def check_config(cls, config: "bt.Config"):
         check_config(cls, config)
@@ -228,9 +241,16 @@ class neuron:
         return uids
 
     def apply_reward_scores(self, uids, responses, rewards):
-        # Scale reward by the ranking of the response time
-        # If the response time is faster, the reward is higher
-        # This should reflect the distribution of axon response times (minmax norm)
+        """
+        Adjusts the moving average scores for a set of UIDs based on their response times and reward values.
+
+        This should reflect the distribution of axon response times (minmax norm)
+
+        Parameters:
+            uids (List[int]): A list of UIDs for which rewards are being applied.
+            responses (List[Response]): A list of response objects received from the nodes.
+            rewards (torch.FloatTensor): A tensor containing the computed reward values.
+        """
         bt.logging.debug(f"Applying rewards: {rewards}")
         bt.logging.debug(f"Reward shape: {rewards.shape}")
         bt.logging.debug(f"UIDs: {uids}")
@@ -253,7 +273,12 @@ class neuron:
         bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
     def update_index(self, synapse: protocol.Update):
-        """Update the validator index with the new data"""
+        """
+        Updates the validator's index with new data received from a synapse.
+
+        Parameters:
+        - synapse (protocol.Update): The synapse object containing the update information.
+        """
         data = self.database.get(synapse.key)
         entry = {
             k: v
@@ -280,8 +305,13 @@ class neuron:
                 self.database.set(synapse.key, json.dumps(entry).encode())
 
     async def broadcast(self, lookup_key, data):
-        """Send updates to all validators on the network when creating or updating in index value"""
+        """
+        Broadcasts updates to all validators on the network for creating or updating an index value.
 
+        Parameters:
+        - lookup_key: The key associated with the data to broadcast.
+        - data: The data to be broadcast to other validators.
+        """
         # Determine axons to query from metagraph
         vpermits = self.metagraph.validator_permit
         vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
@@ -314,14 +344,43 @@ class neuron:
         # TODO: Check the responses to ensure all validaors are updated
 
     async def store_user_data(self, data: bytes, wallet: bt.wallet):
+        """
+        Stores user data using the provided wallet as an encryption key.
+
+        Parameters:
+        - data (bytes): The data to be stored.
+        - wallet (bt.wallet): The wallet to be used for encrypting the data.
+
+        Returns:
+        - The result of the store_data method.
+        """
         # Store user data with the user's wallet as encryption key
         return await self.store_data(data=data, wallet=wallet)
 
     async def store_validator_data(self, data: bytes = None):
+        """
+        Stores random data using the validator's public key as the encryption key.
+
+        Parameters:
+        - data (bytes, optional): The data to be stored. If not provided, random data is generated.
+
+        Returns:
+        - The result of the store_data method.
+        """
         # Store random data using the validator's pubkey as the encryption key
         return await self.store_data(data=data, wallet=self.wallet)
 
     async def store_data(self, data: bytes = None, wallet: bt.wallet = None):
+        """
+        Stores data on the network and ensures it is correctly committed by the miners.
+
+        Parameters:
+        - data (bytes, optional): The data to be stored.
+        - wallet (bt.wallet, optional): The wallet to be used for encrypting the data.
+
+        Returns:
+        - The status of the data storage operation.
+        """
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
@@ -418,7 +477,15 @@ class neuron:
     async def handle_challenge(
         self, uid: int
     ) -> typing.Tuple[bool, protocol.Challenge]:
-        """Handle a challenge from a miner"""
+        """
+        Handles a challenge sent to a miner and verifies the response.
+
+        Parameters:
+        - uid (int): The UID of the miner being challenged.
+
+        Returns:
+        - Tuple[bool, protocol.Challenge]: A tuple containing the verification result and the challenge.
+        """
         hotkey = self.metagraph.hotkeys[uid]
         bt.logging.debug(f"Handling challenge from hotkey: {hotkey}")
         keys = safe_key_search(self.database, f"*.{hotkey}")
@@ -464,10 +531,11 @@ class neuron:
         return verified, response
 
     async def challenge(self):
-        # Asynchronously challenge and see who returns the data
-        # fastest (passes verification), and rank them highest
-        # We create each challenge as a coroutine and then
-        # await the results of each challenge asynchronously
+        """
+        Initiates a series of challenges to miners, verifying their data storage through the network's consensus mechanism.
+
+        Asynchronously challenge and see who returns the data fastest (passes verification), and rank them highest
+        """
         tasks = []
         uids = [17, 26, 27]  # self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
@@ -494,6 +562,15 @@ class neuron:
         self.apply_reward_scores(uids, responses, rewards)
 
     async def retrieve(self, data_hash):
+        """
+        Retrieves and verifies data from the network, ensuring integrity and correctness of the data associated with the given hash.
+
+        Parameters:
+            data_hash (str): The hash of the data to be retrieved.
+
+        Returns:
+            The retrieved data if the verification is successful.
+        """
         # fetch which miners have the data
         keys = safe_key_search(self.database, f"{data_hash}.*")
 
