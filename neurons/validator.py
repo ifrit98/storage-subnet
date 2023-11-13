@@ -262,6 +262,7 @@ class neuron:
             responses (List[Response]): A list of response objects received from the nodes.
             rewards (torch.FloatTensor): A tensor containing the computed reward values.
         """
+
         bt.logging.debug(f"Applying rewards: {rewards}")
         bt.logging.debug(f"Reward shape: {rewards.shape}")
         bt.logging.debug(f"UIDs: {uids}")
@@ -383,6 +384,7 @@ class neuron:
         Returns:
         - The result of the store_data method.
         """
+
         # Store random data using the validator's pubkey as the encryption key
         return await self.store_data(data=data, wallet=self.wallet)
 
@@ -419,6 +421,7 @@ class neuron:
 
         # Select subset of miners to query (e.g. redunancy factor of N)
         uids = self.get_random_uids(k=self.config.neuron.redundancy)
+
         axons = [self.metagraph.axons[uid] for uid in uids]
         retry_uids = [None]
 
@@ -482,12 +485,14 @@ class neuron:
 
             bt.logging.trace("Applying rewards")
             bt.logging.debug(f"responses: {responses}")
+
             self.apply_reward_scores(uids, responses, rewards)
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
                 bt.logging.debug(f"Failed to store on uids: {retry_uids}")
                 uids = self.get_random_uids(k=len(retry_uids))
+
                 bt.logging.debug(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
                 retry_uids = []  # reset retry uids
@@ -551,6 +556,7 @@ class neuron:
                 f"Incompatible chunk size, setting to default {self.config.neuron.override_chunk_size}"
             )
             chunk_size = self.config.neuron.override_chunk_size
+
         bt.logging.debug(f"chunk size {chunk_size}")
         num_chunks = data["size"] // chunk_size
         bt.logging.debug(f"num chunks {num_chunks}")
@@ -591,7 +597,7 @@ class neuron:
         Asynchronously challenge and see who returns the data fastest (passes verification), and rank them highest
         """
         tasks = []
-        uids = self.get_random_uids(k=self.config.neuron.challenge_k)
+        uids = [17, 26, 27]  # self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
         responses = await asyncio.gather(*tasks)
@@ -603,6 +609,7 @@ class neuron:
         bt.logging.debug(f"Init challenge rewards: {rewards}")
         # Set 0 weight if unverified
         # TODO: check and see if we have a dummy synapse (e.g. no data found, shouldn't penalize)
+
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
             bt.logging.debug(
                 f"idx {idx} uid {uid} verified {verified} response {response}"
@@ -725,6 +732,9 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
+        # await self.store_validator_data()
+        await self.challenge()
+        time.sleep(12)
 
         # Store some data
         bt.logging.trace("initiating store data")
