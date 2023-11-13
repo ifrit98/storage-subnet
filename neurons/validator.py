@@ -13,7 +13,7 @@ import traceback
 import bittensor as bt
 from traceback import print_exception
 from random import choice as random_choice
-from Crypto.Random import get_random_bytes
+from Crypto.Random import get_random_bytes, random
 
 from storage import protocol
 
@@ -415,17 +415,25 @@ class neuron:
                 retries += 1
 
     async def handle_challenge(
-        self, hotkey: str
+        self, uid: int
     ) -> typing.Tuple[bool, protocol.Challenge]:
+        """Handle a challenge from a miner"""
+        hotkey = self.metagraph.hotkeys[uid]
+        bt.logging.debug(f"Handling challenge from hotkey: {hotkey}")
         keys = safe_key_search(self.database, f"*.{hotkey}")
+        bt.logging.debug(f"Challenge lookup keys: {keys}")
         key = random.choice(keys)
-        data_hash = key.split(".")[0]
+        bt.logging.debug(f"Challenge lookup key: {key}")
+        data_hash = key.decode("utf-8").split(".")[0]
 
         data = json.loads(self.database.get(key).decode("utf-8"))
+        bt.logging.debug(f"Challenge data: {data}")
         chunk_size = (
             get_random_chunksize(data["size"]) // self.config.neuron.chunk_factor
         )
+        bt.logging.debug(f"chunk size {chunk_size}")
         num_chunks = data["size"] // chunk_size
+        bt.logging.debug(f"num chunks {num_chunks}")
         g, h = setup_CRS()
 
         synapse = protocol.Challenge(
@@ -445,8 +453,8 @@ class neuron:
             synapse,
             deserialize=True,
         )
-
-        verified = verify_challenge_with_seed(response)
+        bt.logging.debug(f"Resposne from uid {uid} challenge: {response}")
+        verified = verify_challenge_with_seed(response[0])
 
         data["prev_seed"] = synapse.seed
         data["counter"] += 1
@@ -462,23 +470,26 @@ class neuron:
         tasks = []
         uids = [17, 26, 27]  # self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
-            tasks.append(
-                asyncio.create_task(self.handle_challenge(self.metagraph.hotkeys[uid]))
-            )
+            tasks.append(asyncio.create_task(self.handle_challenge(uid)))
         responses = await asyncio.gather(*tasks)
-
+        bt.logging.debug(f"Challenge repsonses: {responses}")
         # Compute the rewards for the responses given the prompt.
         rewards: torch.FloatTensor = torch.zeros(
             len(responses), dtype=torch.float32
         ).to(self.device)
-
+        bt.logging.debug(f"Init challenge rewards: {rewards}")
         # Set 0 weight if unverified
-        for uid, (verified, response) in zip(uids, responses):
+        for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
+            bt.logging.debug(
+                f"idx {idx} uid {uid} verified {verified} response {response}"
+            )
             if verified:
-                rewards[uid] = 1.0
+                rewards[idx] = 1.0
             else:
-                rewards[uid] = 0.0
+                rewards[idx] = 0.0
 
+        responses = [response[0] for (verified, response) in responses]
+        bt.logging.debug(f"responses after: {responses}")
         self.apply_reward_scores(uids, responses, rewards)
 
     async def retrieve(self, data_hash):
@@ -545,7 +556,8 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
-        await self.store_validator_data()
+        # await self.store_validator_data()
+        await self.challenge()
         time.sleep(12)
 
     def run(self):
