@@ -180,3 +180,19 @@ def check_uid_availability(
             return False
     # Available otherwise.
     return True
+
+
+def select_subset_uids(uids: List[int], N: int):
+    """Selects a random subset of uids from a list of uids.
+    Args:
+        uids (List[int]): List of uids to select from.
+        N (int): Number of uids to select.
+    Returns:
+        List[int]: List of selected uids.
+    """
+    # If N is greater than the number of uids, return all uids.
+    if N >= len(uids):
+        return uids
+    # Otherwise, randomly select N uids from the list.
+    else:
+        return random.sample(uids, N)

@@ -32,8 +32,27 @@ from storage.shared.utils import (
     b64_encode,
     b64_decode,
     chunk_data,
+    safe_key_search,
 )
 
+from storage.validator.utils import (
+    make_random_file,
+    get_random_chunksize,
+    select_subset_uids,
+    scale_rewards_by_response_time,
+    check_uid_availability,
+)
+
+from storage.validator.encryption import (
+    decrypt_data,
+    encrypt_data,
+)
+
+from storage.validator.verify import (
+    verify_store_with_seed,
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+)
 
 from storage.validator.config import config, check_config, add_args
 
@@ -91,6 +110,7 @@ class neuron:
         # Init wallet.
         bt.logging.debug("loading", "wallet")
         self.wallet = bt.wallet(config=self.config)
+        self.wallet.coldkey  # Unlock for testing
         self.wallet.create_if_non_existent()
         if not self.config.wallet._mock:
             if not self.subtensor.is_hotkey_registered_on_subnet(
@@ -287,15 +307,15 @@ class neuron:
 
     async def store_user_data(self, data: bytes, wallet: bt.wallet):
         # Store user data with the user's wallet as encryption key
-        return store_data(data=data, wallet=wallet)
+        return await self.store_data(data=data, wallet=wallet)
 
-    async def store_validator_data(self, data: bytes):
+    async def store_validator_data(self, data: bytes = None):
         # Store random data using the validator's pubkey as the encryption key
-        return store_data(wallet=self.wallet)
+        return await self.store_data(data=data, wallet=self.wallet)
 
     async def store_data(self, data: bytes = None, wallet: bt.wallet = None):
         # Setup CRS for this round of validation
-        g, h = setup_CRS(curve=self.config.curve)
+        g, h = setup_CRS(curve=self.config.neuron.curve)
 
         # Make a random bytes file to test the miner if none provided
         data = data or make_random_file(maxsize=self.config.maxsize)
@@ -308,14 +328,14 @@ class neuron:
 
         synapse = protocol.Store(
             encrypted_data=b64_encrypted_data,
-            curve=curve,
+            curve=self.config.neuron.curve,
             g=ecc_point_to_hex(g),
             h=ecc_point_to_hex(h),
             seed=get_random_bytes(32).hex(),  # 256-bit seed
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = select_subset_uids(metagraph.uids, N=self.config.redundancy)
+        uids = select_subset_uids(self.metagraph.uids, N=self.config.neuron.redundancy)
         axons = [self.metagraph.axons[uid] for uid in uids]
         retry_uids = [None]
 
@@ -332,6 +352,9 @@ class neuron:
                 deserialize=False,
             )
 
+            import pdb
+
+            pdb.set_trace()
             # Log the results for monitoring purposes.
             bt.logging.info(f"Received responses: {responses}")
 
@@ -342,7 +365,7 @@ class neuron:
 
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
-                if not verify_challenge_with_seed(response):
+                if not verify_store_with_seed(response):
                     # TODO: flag this miner for 0 weight (or negative rewards?)
                     rewards[idx] = 0.0
                     retry_uids.append(uid)
@@ -512,6 +535,8 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
+        await self.store_validator_data()
+        time.sleep(12)
 
     def run(self):
         bt.logging.info("run()")
