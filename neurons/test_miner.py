@@ -178,7 +178,7 @@ def get_all_data_hashes(redis_client):
     # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
     for hotkey in redis_client.scan_iter("*"):
         # Remove the 'hotkey:' prefix to get the actual hotkey value
-        hotkey = hotkey.decode("utf-8").split("hotkey:")[1]
+        hotkey = hotkey.decode("utf-8")
         # Fetch all fields (data hashes) for the current hotkey
         data_hashes = redis_client.hkeys(hotkey)
         # Iterate over each data hash and append the hotkey to the corresponding list

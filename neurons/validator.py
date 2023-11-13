@@ -11,6 +11,8 @@ import asyncio
 import argparse
 import traceback
 import bittensor as bt
+
+from functools import partial
 from traceback import print_exception
 from random import choice as random_choice
 from Crypto.Random import get_random_bytes, random
@@ -78,6 +80,8 @@ from storage.validator.database import (
     add_metadata_to_hotkey,
     get_metadata_from_hash,
     get_all_data_for_hotkey,
+    get_all_data_hashes,
+    get_all_hotkeys_for_data_hash,
     update_metadata_for_data_hash,
 )
 
@@ -414,7 +418,7 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = [14, 26, 27]  # self.get_random_uids(k=self.config.neuron.redundancy)
+        uids = self.get_random_uids(k=self.config.neuron.redundancy)
         axons = [self.metagraph.axons[uid] for uid in uids]
         retry_uids = [None]
 
@@ -483,7 +487,7 @@ class neuron:
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
                 bt.logging.debug(f"Failed to store on uids: {retry_uids}")
-                uids = [14, 26, 27]  # self.get_random_uids(k=len(retry_uids))
+                uids = self.get_random_uids(k=len(retry_uids))
                 bt.logging.debug(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
                 retry_uids = []  # reset retry uids
@@ -536,9 +540,8 @@ class neuron:
             bt.logging.error(
                 f"Failed to get chunk size {self.config.neuron.min_chunk_size} | {self.config.neuron.chunk_factor} | {data['size'] // self.config.neuron.chunk_factor}"
             )
-            import pdb
+            chunk_size = 0
 
-            pdb.set_trace()
         if (
             chunk_size == 0
             or chunk_size > data["size"]
@@ -588,7 +591,7 @@ class neuron:
         Asynchronously challenge and see who returns the data fastest (passes verification), and rank them highest
         """
         tasks = []
-        uids = [14, 26, 27]  # self.get_random_uids(k=self.config.neuron.challenge_k)
+        uids = self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
         responses = await asyncio.gather(*tasks)
@@ -610,10 +613,9 @@ class neuron:
                 rewards[idx] = 0.0
 
         responses = [response[0] for (verified, response) in responses]
-        bt.logging.debug(f"responses after: {responses}")
         self.apply_reward_scores(uids, responses, rewards)
 
-    async def retrieve(self, data_hash):
+    async def retrieve(self, data_hash=None):
         """
         Retrieves and verifies data from the network, ensuring integrity and correctness of the data associated with the given hash.
 
@@ -623,30 +625,42 @@ class neuron:
         Returns:
             The retrieved data if the verification is successful.
         """
+
+        if data_hash == None:
+            hashes_dict = get_all_data_hashes(self.database)
+            hashes = list(hashes_dict.keys())
+            data_hash = random_choice(hashes)
+            hotkeys = hashes_dict[data_hash]
+        else:
+            hotkeys = get_all_hotkeys_for_data_hash(data_hash, self.database)
+
+        bt.logging.debug(f"Retrieving data with hash: {data_hash}")
+
+        # Make sure we have the most up-to-date hotkey info
+        self.metagraph.sync(lite=True)
+
         # fetch which miners have the data
-        import pdb
-
-        pdb.set_trace()
-        keys = safe_key_search(self.database, f"*")
-
         uids = []
         axons_to_query = []
-        for key in keys:
-            hotkey = key.split(".")[1]
-            uid = metagraph.hotkeys.index(hotkey)
-            axons_to_query.append(metagraph.axons[uid])
+        for hotkey in hotkeys:
+            hotkey = (
+                hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
+            )  # ensure str
+            uid = self.metagraph.hotkeys.index(hotkey)
+            axons_to_query.append(self.metagraph.axons[uid])
             uids.append(uid)
             bt.logging.debug(f"appending hotkey: {hotkey}")
 
         # query all N (from redundancy factor) with M challenges (x% of the total data)
         # see who returns the data fastest (passes verification), and rank them highest
+        synapse = protocol.Retrieve(
+            data_hash=data_hash,
+            seed=get_random_bytes(32).hex(),
+        )
         responses = await self.dendrite(
             axons_to_query,
-            protocol.Retrieve(
-                data_hash=data_hash,
-                seed=get_random_bytes(32).hex(),
-            ),
-            deserialize=True,
+            synapse,
+            deserialize=False,
         )
 
         rewards: torch.FloatTensor = torch.zeros(
@@ -656,9 +670,18 @@ class neuron:
         datas = []
         for idx, response in enumerate(responses):
             bt.logging.debug(f"response: {response}")
-            decoded_data = base64.b64decode(respnonse.data)
-            if hash_data(decoded_data) != data_hash:
+            try:
+                decoded_data = base64.b64decode(response.data)
+            except Exception as e:
+                bt.logging.error(
+                    f"Failed to decode data from UID: {uids[idx]} with error {e}"
+                )
+                rewards[idx] = -1.0
+                continue
+
+            if str(hash_data(decoded_data)) != data_hash:
                 bt.logging.error(f"Hash of received data does not match expected hash!")
+                rewards[idx] = -1.0
                 continue
 
             if not verify_retrieve_with_seed(response):
@@ -668,38 +691,54 @@ class neuron:
             else:
                 rewards[idx] = 1.0
 
+            # If we reach here, this miner has passed verification. Update the validator storage.
+            data["prev_seed"] = synapse.seed
+            data["counter"] += 1
+            update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
+
             try:
                 bt.logging.debug(f"Decrypting from UID: {uids[idx]}")
-                # Decrypt the data using the validator stored encryption keys
-                decrypted_data = decrypt_data(decoded_data, data["encryption_payload"])
-                datas.append(decrypted_data)
+                # Load the data for this miner from validator storage
+                data = get_metadata_from_hash(hotkey, data_hash, self.database)
+
+                # TODO: Add this decryption on the miner side provided the user logs in
+                # with their wallet! This way miners can send back a landing/login link
+                # TODO: get a temp link from the server to send back to the client instead
+
+                # Encapsulate this function with args so only need to pass the wallet
+                # The partial func decrypts the data using the validator stored encryption keys
+                decrypt_user_data = partial(
+                    decrypt_data,
+                    encrypted_data=decoded_data,
+                    encryption_payload=data["encryption_payload"],
+                )
+                # Pass the user back the encrypted_data along with a function to decrypt it
+                # given their wallet which was used to encrypt in the first place
+                datas.append((decoded_data, decrypt_user_data))
             except Exception as e:
                 bt.logging.error(f"Failed to decrypt data from UID: {uids[idx]} {e}")
 
-            # TODO: get a temp link from the server to send back to the client
-
-        # TODO: update the database with the new seed challenge (prev_seed needs to be updated)
         self.apply_reward_scores(uids, responses, rewards)
 
-        return datas[
-            0
-        ]  # Return only first element of data, incase only 1 response is valid
+        return datas
 
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
 
         # Store some data
+        bt.logging.trace("initiating store data")
         await self.store_validator_data()
 
         # Challenge some data
+        bt.logging.trace("initiating challenge")
         await self.challenge()
 
-        # Retrieve some data
-        hashes = safe_key_search(self.database, "*")
-        data_hash = random_choice(hashes)
-        bt.logging.debug(f"chosen random hash for retrieval: {data_hash}")
-        await self.retrieve(data_hash)
+        if self.step % 3 == 0:
+            # Retrieve some data
+            bt.logging.trace("initiating retrieve")
+            await self.retrieve()
+
         time.sleep(12)
 
     def run(self):

@@ -82,3 +82,54 @@ def get_metadata_from_hash(hotkey, data_hash, database):
     else:
         print(f"No metadata found for {data_hash} in hash {hotkey}.")
         return None
+
+
+def get_all_data_hashes(database):
+    """
+    Retrieves all data hashes and their corresponding hotkeys from the Redis instance.
+
+    Parameters:
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
+    """
+    # Initialize an empty dictionary to store the inverse map
+    data_hash_to_hotkeys = {}
+
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    for hotkey in database.scan_iter("*"):
+        # Fetch all fields (data hashes) for the current hotkey
+        data_hashes = database.hkeys(hotkey)
+        # Iterate over each data hash and append the hotkey to the corresponding list
+        for data_hash in data_hashes:
+            data_hash = data_hash.decode("utf-8")
+            if data_hash not in data_hash_to_hotkeys:
+                data_hash_to_hotkeys[data_hash] = []
+            data_hash_to_hotkeys[data_hash].append(hotkey)
+
+    return data_hash_to_hotkeys
+
+
+def get_all_hotkeys_for_data_hash(data_hash, database):
+    """
+    Retrieves all hotkeys associated with a specific data hash.
+
+    Parameters:
+        data_hash (str): The data hash to look up.
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        A list of hotkeys associated with the data hash.
+    """
+    # Initialize an empty list to store the hotkeys
+    hotkeys = []
+
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    for hotkey in database.scan_iter("*"):
+        # Check if the data hash exists within the hash of the hotkey
+        if database.hexists(hotkey, data_hash):
+            hotkey = hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
+            hotkeys.append(hotkey)
+
+    return hotkeys
