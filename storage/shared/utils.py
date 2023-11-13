@@ -48,7 +48,7 @@ def b64_encode(data):
     """
     if isinstance(data, bytes):
         data = data.hex()
-    if isinstance(data, list) and isinstance(data[0], bytes):
+    if isinstance(data, list) and len(data) and isinstance(data[0], bytes):
         data = [d.hex() for d in data]
     if isinstance(data, dict) and isinstance(data[list(data.keys())[0]], bytes):
         data = {k: v.hex() for k, v in data.items()}

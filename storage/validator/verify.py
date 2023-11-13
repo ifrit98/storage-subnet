@@ -37,6 +37,10 @@ def verify_chained_commitment(proof, seed, commitment, verbose=False):
 
 
 def verify_challenge_with_seed(synapse, verbose=False):
+    if synapse.commitment_hash == None or synapse.commitment_proof == None:
+        print(f"Missing commitment hash or proof.")
+        return False
+
     if not verify_chained_commitment(
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):

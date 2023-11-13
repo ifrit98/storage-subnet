@@ -18,6 +18,7 @@
 
 import sys
 import json
+import redis
 import base64
 import storage
 import bittensor as bt
@@ -83,7 +84,115 @@ def GetSynapse(curve, maxsize, wallet):
     return synapse, encryption_payload, random_data
 
 
+# Function to add metadata to a hash in Redis
+def add_data_to_hotkey(hotkey, data_hash, metadata, database):
+    """
+    Associates a data hash and its metadata with a hotkey in Redis.
+
+    Parameters:
+        hotkey (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        metadata (dict): The metadata to associate with the data hash.
+        database (redis.Redis): The Redis client instance.
+    """
+    # Serialize the metadata as a JSON string
+    metadata_json = json.dumps(metadata)
+    # Use HSET to associate the data hash with the hotkey
+    database.hset(hotkey, data_hash, metadata_json)
+    print(f"Associated data hash {data_hash} with hotkey {hotkey}.")
+
+
+def get_all_data_for_hotkey(hotkey, database):
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
+
+    Parameters:
+        hotkey (str): The key representing the hotkey.
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    # Fetch all fields (data hashes) and values (metadata) for the hotkey
+    all_data_hashes = database.hgetall(hotkey)
+    # Deserialize the metadata for each data hash
+    return {
+        data_hash.decode("utf-8"): json.loads(metadata.decode("utf-8"))
+        for data_hash, metadata in all_data_hashes.items()
+    }
+
+
+def update_metadata_for_data_hash(hotkey, data_hash, new_metadata, database):
+    """
+    Updates the metadata for a specific data hash associated with a hotkey.
+
+    Parameters:
+        hotkey (str): The key representing the hotkey.
+        data_hash (str): The subkey representing the data hash to update.
+        new_metadata (dict): The new metadata to associate with the data hash.
+        database (redis.Redis): The Redis client instance.
+    """
+    # Serialize the new metadata as a JSON string
+    new_metadata_json = json.dumps(new_metadata)
+    # Update the field in the hash with the new metadata
+    database.hset(hotkey, data_hash, new_metadata_json)
+    print(f"Updated metadata for data hash {data_hash} under hotkey {hotkey}.")
+
+
+def get_metadata_from_hash(hotkey, data_hash, database):
+    """
+    Retrieves metadata from a hash in Redis for the given field_key.
+
+    Parameters:
+        hash_key (str): The hash key in Redis.
+        field_key (str): The field key within the hash.
+        databse (redis.Redis): The Redis client instance.
+
+    Returns:
+        The deserialized metadata as a dictionary, or None if not found.
+    """
+    # Get the JSON string from Redis
+    metadata_json = database.hget(hotkey, data_hash)
+    if metadata_json:
+        # Deserialize the JSON string to a Python dictionary
+        metadata = json.loads(metadata_json)
+        return metadata
+    else:
+        print(f"No metadata found for {data_hash} in hash {hotkey}.")
+        return None
+
+
+def get_all_data_hashes(redis_client):
+    """
+    Retrieves all data hashes and their corresponding hotkeys from the Redis instance.
+
+    Parameters:
+        redis_client (redis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
+    """
+    # Initialize an empty dictionary to store the inverse map
+    data_hash_to_hotkeys = {}
+
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    for hotkey in redis_client.scan_iter("*"):
+        # Remove the 'hotkey:' prefix to get the actual hotkey value
+        hotkey = hotkey.decode("utf-8").split("hotkey:")[1]
+        # Fetch all fields (data hashes) for the current hotkey
+        data_hashes = redis_client.hkeys(hotkey)
+        # Iterate over each data hash and append the hotkey to the corresponding list
+        for data_hash in data_hashes:
+            data_hash = data_hash.decode("utf-8")
+            if data_hash not in data_hash_to_hotkeys:
+                data_hash_to_hotkeys[data_hash] = []
+            data_hash_to_hotkeys[data_hash].append(hotkey)
+
+    return data_hash_to_hotkeys
+
+
 def test(miner):
+    validator_db = redis.StrictRedis(host="localhost", port=6379, db=1)
     bt.logging.debug("\n\nstore phase------------------------".upper())
     syn, encryption_payload, random_data = GetSynapse("P-256", 128, wallet=miner.wallet)
     bt.logging.debug("\nsynapse:", syn)
@@ -97,27 +206,22 @@ def test(miner):
 
     encrypted_byte_data = base64.b64decode(syn.encrypted_data)
     response_store.axon.hotkey = miner.wallet.hotkey.ss58_address
-    lookup_key = f"{hash_data(encrypted_byte_data)}.{response_store.axon.hotkey}"
-    bt.logging.debug(f"lookup key: {lookup_key}")
     validator_store = {
         "prev_seed": response_store.seed,
         "size": sys.getsizeof(encrypted_byte_data),
         "counter": 0,
         "encryption_payload": encryption_payload,
     }
-    dump = json.dumps(validator_store).encode()
-    miner.database.set(lookup_key, dump)
-    retrv = miner.database.get(lookup_key)
-    bt.logging.debug("\nretrv:", retrv)
-    bt.logging.debug("\nretrv decoded:", json.loads(retrv.decode("utf-8")))
+
+    # Add metadata to Redis (hash, hotkey) pair
+    data_hash = hash_data(encrypted_byte_data)
+    hotkey = str(response_store.axon.hotkey)
+    add_data_to_hotkey(hotkey, data_hash, validator_store, validator_db)
 
     bt.logging.debug("\n\nchallenge phase------------------------".upper())
-    bt.logging.debug(f"key selected: {lookup_key}")
-    data_hash = lookup_key.split(".")[0]
-    bt.logging.debug("data_hash:", data_hash)
-    data = miner.database.get(lookup_key)
+    bt.logging.debug(f"key selected: {data_hash} {hotkey}")
+    data = get_metadata_from_hash(hotkey, data_hash, validator_db)
     bt.logging.debug("data:", data)
-    data = json.loads(data.decode("utf-8"))
     bt.logging.debug(f"data size: {data['size']}")
 
     # Get random chunksize given total size
@@ -131,6 +235,7 @@ def test(miner):
 
     # Calculate number of chunks
     num_chunks = data["size"] // chunk_size
+    bt.logging.debug(f"num chunks {num_chunks}")
 
     # Get setup params
     g, h = setup_CRS()
@@ -152,8 +257,10 @@ def test(miner):
     # Update validator storage
     data["prev_seed"] = response_challenge.seed
     data["counter"] += 1
-    dump = json.dumps(data).encode()
-    miner.database.set(lookup_key, dump)
+    bt.logging.debug(
+        f"updating validator database for key {data_hash} | {hotkey} with: {data}"
+    )
+    update_metadata_for_data_hash(hotkey, data_hash, data, validator_db)
 
     # Challenge a 2nd time to verify the chain of proofs
     bt.logging.debug("\n\n2nd challenge phase------------------------".upper())
@@ -176,8 +283,10 @@ def test(miner):
     # Update validator storage
     data["prev_seed"] = response_challenge.seed
     data["counter"] += 1
-    dump = json.dumps(data).encode()
-    miner.database.set(lookup_key, dump)
+    bt.logging.debug(
+        f"updating validator database for key {data_hash} | {hotkey} with: {data}"
+    )
+    update_metadata_for_data_hash(hotkey, data_hash, data, validator_db)
 
     bt.logging.debug("\n\nretrieve phase------------------------".upper())
     ryn = storage.protocol.Retrieve(
@@ -202,10 +311,16 @@ def test(miner):
     # Update validator storage
     data["prev_seed"] = ryn.seed
     data["counter"] += 1
-    dump = json.dumps(data).encode()
-    miner.database.set(lookup_key, dump)
 
-    print("final validator store:", miner.database.get(lookup_key))
+    bt.logging.debug(
+        f"updating validator database for key {data_hash} | {hotkey} with: {data}"
+    )
+    update_metadata_for_data_hash(hotkey, data_hash, data, validator_db)
+
+    print(
+        "final validator store:",
+        get_metadata_from_hash(hotkey, data_hash, validator_db),
+    )
 
     try:
         # Check if the data is the same
@@ -216,4 +331,8 @@ def test(miner):
 
     print("Verified successully!")
 
+    hash_map = get_all_data_hashes(validator_db)
+    import pdb
+
+    pdb.set_trace()
     return True

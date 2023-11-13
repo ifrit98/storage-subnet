@@ -127,7 +127,8 @@ class Retrieve(bt.Synapse):
 
 class Update(bt.Synapse):
     # Lookup key for where metadata is stored in validator index
-    lookup_key: str  # key = f"{data_hash}.{hotkey}"
+    hotkey: str
+    data_hash: str
 
     # Data to update
     prev_seed: str  # hex string
@@ -140,7 +141,7 @@ class Update(bt.Synapse):
     # be decrypted by the originating wallet.
 
     required_hash_fields: typing.List[str] = pydantic.Field(
-        ["encryption_payload", "prev_seed", "size", "counter"],
+        ["hotkey", "data_hash", "encryption_payload", "prev_seed", "size", "counter"],
         title="Required Hash Fields",
         description="A list of required fields for the hash.",
         allow_mutation=False,

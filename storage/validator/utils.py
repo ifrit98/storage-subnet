@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
+import math
 import numpy as np
 from typing import Dict, List, Any, Union, Optional, Tuple
 
@@ -113,49 +114,43 @@ def get_sorted_response_times(uids, responses):
         [(2, 0.1), (1, 0.2), (3, 0.3)]
     """
     axon_times = [
-        (uids[idx], response.axon.process_time)
+        (
+            uids[idx],
+            response.axon.process_time if response.axon.process_time != None else 100,
+        )
         for idx, response in enumerate(responses)
     ]
     # Sorting in ascending order since lower process time is better
+    print(f"axon_times: {axon_times}")
     sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
+    print(f"sorted_axon_times: {sorted_axon_times}")
     return sorted_axon_times
 
 
 def scale_rewards_by_response_time(uids, responses, rewards):
-    """
-    Sorts a list of axons based on their response times.
-
-    This function pairs each uid with its corresponding axon's response time,
-    and then sorts this list in ascending order. Lower response times are considered better.
-
-    Args:
-        uids (List[int]): List of unique identifiers for each axon.
-        responses (List[Response]): List of Response objects corresponding to each axon.
-
-    Returns:
-        List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
-
-    Example:
-        >>> get_sorted_response_times([1, 2, 3], [response1, response2, response3])
-        [(2, 0.1), (1, 0.2), (3, 0.3)]
-    """
     sorted_axon_times = get_sorted_response_times(uids, responses)
 
     # Extract only the process times
     process_times = [proc_time for _, proc_time in sorted_axon_times]
 
-    # Find min and max values for normalization
+    # Find min and max values for normalization, avoid division by zero
     min_time = min(process_times)
-    max_time = max(process_times)
+    max_time = max(process_times) if max(process_times) > min_time else min_time + 1
 
     # Normalize these times to a scale of 0 to 1 (inverted)
     normalized_scores = [
         (max_time - proc_time) / (max_time - min_time) for proc_time in process_times
     ]
 
+    # Create a mapping from uid to its normalized score
+    uid_to_normalized_score = {
+        uid: normalized_score
+        for (uid, _), normalized_score in zip(sorted_axon_times, normalized_scores)
+    }
+
     # Scale the rewards by these normalized scores
-    for idx, (uid, _) in enumerate(sorted_axon_times):
-        rewards[idx] *= normalized_scores[idx]
+    for i, uid in enumerate(uids):
+        rewards[i] *= uid_to_normalized_score.get(uid, 0)
 
     return rewards
 

@@ -89,6 +89,18 @@ def add_args(cls, parser):
         help="Maximum size of random data to store.",
     )
     parser.add_argument(
+        "--neuron.min_chunk_size",
+        default=24,
+        type=int,
+        help="Minimum chunk size of random data to challenge.",
+    )
+    parser.add_argument(
+        "--neuron.override_chunk_size",
+        default=12,  # 64 bytes
+        type=int,
+        help="Override random chunk size to split data into for challenges.",
+    )
+    parser.add_argument(
         "--neuron.redundancy",
         type=int,
         default=3,
@@ -192,7 +204,7 @@ def add_args(cls, parser):
         "--database.port", default=6379, help="The port of the redis database."
     )
     parser.add_argument(
-        "--database.index", default=0, help="The database number of the redis database."
+        "--database.index", default=1, help="The database number of the redis database."
     )
 
     # Wandb args
