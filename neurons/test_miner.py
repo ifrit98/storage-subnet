@@ -16,24 +16,42 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import sys
 import json
 import base64
 import storage
 import bittensor as bt
 
+from Crypto.Random import get_random_bytes
 
-from storage.shared.ecc import setup_CRS, ecc_point_to_hex
-from storage.shared.utils import (
-    encrypt_data,
-    make_random_file,
+from storage.shared.ecc import (
     hash_data,
-    get_random_bytes,
+    setup_CRS,
+    ECCommitment,
+    ecc_point_to_hex,
+    hex_to_ecc_point,
 )
-from storage.utils.shared import get_random_chunksize, decrypt_data
-from storage.utils.validator import (
+
+from storage.validator.verify import (
     verify_store_with_seed,
     verify_challenge_with_seed,
     verify_retrieve_with_seed,
+)
+
+from storage.validator.encryption import (
+    decrypt_data,
+    encrypt_data,
+)
+
+from storage.validator.utils import (
+    make_random_file,
+    get_random_chunksize,
+)
+
+from storage.shared.utils import (
+    b64_encode,
+    b64_decode,
+    chunk_data,
 )
 
 
@@ -46,7 +64,7 @@ def GetSynapse(curve, maxsize, wallet):
     # random_data = make_random_file(maxsize=maxsize)
 
     # Encrypt the data
-    encrypted_data, encrypted_payload = encrypt_data(random_data, wallet)
+    encrypted_data, encryption_payload = encrypt_data(random_data, wallet)
 
     # Convert to base64 for compactness
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
@@ -67,9 +85,7 @@ def GetSynapse(curve, maxsize, wallet):
 
 def test(miner):
     bt.logging.debug("\n\nstore phase------------------------".upper())
-    syn, encryption_payload = GetSynapse(
-        miner.config.curve, miner.config.maxsize, wallet=miner.wallet
-    )
+    syn, encryption_payload = GetSynapse("P-256", 128, wallet=miner.wallet)
     bt.logging.debug("\nsynapse:", syn)
     response_store = miner.store(syn)
 
@@ -89,6 +105,10 @@ def test(miner):
         "counter": 0,
         "encryption_payload": encryption_payload,
     }
+    # TODO: start here!
+    import pdb
+
+    pdb.set_trace()
     dump = json.dumps(validator_store).encode()
     miner.database.set(lookup_key, dump)
     retrv = miner.database.get(lookup_key)

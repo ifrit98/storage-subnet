@@ -38,6 +38,8 @@ from Crypto.Random import get_random_bytes
 
 from pprint import pprint, pformat
 
+from test_miner import test
+
 # import this repo
 import storage
 from storage.shared.ecc import (
@@ -161,9 +163,9 @@ class miner:
 
         # Setup database
         self.database = redis.StrictRedis(
-            host=self.config.database_host,
-            port=self.config.database_port,
-            db=self.config.database_index,
+            host=self.config.database.host,
+            port=self.config.database.port,
+            db=self.config.database.index,
         )
 
         self.my_subnet_uid = self.metagraph.hotkeys.index(

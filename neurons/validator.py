@@ -16,7 +16,6 @@ from Crypto.Random import get_random_bytes
 
 from storage import protocol
 
-# import this repo
 from storage.shared.ecc import (
     hash_data,
     setup_CRS,
@@ -114,9 +113,9 @@ class neuron:
 
         # Setup database
         self.database = redis.StrictRedis(
-            host=self.config.database_host,
-            port=self.config.database_port,
-            db=self.config.database_index,
+            host=self.config.database.host,
+            port=self.config.database.port,
+            db=self.config.database.index,
         )
 
         # Init Weights.

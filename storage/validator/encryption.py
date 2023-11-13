@@ -10,7 +10,7 @@ from nacl import pwhash, secret
 NACL_SALT = b"\x13q\x83\xdf\xf1Z\t\xbc\x9c\x90\xb5Q\x879\xe9\xb1"
 
 
-def encrypt_aes(filename: Union[bytes, str], key: bytes) -> bytes:
+def encrypt_aes(filename: typing.Union[bytes, str], key: bytes) -> bytes:
     """
     Encrypt the data in the given filename using AES-GCM.
 
@@ -173,6 +173,9 @@ def encrypt_data_with_aes_and_serialize(
     )  # Encrypt the serialized JSON string
 
 
+encrypt_data = encrypt_data_with_aes_and_serialize
+
+
 def decrypt_data_and_deserialize(
     encrypted_data: bytes, encrypted_payload: bytes, wallet: bt.wallet
 ) -> bytes:
@@ -205,6 +208,9 @@ def decrypt_data_and_deserialize(
     decrypted_data = cipher.decrypt_and_verify(encrypted_data, tag)
 
     return decrypted_data
+
+
+decrypt_data = decrypt_data_and_deserialize
 
 
 def test_encrypt_decrypt_small_data():

@@ -186,13 +186,13 @@ def add_args(cls, parser):
 
     # Redis arguments
     parser.add_argument(
-        "--databse.host", default="localhost", help="The host of the redis database."
+        "--database.host", default="localhost", help="The host of the redis database."
     )
     parser.add_argument(
-        "--databse.port", default=6379, help="The port of the redis database."
+        "--database.port", default=6379, help="The port of the redis database."
     )
     parser.add_argument(
-        "--databse.index", default=0, help="The database number of the redis database."
+        "--database.index", default=0, help="The database number of the redis database."
     )
 
     # Wandb args

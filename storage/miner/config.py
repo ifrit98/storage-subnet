@@ -58,7 +58,7 @@ def add_args(cls, parser):
     parser.add_argument("--verbose", default=False, action="store_true")
     parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument(
-        "--databse.host", default="localhost", help="The host of the redis database."
+        "--database.host", default="localhost", help="The host of the redis database."
     )
     parser.add_argument(
         "--database.port",
