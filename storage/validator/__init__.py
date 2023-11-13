@@ -3,6 +3,7 @@ from . import state
 from . import forward
 from . import utils
 from . import verify
+from . import encryption
 
 __version__ = "0.0.1"
 version_split = __version__.split(".")

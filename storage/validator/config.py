@@ -68,7 +68,7 @@ def add_args(cls, parser):
         "--neuron.name",
         type=str,
         help="Trials for this miner go in miner.root / (wallet_cold - wallet_hot) / miner.name. ",
-        default="core_prompting_validator",
+        default="core_storage_validator",
     )
     parser.add_argument(
         "--neuron.device",

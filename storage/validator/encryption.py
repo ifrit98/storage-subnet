@@ -181,7 +181,7 @@ encrypt_data = encrypt_data_with_aes_and_serialize
 
 
 def decrypt_data_and_deserialize(
-    encrypted_data: bytes, encrypted_payload: bytes, wallet: bt.wallet
+    encrypted_data: bytes, encryption_payload: bytes, wallet: bt.wallet
 ) -> bytes:
     """
     Decrypts and deserializes the encrypted payload to extract the AES key, nonce, and tag, which are then used to
@@ -189,7 +189,7 @@ def decrypt_data_and_deserialize(
 
     Args:
         encrypted_data (bytes): AES encrypted data.
-        encrypted_payload (bytes): Encrypted payload containing the AES key, nonce, and tag.
+        encryption_payload (bytes): Encrypted payload containing the AES key, nonce, and tag.
         wallet (bt.wallet): Bittensor wallet object containing the coldkey.
 
     Returns:
@@ -201,7 +201,7 @@ def decrypt_data_and_deserialize(
 
     # Deserialize the encrypted payload to get the AES key, nonce, and tag in nacl.utils.EncryptedMessage format
     encrypted_msg: EncryptedMessage = deserialize_nacl_encrypted_message(
-        encrypted_payload
+        encryption_payload
     )
 
     # Decrypt the payload to get the JSON string
@@ -254,13 +254,13 @@ def test_encrypt_decrypt_large_data():
 
     # Encrypting large data
     data_to_encrypt = b"Large amount of data here..."
-    encrypted_data, encrypted_payload = encrypt_data_with_aes_and_serialize(
+    encrypted_data, encryption_payload = encrypt_data_with_aes_and_serialize(
         data_to_encrypt, bt.wallet()
     )
 
     # Decrypting data
     decrypted_data = decrypt_data_and_deserialize(
-        encrypted_data, encrypted_payload, bt.wallet()
+        encrypted_data, encryption_payload, bt.wallet()
     )
 
     print("Original Data:", data_to_encrypt)
@@ -288,7 +288,7 @@ def time_encrypt_decrypt_large_data(exp=9):
 
     # Start timing encryption
     start_time = time.time()
-    encrypted_data, encrypted_payload = encrypt_data_with_aes_and_serialize(
+    encrypted_data, encryption_payload = encrypt_data_with_aes_and_serialize(
         data_to_encrypt, wallet
     )
     encryption_time = time.time() - start_time
@@ -296,7 +296,7 @@ def time_encrypt_decrypt_large_data(exp=9):
     # Start timing decryption
     start_time = time.time()
     decrypted_data = decrypt_data_and_deserialize(
-        encrypted_data, encrypted_payload, wallet
+        encrypted_data, encryption_payload, wallet
     )
     decryption_time = time.time() - start_time
 

@@ -19,7 +19,6 @@ import time
 import wandb
 import bittensor as bt
 import traceback
-from prompting.protocol import Prompting
 from .set_weights import set_weights
 
 
@@ -62,7 +61,7 @@ def run(self):
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
     bt.logging.info(
-        f"Serving axon {Prompting} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
     )
     self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
