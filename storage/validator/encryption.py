@@ -6,6 +6,8 @@ import typing
 import bittensor as bt
 from Crypto.Cipher import AES
 from nacl import pwhash, secret
+from nacl.encoding import HexEncoder
+from nacl.utils import EncryptedMessage
 
 NACL_SALT = b"\x13q\x83\xdf\xf1Z\t\xbc\x9c\x90\xb5Q\x879\xe9\xb1"
 
@@ -168,9 +170,11 @@ def encrypt_data_with_aes_and_serialize(
     }
     aes_info_str = json.dumps(aes_info)
 
-    return encrypted_data, encrypt_data_with_wallet(
+    encrypted_msg: EncryptedMessage = encrypt_data_with_wallet(
         aes_info_str.encode(), wallet
     )  # Encrypt the serialized JSON string
+
+    return encrypted_data, serialize_nacl_encrypted_message(encrypted_msg)
 
 
 encrypt_data = encrypt_data_with_aes_and_serialize
@@ -194,8 +198,14 @@ def decrypt_data_and_deserialize(
     This function reverses the process performed by `encrypt_data_with_aes_and_serialize`.
     It first decrypts the payload to extract the AES key, nonce, and tag, and then uses them to decrypt the data.
     """
+
+    # Deserialize the encrypted payload to get the AES key, nonce, and tag in nacl.utils.EncryptedMessage format
+    encrypted_msg: EncryptedMessage = deserialize_nacl_encrypted_message(
+        encrypted_payload
+    )
+
     # Decrypt the payload to get the JSON string
-    decrypted_aes_info_str = decrypt_data_with_wallet(encrypted_payload, wallet)
+    decrypted_aes_info_str = decrypt_data_with_wallet(encrypted_msg, wallet)
 
     # Deserialize JSON string to get AES key, nonce, and tag
     aes_info = json.loads(decrypted_aes_info_str)
@@ -298,3 +308,67 @@ def time_encrypt_decrypt_large_data(exp=9):
     assert (
         decrypted_data == data_to_encrypt
     ), "Decrypted data does not match the original"
+
+
+def serialize_nacl_encrypted_message(encrypted_message: EncryptedMessage) -> str:
+    """
+    Serializes an EncryptedMessage object to a JSON string.
+
+    Args:
+        encrypted_message (EncryptedMessage): The EncryptedMessage object to serialize.
+
+    Returns:
+        str: A JSON string representing the serialized object.
+
+    This function takes an EncryptedMessage object, extracts its nonce and ciphertext,
+    and encodes them into a hex format. It then constructs a dictionary with these
+    values and serializes the dictionary into a JSON string.
+    """
+    data = {
+        "nonce": HexEncoder.encode(encrypted_message.nonce).decode("utf-8"),
+        "ciphertext": HexEncoder.encode(encrypted_message.ciphertext).decode("utf-8"),
+    }
+    return json.dumps(data)
+
+
+def deserialize_nacl_encrypted_message(serialized_data: str) -> EncryptedMessage:
+    """
+    Deserializes a JSON string back into an EncryptedMessage object.
+
+    Args:
+        serialized_data (str): The JSON string to deserialize.
+
+    Returns:
+        EncryptedMessage: The reconstructed EncryptedMessage object.
+
+    This function takes a JSON string representing a serialized EncryptedMessage object,
+    decodes it into a dictionary, and extracts the nonce and ciphertext. It then
+    reconstructs the EncryptedMessage object using the original nonce and ciphertext.
+    """
+    data = json.loads(serialized_data)
+    nonce = HexEncoder.decode(data["nonce"].encode("utf-8"))
+    ciphertext = HexEncoder.decode(data["ciphertext"].encode("utf-8"))
+    combined = nonce + ciphertext
+    return EncryptedMessage._from_parts(nonce, ciphertext, combined)
+
+
+def test_serialize_nacl_encrypted_message():
+    encrypted_msg = encrypt_data_with_wallet(b"Hello World!", bt.wallet())
+
+    # Assuming 'encrypted_msg' is an EncryptedMessage object
+    serialized = serialize_nacl_encrypted_message(encrypted_msg)
+    print("Serialized data:", serialized)
+
+    # Deserializing back to an EncryptedMessage object
+    deserialized_msg = deserialize_nacl_encrypted_message(serialized)
+    print("Deserialized message nonce:", deserialized_msg.nonce)
+    print("Deserialized message ciphertext:", deserialized_msg.ciphertext)
+
+    # Assertions to verify equivalence
+    assert deserialized_msg.nonce == encrypted_msg.nonce, "Nonces do not match"
+    assert (
+        deserialized_msg.ciphertext == encrypted_msg.ciphertext
+    ), "Ciphertexts do not match"
+
+
+test_encrypt_decrypt_large_data()
