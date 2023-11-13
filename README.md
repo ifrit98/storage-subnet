@@ -1,106 +1,118 @@
-<div align="center">
+# Subnet 21
+Subnet 21 implements a novel, multi-layered zero-knowledge interactive proof-of-spacetime algorithm by cleverly using Pedersen commitments, random challenges using elliptic curve cryptography, sequential seed-based chained hash verification, and merkle proofs to achieve an efficient, robust, secure, and highly available decetralized storage system on the Bittensor network. The system validates on encrypted user data, such that miners are unaware of what data they are storing, and only end-users may encrypt/decrypt the data they provide with their bittensor wallet coldkey.
 
-# **Bittensor Subnet Template** <!-- omit in toc -->
-[![Discord Chat](https://img.shields.io/discord/308323056592486420.svg)](https://discord.gg/bittensor)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
+We consider this system to be an important stepping stone so that bittensor can fulfill it's mission of democratizing intelligence, and a decentralized AWS platform is a key brick in this wall. 
 
----
+## Zero Knowledge Proof-of-Spacetime
 
-## The Incentivized Internet <!-- omit in toc -->
+The algorithm comprises three phases:
+- **Storage**: Miners store data locally and prove to the verifier (Validator) that they have commited to the entire data block
+- **Challenge**: Random challenges are issued by validators without advance warning, and miners must recommit to the entire data in order respond with the correct merkle proof.
+- **Retrieval**: Upon retrieving data, miners are challenged to generate an efficient proof based on a random seed value that is sent back with the original data for verification.
 
-[Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Research](https://bittensor.com/whitepaper)
-</div>
+> Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
----
-- [Quickstarter template](#quickstarter-template)
-- [Introduction](#introduction)
-  - [Example](#example)
-- [Installation](#installation)
-  - [Before you proceed](#before-you-proceed)
-  - [Install](#install)
-- [Writing your own incentive mechanism](#writing-your-own-incentive-mechanism)
-- [License](#license)
+### Storage Phase
 
----
-## Quickstarter template
+In the Store phase, the goal is to securely store data and create a commitment to prove its storage without revealing the data itself. The mathematical steps are:
 
-This template contains all the required installation instructions, scripts, and files and functions for:
-- Building Bittensor subnets.
-- Creating custom incentive mechanisms and running these mechanisms on the subnets. 
+Validators query miners to store user data that is encrypted by the end-user coldkey pubkey. The encrypted data is sent to miners along with a random seed, which the miners use to initiate a sequential chain of seed + hash verification proofs. The previous seed value and the data is required for each subsequent commitment proof. The miner then applies a Pedersen committment to the entire data using the random seed, and forwards the proofs to the validator.
 
----
+Upon receipt, validators verify the commitment and the initial hash chain, storing the associated metadata.
 
-## Introduction
 
-**IMPORTANT**: If you are new to Bittensor subnets, read this section before proceeding to [Installation](#installation) section. 
+1. **Data Encryption**:
+   - Data `D` is encrypted using a symmetric encryption scheme whos keys are .
+   - Encrypted Data: `encrypted_D = encrypt(D, key)`.
 
-The Bittensor blockchain hosts multiple self-contained incentive mechanisms called **subnets**. Subnets are playing fields in which:
-- Subnet miners who produce value, and
-- Subnet validators who produce consensus
+2. **Hashing and Commitment**:
+   - Hash the encoded data with a unique random seed to create a unique identifier for the data.
+   - Data Hash: `data_hash = hash(encrypted_D + r_seed)`.
+   - Create a cryptographic commitment using an Elliptic Curve Commitment Scheme (ECC), which involves a commitment function `commit` with curve points `g` and `h`.
+   - Pedersen Commitment: `(c, m, r) = commit(encrypted_D + seed)`, where `c` is the commitment, `m` is the message (or commitment hash), and `r` is the randomness used in the commitment.
+   - Chained Hash Proof: `m` is used as the initial `C_0`, which contains the initial random seed and the data itself. The random seed is stored for the next challenge in the chain.
 
-determine together the proper distribution of TAO for the purpose of incentivizing the creation of value, i.e., generating digital commodities, such as intelligence or data. 
+3. **Storage**:
+   - Store the data (`E`) and the random seed (`r_seed`) in local storage.
 
-Each subnet consists of:
-- Subnet miners and subnet validators.
-- A protocol using which the subnet miners and subnet validators interact with one another. This protocol is part of the incentive mechanism.
-- The Bittensor API using which the subnet miners and subnet validators interact with Bittensor's onchain consensus engine [Yuma Consensus](https://bittensor.com/documentation/validating/yuma-consensus). The Yuma Consensus is designed to drive these actors: subnet validators and subnet miners, into agreement on who is creating value and what that value is worth. 
 
-This starter template is split into three primary files. To write your own incentive mechanism, you should edit these files. These files are:
-1. `template/protocol.py`: Contains the definition of the protocol used by subnet miners and subnet validators.
-2. `neurons/miner.py`: Script that defines the subnet miner's behavior, i.e., how the subnet miner responds to requests from subnet validators.
-3. `neurons/validator.py`: This script defines the subnet validator's behavior, i.e., how the subnet validator requests information from the subnet miners and determines the scores.
+### Challenge Phase
+In the Challenge phase, the system verifies the possession of the data without actually retrieving the data itself.
 
-### Example
+Validators request the miner prove that it currently stores the data claimed by issuing an index-based challenge, where the miner must apply Pedersen committments to the entire data table given a random seed and a chunk size. 
 
-The Bittensor Subnet 1 for Text Prompting is built using this template. See [Bittensor Text-Prompting](https://github.com/opentensor/text-prompting) for how to configure the files and how to add monitoring and telemetry and support multiple miner types. Also see this Subnet 1 in action on [Taostats](https://taostats.io/subnets/netuid-1/) explorer.
+Data is chunked according to the chunk size, and each slice is committed using a Pederson commitment with the random seed. Each commitment is appended to a merkle tree, and a subsequent proof is generated to obtain the path along the merkle tree such that a validator can verify the random seed was indeed used to commit to each data chunk at challenge time, thus proving the miner has the data at time of the challenge. 
 
----
+The mathematical operations involved in the "Store", "Challenge", and "Retrieve" phases of this data storage and verification system can be broken down into a few key steps. Here's a simplified explanation for each phase:
+
+
+1. **Chunking Data**:
+   - The encrypted data is split into chunks: `chunks = chunk(encrypted_D, chunk_size)`.
+
+2. **Selecting a Chunk for Challenge**:
+   - A random chunk is selected for the challenge.
+   - Selected Chunk: `chunk_j = chunks[j]`.
+
+3. **Computing Commitment for the Chunk**:
+   - A commitment is computed for the selected chunk.
+   - Commitment for Chunk: `(c_j, m_j, r_j) = commit(chunk_j + seed)`.
+
+4. **Creating a Merkle Tree**:
+   - A Merkle tree is constructed using all chunk commitments.
+   - Merkle Tree: `merkle_tree = MerkleTree([c_1, c_2, ..., c_n])`.
+
+5. **Generating Merkle Proof**:
+   - A Merkle proof is generated for the selected chunk to recreate the path along the merkle tree to the leaf that represents `chunk_j`.
+   - Merkle Proof: `proof_j = merkle_tree.get_proof(j)`.
+
+6. **Generating chained commitment**:
+   - Compute commitment hash `Cn = hash( hash( encrypted_D + prev_seed ) + new_seed )`
+   - Update previous seed `prev_seed = new_seed`
+
+7. **Response**:
+   - The challenge response includes the Pedersen elliptic curve commitment, the chained commitment hash, the Merkle proof, and the Merkle tree root.
+   - The validator verifies the triple of proofs: chained commitment, elliptic-curve commitment, and the merkle proof.
+ 
+
+### Retrieval Phase
+
+In this phase, the data is retrieved, decrypted, and its integrity is verified.
+
+1. **Fetching Encrypted Data**:
+   - The encrypted data is fetched from the database based on its hash.
+   - `encrypted_D = fetch(data_hash)`.
+
+2. **Chained Verification Challenge**:
+   - A new commitment is computed on the encrypted data with a new seed and the previous seed.
+       - `Ch = hash( hash( encrypted_D + prev_seed ) + new_seed )`.
+
+3. **Data Integrity Check**:
+   - The retrieved data's integrity is verified by checking if the newly computed commitment matches the expected value.
+   - `verify_chained(commitment, expected_commitment) == True`.
+
+5. **Decryption**:
+   - The data is decrypted using the symmetric encryption key and returned to the end-user.
+   - Decrypted Data: `D = decrypt(encrypted_D, key)`.
+
+In each phase, cryptographic primitives ensure data integrity and confidentiality. The encryption and commitment schemes ensure the data's security, while Merkle trees and random challenges provide a robust method for verifying data possession without revealing the actual data.
+
+In each phase, cryptographic primitives like hashing, commitment schemes (e.g., Elliptic Curve Cryptography and Pedersen commitments), and data structures like Merkle trees are employed to ensure the integrity, confidentiality, and availability of the data. The use of seeds and randomness in commitments adds an additional layer of security and ensures that each instance of data storage and retrieval is unique and verifiable.
+
+
 
 ## Installation
+```bash
+git clone https://github.com/ifrit98/storage-subnet
+cd storage-subnet
+python -m pip install -e .
+```
 
-### Before you proceed
-Before you proceed with the installation of the subnet, note the following: 
+### Running a miner
+```bash
+python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
+```
 
-- Use these instructions to run your subnet locally for your development and testing, or on Bittensor testnet or on Bittensor mainnet. 
-- **IMPORTANT**: We **strongly recommend** that you first run your subnet locally and complete your development and testing before running the subnet on Bittensor testnet. Furthermore, make sure that you next run your subnet on Bittensor testnet before running it on the Bittensor mainnet.
-- You can run your subnet either as a subnet owner, or as a subnet validator or as a subnet miner. 
-- **IMPORTANT:** Make sure you are aware of the minimum compute requirements for your subnet. See the [Minimum compute YAML configuration](./min_compute.yml).
-- Note that installation instructions differ based on your situation: For example, installing for local development and testing will require a few additional steps compared to installing for testnet. Similarly, installation instructions differ for a subnet owner vs a validator or a miner. 
-
-### Install
-
-- **Running locally**: Follow the step-by-step instructions described in this section: [Running Subnet Locally](./docs/running_on_staging.md).
-- **Running on Bittensor testnet**: Follow the step-by-step instructions described in this section: [Running on the Test Network](./docs/running_on_testnet.md).
-- **Running on Bittensor mainnet**: Follow the step-by-step instructions described in this section: [Running on the Main Network](./docs/running_on_mainnet.md).
-
----
-
-## Writing your own incentive mechanism
-
-As described in [Quickstarter template](#quickstarter-template) section above, when you are ready to write your own incentive mechanism, update this template repository by editing the following files. The code in these files contains detailed documentation on how to update the template. Read the documentation in each of the files to understand how to update the template. There are multiple **TODO**s in each of the files identifying sections you should update. These files are:
-- `template/protocol.py`: Contains the definition of the wire-protocol used by miners and validators.
-- `neurons/miner.py`: Script that defines the miner's behavior, i.e., how the miner responds to requests from validators.
-- `neurons/validator.py`: This script defines the validator's behavior, i.e., how the validator requests information from the miners and determines the scores.
-
----
-
-## License
-This repository is licensed under the MIT License.
-```text
-# The MIT License (MIT)
-# Copyright © 2023 Yuma Rao
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-# documentation files (the “Software”), to deal in the Software without restriction, including without limitation
-# the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
-# and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all copies or substantial portions of
-# the Software.
-
-# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-# THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-# DEALINGS IN THE SOFTWARE.
+### Running a validator
+```bash
+python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
