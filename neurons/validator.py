@@ -1,6 +1,7 @@
 import os
 import sys
 import copy
+import json
 import time
 import redis
 import torch
@@ -229,6 +230,9 @@ class neuron:
         # Scale reward by the ranking of the response time
         # If the response time is faster, the reward is higher
         # This should reflect the distribution of axon response times (minmax norm)
+        bt.logging.debug(f"Applying rewards: {rewards}")
+        bt.logging.debug(f"Reward shape: {rewards.shape}")
+        bt.logging.debug(f"UIDs: {uids}")
         scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
 
         # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
@@ -318,7 +322,7 @@ class neuron:
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
         # Make a random bytes file to test the miner if none provided
-        data = data or make_random_file(maxsize=self.config.maxsize)
+        data = data or make_random_file(maxsize=self.config.neuron.maxsize)
 
         # Encrypt the data
         encrypted_data, encryption_payload = encrypt_data(data, wallet)
@@ -335,7 +339,7 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = select_subset_uids(self.metagraph.uids, N=self.config.neuron.redundancy)
+        uids = [17, 26, 27]  # self.get_random_uids(k=self.config.neuron.redundancy)
         axons = [self.metagraph.axons[uid] for uid in uids]
         retry_uids = [None]
 
@@ -352,9 +356,6 @@ class neuron:
                 deserialize=False,
             )
 
-            import pdb
-
-            pdb.set_trace()
             # Log the results for monitoring purposes.
             bt.logging.info(f"Received responses: {responses}")
 
@@ -366,7 +367,9 @@ class neuron:
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
                 if not verify_store_with_seed(response):
-                    # TODO: flag this miner for 0 weight (or negative rewards?)
+                    bt.logging.debug(
+                        f"Failed to verify store commitment from UID: {uid}"
+                    )
                     rewards[idx] = 0.0
                     retry_uids.append(uid)
                     continue  # Skip trying to store the data
@@ -386,21 +389,24 @@ class neuron:
                 dumped_data = json.dumps(response_storage).encode()
 
                 # Store in the database according to the data hash and the miner hotkey
-                database.set(key, dumped_data)
+                self.database.set(key, dumped_data)
                 bt.logging.debug(f"Stored data in database with key: {key}")
 
                 # Broadcast the update to all other validators
                 # TODO: ensure this will not block
                 # TODO: potentially batch update after all miners have responded?
-                broadcast(key, dumped_data)
+                bt.logging.trace(f"Broadcasting update to all validators")
+                self.broadcast(key, dumped_data)
 
+            bt.logging.trace("Applying rewards")
             self.apply_reward_scores(uids, responses, rewards)
 
             # Get a new set of UIDs to query for those left behind
             if retry_uids != []:
-                uids = select_subset_uids(metagraph.uids, N=len(retry_uids))
+                bt.logging.debug(f"Failed to store on uids: {retry_uids}")
+                uids = [17, 26, 27]  # self.get_random_uids(k=len(retry_uids))
                 bt.logging.debug(f"Retrying with new uids: {uids}")
-                axons = [metagraph.axons[uid] for uid in uids]
+                axons = [self.metagraph.axons[uid] for uid in uids]
                 retry_uids = []  # reset retry uids
                 retries += 1
 
@@ -450,7 +456,7 @@ class neuron:
         # We create each challenge as a coroutine and then
         # await the results of each challenge asynchronously
         tasks = []
-        uids = self.get_random_uids(k=self.config.neuron.challenge_k)
+        uids = [17, 26, 27]  # self.get_random_uids(k=self.config.neuron.challenge_k)
         for uid in uids:
             tasks.append(
                 asyncio.create_task(self.handle_challenge(self.metagraph.hotkeys[uid]))
