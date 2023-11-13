@@ -369,6 +369,3 @@ def test_serialize_nacl_encrypted_message():
     assert (
         deserialized_msg.ciphertext == encrypted_msg.ciphertext
     ), "Ciphertexts do not match"
-
-
-test_encrypt_decrypt_large_data()

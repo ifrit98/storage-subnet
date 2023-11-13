@@ -22,7 +22,7 @@ import base64
 import storage
 import bittensor as bt
 
-from Crypto.Random import get_random_bytes
+from Crypto.Random import get_random_bytes, random
 
 from storage.shared.ecc import (
     hash_data,
@@ -80,12 +80,12 @@ def GetSynapse(curve, maxsize, wallet):
         h=ecc_point_to_hex(h),
         seed=get_random_bytes(32).hex(),
     )
-    return synapse, encryption_payload
+    return synapse, encryption_payload, random_data
 
 
 def test(miner):
     bt.logging.debug("\n\nstore phase------------------------".upper())
-    syn, encryption_payload = GetSynapse("P-256", 128, wallet=miner.wallet)
+    syn, encryption_payload, random_data = GetSynapse("P-256", 128, wallet=miner.wallet)
     bt.logging.debug("\nsynapse:", syn)
     response_store = miner.store(syn)
 
@@ -105,10 +105,6 @@ def test(miner):
         "counter": 0,
         "encryption_payload": encryption_payload,
     }
-    # TODO: start here!
-    import pdb
-
-    pdb.set_trace()
     dump = json.dumps(validator_store).encode()
     miner.database.set(lookup_key, dump)
     retrv = miner.database.get(lookup_key)
@@ -143,7 +139,7 @@ def test(miner):
         chunk_size=chunk_size,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        curve=miner.config.curve,
+        curve="P-256",
         challenge_index=random.choice(range(num_chunks)),
         seed=get_random_bytes(32).hex(),
     )
@@ -167,7 +163,7 @@ def test(miner):
         chunk_size=chunk_size,
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
-        curve=miner.config.curve,
+        curve="P-256",
         challenge_index=random.choice(range(num_chunks)),
         seed=get_random_bytes(32).hex(),  # data["seed"], # should be a NEW seed
     )
@@ -196,9 +192,11 @@ def test(miner):
     bt.logging.debug("retrieved data:", rdata)
     decoded = base64.b64decode(rdata.data)
     bt.logging.debug("decoded base64 data:", decoded)
-    encryption_payload = json.loads(data["encryption_payload"])
+    encryption_payload = data[
+        "encryption_payload"
+    ]  # json.loads(data["encryption_payload"])
     bt.logging.debug(f"encryption payload: {encryption_payload}")
-    unencrypted = decrypt_data(decoded, encryption_payload)
+    unencrypted = decrypt_data(decoded, encryption_payload, wallet=miner.wallet)
     bt.logging.debug("decrypted data:", unencrypted)
 
     # Update validator storage
@@ -208,6 +206,14 @@ def test(miner):
     miner.database.set(lookup_key, dump)
 
     print("final validator store:", miner.database.get(lookup_key))
-    import pdb
 
-    pdb.set_trace()
+    try:
+        # Check if the data is the same
+        assert random_data == unencrypted, "Data is not the same!"
+    except Exception as e:
+        print(e)
+        return False
+
+    print("Verified successully!")
+
+    return True

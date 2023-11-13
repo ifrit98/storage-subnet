@@ -69,6 +69,7 @@ from storage.miner.utils import (
     compute_subsequent_commitment,
     save_data_to_filesystem,
     load_from_filesystem,
+    commit_data_with_seed,
 )
 
 from storage.miner.config import (
@@ -223,6 +224,7 @@ class miner:
 
         if self.config.test:  # (debugging)
             test(self)
+            exit(0)
 
     @property
     def total_storage(self):
