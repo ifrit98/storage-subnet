@@ -155,7 +155,7 @@ def scale_rewards_by_response_time(uids, responses, rewards):
 
     # Scale the rewards by these normalized scores
     for idx, (uid, _) in enumerate(sorted_axon_times):
-        rewards[uid] *= normalized_scores[idx]
+        rewards[idx] *= normalized_scores[idx]
 
     return rewards
 

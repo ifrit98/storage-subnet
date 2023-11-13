@@ -234,12 +234,14 @@ class neuron:
         bt.logging.debug(f"Reward shape: {rewards.shape}")
         bt.logging.debug(f"UIDs: {uids}")
         scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
+        bt.logging.debug(f"Scaled rewards: {scaled_rewards}")
 
         # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
         # shape: [ metagraph.n ]
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, uids, scaled_rewards
+            0, torch.tensor(uids).to(self.device), scaled_rewards
         ).to(self.device)
+        bt.logging.debug(f"Scattered rewards: {scattered_rewards}")
 
         # Update moving_averaged_scores with rewards produced by this step.
         # shape: [ metagraph.n ]
@@ -247,6 +249,7 @@ class neuron:
         self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
             1 - alpha
         ) * self.moving_averaged_scores.to(self.device)
+        bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
     def update_index(self, synapse: protocol.Update):
         """Update the validator index with the new data"""
@@ -363,6 +366,7 @@ class neuron:
             rewards: torch.FloatTensor = torch.zeros(
                 len(responses), dtype=torch.float32
             ).to(self.device)
+            bt.logging.debug(f"Init rewards: {rewards}")
 
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
