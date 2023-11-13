@@ -79,14 +79,39 @@ from storage.miner.config import (
 class miner:
     @classmethod
     def check_config(cls, config: "bt.Config"):
+        """
+        Adds neuron-specific arguments to the argument parser.
+
+        Args:
+            parser (argparse.ArgumentParser): Parser to add arguments to.
+
+        This class method enriches the argument parser with options specific to the neuron's configuration.
+        """
         check_config(cls, config)
 
     @classmethod
     def add_args(cls, parser):
+        """
+        Adds neuron-specific arguments to the argument parser.
+
+        Args:
+            parser (argparse.ArgumentParser): Parser to add arguments to.
+
+        This class method enriches the argument parser with options specific to the neuron's configuration.
+        """
         add_args(cls, parser)
 
     @classmethod
     def config(cls):
+        """
+        Retrieves the configuration for the neuron.
+
+        Returns:
+            bt.Config: The configuration object for the neuron.
+
+        This class method returns the neuron's configuration, which is used throughout the neuron's lifecycle
+        for various functionalities and operations.
+        """
         return config(cls)
 
     subtensor: "bt.subtensor"
@@ -174,13 +199,7 @@ class miner:
         # Serve passes the axon information to the network + netuid we are hosting on.
         # This will auto-update if the axon port of external ip have changed.
         bt.logging.info(
-            f"Serving axon {self.store} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
-        )
-        bt.logging.info(
-            f"Serving axon {self.challenge} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
-        )
-        bt.logging.info(
-            f"Serving axon {self.retrieve} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+            f"Serving axon {self.axon} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
         )
         self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
@@ -199,6 +218,9 @@ class miner:
         self.request_timestamps: Dict = {}
 
         self.step = 0
+
+        if self.config.test:  # (debugging)
+            test(self)
 
     @property
     def total_storage(self):
@@ -403,19 +425,6 @@ class miner:
         synapse.data = base64.b64encode(encrypted_data_bytes)
         return synapse
 
-        if config.test:  # (debugging)
-            import random
-            from storage.utils import (
-                GetSynapse,
-                verify_store_with_seed,
-                verify_challenge_with_seed,
-                verify_retrieve_with_seed,
-                get_random_chunksize,
-                decrypt_aes_gcm,
-            )
-
-            test(self)
-
     def run(self):
         run(self)
 
@@ -467,6 +476,12 @@ class miner:
 
 
 def main():
+    """
+    Main function to run the neuron.
+
+    This function initializes and runs the neuron. It handles the main loop, state management, and interaction
+    with the Bittensor network.
+    """
     miner().run()
 
 

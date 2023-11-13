@@ -16,28 +16,27 @@ from Crypto.Random import get_random_bytes
 
 from storage import protocol
 
-from storage.utils import (
+# import this repo
+from storage.shared.ecc import (
     hash_data,
     setup_CRS,
-    chunk_data,
-    MerkleTree,
-    encrypt_data,
-    decrypt_data,
     ECCommitment,
-    make_random_file,
-    safe_key_search,
-    get_random_chunksize,
     ecc_point_to_hex,
     hex_to_ecc_point,
-    verify_challenge_with_seed,
-    verify_store_with_seed,
-    verify_retrieve_with_seed,
-    b64_decode,
-    b64_encode,
 )
 
-from storage.validator.config import config, check_config, add_args
+from storage.shared.merkle import (
+    MerkleTree,
+)
 
+from storage.shared.utils import (
+    b64_encode,
+    b64_decode,
+    chunk_data,
+)
+
+
+from storage.validator.config import config, check_config, add_args
 
 from storage.validator.state import (
     should_checkpoint,
@@ -54,60 +53,6 @@ from storage.validator.weights import (
     should_set_weights,
     set_weights,
 )
-
-
-def get_sorted_response_times(uids, responses):
-    axon_times = [
-        (uids[idx], response.axon.process_time)
-        for idx, response in enumerate(responses)
-    ]
-    # Sorting in ascending order since lower process time is better
-    sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
-    return sorted_axon_times
-
-
-def scale_rewards_by_response_time(uids, responses, rewards):
-    sorted_axon_times = get_sorted_response_times(uids, responses)
-
-    # Extract only the process times
-    process_times = [proc_time for _, proc_time in sorted_axon_times]
-
-    # Find min and max values for normalization
-    min_time = min(process_times)
-    max_time = max(process_times)
-
-    # Normalize these times to a scale of 0 to 1 (inverted)
-    normalized_scores = [
-        (max_time - proc_time) / (max_time - min_time) for proc_time in process_times
-    ]
-
-    # Scale the rewards by these normalized scores
-    for idx, (uid, _) in enumerate(sorted_axon_times):
-        rewards[uid] *= normalized_scores[idx]
-
-    return rewards
-
-
-def check_uid_availability(
-    metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
-) -> bool:
-    """Check if uid is available. The UID should be available if it is serving and has less than vpermit_tao_limit stake
-    Args:
-        metagraph (:obj: bt.metagraph.Metagraph): Metagraph object
-        uid (int): uid to be checked
-        vpermit_tao_limit (int): Validator permit tao limit
-    Returns:
-        bool: True if uid is available, False otherwise
-    """
-    # Filter non serving axons.
-    if not metagraph.axons[uid].is_serving:
-        return False
-    # Filter validator permit > 1024 stake.
-    if metagraph.validator_permit[uid]:
-        if metagraph.S[uid] > vpermit_tao_limit:
-            return False
-    # Available otherwise.
-    return True
 
 
 class neuron:
@@ -566,8 +511,8 @@ class neuron:
         ]  # Return only first element of data, incase only 1 response is valid
 
     async def forward(self) -> torch.Tensor:
-        self.counter += 1
-        bt.logging.info(f"forward() {self.counter}")
+        self.step += 1
+        bt.logging.info(f"forward() {self.step}")
 
     def run(self):
         bt.logging.info("run()")

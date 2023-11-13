@@ -17,18 +17,10 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import json
-import base64
-import hashlib
-import binascii
 import numpy as np
-from collections import defaultdict
 from typing import Dict, List, Any, Union, Optional, Tuple
 
-import Crypto
 from Crypto.Random import random
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
 
 from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from ..shared.merkle import MerkleTree
@@ -102,58 +94,89 @@ def get_random_chunksize(minsize: int = 24, maxsize: int = 512) -> int:
     return random.randint(minsize, maxsize)
 
 
-def encrypt_aes(filename: Union[bytes, str], key: bytes) -> bytes:
+def get_sorted_response_times(uids, responses):
     """
-    Encrypt the data in the given filename using AES-GCM.
+    Sorts a list of axons based on their response times.
 
-    Parameters:
-    - filename: str or bytes. If str, it's considered as a file name. If bytes, as the data itself.
-    - key: bytes. 16-byte (128-bit), 24-byte (192-bit), or 32-byte (256-bit) secret key.
+    This function pairs each uid with its corresponding axon's response time,
+    and then sorts this list in ascending order. Lower response times are considered better.
+
+    Args:
+        uids (List[int]): List of unique identifiers for each axon.
+        responses (List[Response]): List of Response objects corresponding to each axon.
 
     Returns:
-    - cipher_text: bytes. The encrypted data.
-    - nonce: bytes. The nonce used for the GCM mode.
-    - tag: bytes. The tag for authentication.
+        List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
+
+    Example:
+        >>> get_sorted_response_times([1, 2, 3], [response1, response2, response3])
+        [(2, 0.1), (1, 0.2), (3, 0.3)]
     """
-
-    # If filename is a string, treat it as a file name and read the data
-    if isinstance(filename, str):
-        with open(filename, "rb") as file:
-            data = file.read()
-    else:
-        data = filename
-
-    # Initialize AES-GCM cipher
-    cipher = AES.new(key, AES.MODE_GCM)
-
-    # Encrypt the data
-    cipher_text, tag = cipher.encrypt_and_digest(data)
-
-    return cipher_text, cipher.nonce, tag
+    axon_times = [
+        (uids[idx], response.axon.process_time)
+        for idx, response in enumerate(responses)
+    ]
+    # Sorting in ascending order since lower process time is better
+    sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
+    return sorted_axon_times
 
 
-def decrypt_aes(cipher_text: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
+def scale_rewards_by_response_time(uids, responses, rewards):
     """
-    Decrypt the data using AES-GCM.
+    Sorts a list of axons based on their response times.
 
-    Parameters:
-    - cipher_text: bytes. The encrypted data.
-    - key: bytes. The secret key used for decryption.
-    - nonce: bytes. The nonce used in the GCM mode for encryption.
-    - tag: bytes. The tag for authentication.
+    This function pairs each uid with its corresponding axon's response time,
+    and then sorts this list in ascending order. Lower response times are considered better.
+
+    Args:
+        uids (List[int]): List of unique identifiers for each axon.
+        responses (List[Response]): List of Response objects corresponding to each axon.
 
     Returns:
-    - data: bytes. The decrypted data.
+        List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
+
+    Example:
+        >>> get_sorted_response_times([1, 2, 3], [response1, response2, response3])
+        [(2, 0.1), (1, 0.2), (3, 0.3)]
     """
+    sorted_axon_times = get_sorted_response_times(uids, responses)
 
-    # Initialize AES-GCM cipher with the given key and nonce
-    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    # Extract only the process times
+    process_times = [proc_time for _, proc_time in sorted_axon_times]
 
-    # Decrypt the data and verify the tag
-    try:
-        data = cipher.decrypt_and_verify(cipher_text, tag)
-    except ValueError:
-        # This is raised if the tag does not match
-        raise ValueError("Incorrect decryption key or corrupted data.")
+    # Find min and max values for normalization
+    min_time = min(process_times)
+    max_time = max(process_times)
 
-    return data
+    # Normalize these times to a scale of 0 to 1 (inverted)
+    normalized_scores = [
+        (max_time - proc_time) / (max_time - min_time) for proc_time in process_times
+    ]
+
+    # Scale the rewards by these normalized scores
+    for idx, (uid, _) in enumerate(sorted_axon_times):
+        rewards[uid] *= normalized_scores[idx]
+
+    return rewards
+
+
+def check_uid_availability(
+    metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
+) -> bool:
+    """Check if uid is available. The UID should be available if it is serving and has less than vpermit_tao_limit stake
+    Args:
+        metagraph (:obj: bt.metagraph.Metagraph): Metagraph object
+        uid (int): uid to be checked
+        vpermit_tao_limit (int): Validator permit tao limit
+    Returns:
+        bool: True if uid is available, False otherwise
+    """
+    # Filter non serving axons.
+    if not metagraph.axons[uid].is_serving:
+        return False
+    # Filter validator permit > 1024 stake.
+    if metagraph.validator_permit[uid]:
+        if metagraph.S[uid] > vpermit_tao_limit:
+            return False
+    # Available otherwise.
+    return True

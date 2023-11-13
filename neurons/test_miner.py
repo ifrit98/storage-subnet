@@ -22,8 +22,8 @@ import storage
 import bittensor as bt
 
 
-from storage.utils.ecc import setup_CRS, ecc_point_to_hex
-from storage.utils.util import (
+from storage.shared.ecc import setup_CRS, ecc_point_to_hex
+from storage.shared.utils import (
     encrypt_data,
     make_random_file,
     hash_data,

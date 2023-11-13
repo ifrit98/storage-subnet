@@ -10,6 +10,63 @@ from nacl import pwhash, secret
 NACL_SALT = b"\x13q\x83\xdf\xf1Z\t\xbc\x9c\x90\xb5Q\x879\xe9\xb1"
 
 
+def encrypt_aes(filename: Union[bytes, str], key: bytes) -> bytes:
+    """
+    Encrypt the data in the given filename using AES-GCM.
+
+    Parameters:
+    - filename: str or bytes. If str, it's considered as a file name. If bytes, as the data itself.
+    - key: bytes. 16-byte (128-bit), 24-byte (192-bit), or 32-byte (256-bit) secret key.
+
+    Returns:
+    - cipher_text: bytes. The encrypted data.
+    - nonce: bytes. The nonce used for the GCM mode.
+    - tag: bytes. The tag for authentication.
+    """
+
+    # If filename is a string, treat it as a file name and read the data
+    if isinstance(filename, str):
+        with open(filename, "rb") as file:
+            data = file.read()
+    else:
+        data = filename
+
+    # Initialize AES-GCM cipher
+    cipher = AES.new(key, AES.MODE_GCM)
+
+    # Encrypt the data
+    cipher_text, tag = cipher.encrypt_and_digest(data)
+
+    return cipher_text, cipher.nonce, tag
+
+
+def decrypt_aes(cipher_text: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
+    """
+    Decrypt the data using AES-GCM.
+
+    Parameters:
+    - cipher_text: bytes. The encrypted data.
+    - key: bytes. The secret key used for decryption.
+    - nonce: bytes. The nonce used in the GCM mode for encryption.
+    - tag: bytes. The tag for authentication.
+
+    Returns:
+    - data: bytes. The decrypted data.
+    """
+
+    # Initialize AES-GCM cipher with the given key and nonce
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+
+    # Decrypt the data and verify the tag
+    try:
+        data = cipher.decrypt_and_verify(cipher_text, tag)
+    except ValueError:
+        # This is raised if the tag does not match
+        raise ValueError("Incorrect decryption key or corrupted data.")
+
+    return data
+
+
 def encrypt_data_with_wallet(data: bytes, wallet) -> bytes:
     """
     Encrypts the given data using a symmetric key derived from the wallet's coldkey public key.
