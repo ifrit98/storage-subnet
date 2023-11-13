@@ -226,6 +226,19 @@ class miner:
 
     @property
     def total_storage(self):
+        """
+        Calculates the total size of data stored by the miner.
+
+        This method fetches all data keys from the Redis database and sums up the size of each data object.
+        It provides an estimate of the total amount of data currently held by the miner.
+
+        Returns:
+            int: Total size of data (in bytes) stored by the miner.
+
+        Example:
+            >>> miner.total_storage()
+            102400  # Example output indicating 102,400 bytes of data stored
+        """
         # Fetch all keys from Redis
         all_keys = safe_key_search(database, "*")
 
@@ -272,6 +285,19 @@ class miner:
 
     # This is the core miner function, which decides the miner's response to a valid, high-priority request.
     def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
+        """
+        Handles storing data requested by a synapse.
+
+        This method commits to the entire data block provided by the synapse, stores it in the filesystem,
+        and updates the Redis database with metadata about the stored data. It also generates a commitment
+        proof to send back to the requesting entity as evidence of storage.
+
+        Args:
+            synapse (storage.protocol.Store): The Store synapse containing the data to be stored and associated metadata.
+
+        Returns:
+            storage.protocol.Store: The updated synapse with commitment proof and other storage details.
+        """
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
 
@@ -325,6 +351,19 @@ class miner:
     def challenge(
         self, synapse: storage.protocol.Challenge
     ) -> storage.protocol.Challenge:
+        """
+        Responds to a challenge request by proving possession of the requested data chunk.
+
+        This method fetches and chunks the data requested in the synapse. It computes the commitment to the data chunk
+        based on the provided curve points and returns the chunk along with a merkle proof, root, and commitment
+        as evidence of possession.
+
+        Args:
+            synapse (storage.protocol.Challenge): The Challenge synapse containing parameters for the data challenge.
+
+        Returns:
+            storage.protocol.Challenge: The updated synapse with the response to the data challenge.
+        """
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
         data = self.database.get(synapse.challenge_hash)
@@ -397,6 +436,19 @@ class miner:
         return synapse
 
     def retrieve(self, synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+        """
+        Retrieves data based on a given hash from the miner's storage.
+
+        This method looks up the requested data in the Redis database using the provided hash. It then loads
+        the data from the filesystem and includes a final seed challenge to verify continued possession
+        of the data at retrieval time.
+
+        Args:
+            synapse (storage.protocol.Retrieve): The Retrieve synapse containing the hash of the data to be retrieved.
+
+        Returns:
+            storage.protocol.Retrieve: The updated synapse with the retrieved data and additional verification information.
+        """
         # Fetch the data from the miner database
         data = self.database.get(synapse.data_hash)
         bt.logging.debug("retireved data:", data)
