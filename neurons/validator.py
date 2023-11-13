@@ -55,6 +55,7 @@ from storage.validator.verify import (
     verify_retrieve_with_seed,
 )
 
+
 from storage.validator.config import config, check_config, add_args
 
 from storage.validator.state import (
