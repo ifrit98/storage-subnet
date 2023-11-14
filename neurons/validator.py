@@ -212,6 +212,9 @@ class neuron:
             self.config.neuron.epoch_length = 100
         bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
 
+        if self.config.neuron.challenge_sample_size == 0:
+            self.config.neuron.challenge_sample_size = self.metagraph.n
+
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
@@ -750,7 +753,7 @@ class neuron:
 
     async def forward(self) -> torch.Tensor:
         self.step += 1
-        bt.logging.info(f"forward() {self.step}")
+        bt.logging.info(f"forward step: {self.step}")
 
         try:
             # Store some data
@@ -834,6 +837,9 @@ class neuron:
                     reinit_wandb(self)
 
                 self.prev_step_block = ttl_get_block(self)
+                if self.config.neuron.verbose:
+                    bt.logging.debug(f"block at end of step: {self.prev_step_block}")
+                    bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
                 self.step += 1
         except Exception as err:
             bt.logging.error("Error in training loop", str(err))
