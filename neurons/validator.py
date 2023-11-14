@@ -424,6 +424,7 @@ class neuron:
         # Select subset of miners to query (e.g. redunancy factor of N)
         uids = self.get_random_uids(k=self.config.neuron.redundancy)
 
+        updated_axons = []
         axons = [self.metagraph.axons[uid] for uid in uids]
         retry_uids = [None]
 
@@ -460,6 +461,7 @@ class neuron:
                     continue  # Skip trying to store the data
                 else:
                     rewards[idx] = 1.0
+                    updated_axons.append(self.metagraph.axons[uid])
 
                 data_hash = hash_data(encrypted_data)
 
@@ -482,12 +484,14 @@ class neuron:
                 # Broadcast the update to all other validators
                 # TODO: ensure this will not block
                 # TODO: potentially batch update after all miners have responded?
-                bt.logging.trace(f"Broadcasting update to all validators")
-                await self.broadcast(response.axon.hotkey, data_hash, response_storage)
 
-            bt.logging.trace("Applying rewards")
-            bt.logging.debug(f"responses: {responses}")
+            bt.logging.trace(f"Broadcasting update to all validators")
+            await self.broadcast(response.axon.hotkey, data_hash, response_storage)
 
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"responses: {responses}")
+
+            bt.logging.trace("Applying store rewards")
             self.apply_reward_scores(uids, responses, rewards)
 
             # Get a new set of UIDs to query for those left behind
@@ -530,11 +534,17 @@ class neuron:
             return False, [
                 dummy_response
             ]  # no data found associated with this miner hotkey
-        # bt.logging.debug(f"Challenge lookup keys: {keys}")
+
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Challenge lookup keys: {keys}")
+
         data_hash = random.choice(keys).decode("utf-8")
-        bt.logging.debug(f"Challenge lookup key: {data_hash}")
         data = get_metadata_from_hash(hotkey, data_hash, self.database)
-        bt.logging.debug(f"Challenge data: {data}")
+
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Challenge lookup key: {data_hash}")
+            bt.logging.debug(f"Challenge data: {data}")
+
         try:
             chunk_size = get_random_chunksize(
                 minsize=self.config.neuron.min_chunk_size,
@@ -581,9 +591,7 @@ class neuron:
             synapse,
             deserialize=True,
         )
-        bt.logging.debug(f"Resposne from uid {uid} challenge: {response}")
         verified = verify_challenge_with_seed(response[0])
-        bt.logging.debug(f"Challenge uid {uid} verified: {verified}")
 
         if verified:
             data["prev_seed"] = synapse.seed
@@ -604,25 +612,30 @@ class neuron:
         )
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
+
         responses = await asyncio.gather(*tasks)
-        bt.logging.debug(f"Challenge repsonses: {responses}")
+
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Challenge repsonses: {responses}")
+
         # Compute the rewards for the responses given the prompt.
         rewards: torch.FloatTensor = torch.zeros(
             len(responses), dtype=torch.float32
         ).to(self.device)
-        bt.logging.debug(f"Init challenge rewards: {rewards}")
-        # TODO: check and see if we have a dummy synapse (e.g. no data found, shouldn't penalize)
 
+        # TODO: check and see if we have a dummy synapse (e.g. no data found, shouldn't penalize)
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-            bt.logging.debug(
-                f"idx {idx} uid {uid} verified {verified} response {response}"
-            )
+            if self.config.neruon.verbose:
+                bt.logging.debug(
+                    f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
+                )
             if verified:
                 rewards[idx] = 1.0
             else:
                 rewards[idx] = 0.0
 
         responses = [response[0] for (verified, response) in responses]
+        bt.logging.trace("Applying challenge rewards")
         self.apply_reward_scores(uids, responses, rewards)
 
     async def retrieve(self, data_hash=None):
@@ -659,7 +672,8 @@ class neuron:
             uid = self.metagraph.hotkeys.index(hotkey)
             axons_to_query.append(self.metagraph.axons[uid])
             uids.append(uid)
-            bt.logging.debug(f"appending hotkey: {hotkey}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"appending hotkey: {hotkey}")
 
         # query all N (from redundancy factor) with M challenges (x% of the total data)
         # see who returns the data fastest (passes verification), and rank them highest
@@ -690,7 +704,9 @@ class neuron:
                 continue
 
             if str(hash_data(decoded_data)) != data_hash:
-                bt.logging.error(f"Hash of received data does not match expected hash!")
+                bt.logging.error(
+                    f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
+                )
                 rewards[idx] = -1.0
                 continue
 
@@ -702,7 +718,7 @@ class neuron:
                 rewards[idx] = 1.0
 
             try:
-                bt.logging.debug(f"Decrypting from UID: {uids[idx]}")
+                bt.logging.trace(f"Decrypting from UID: {uids[idx]}")
 
                 # Load the data for this miner from validator storage
                 data = get_metadata_from_hash(hotkey, data_hash, self.database)
@@ -727,8 +743,11 @@ class neuron:
                 # given their wallet which was used to encrypt in the first place
                 datas.append((decoded_data, decrypt_user_data))
             except Exception as e:
-                bt.logging.error(f"Failed to decrypt data from UID: {uids[idx]} {e}")
+                bt.logging.error(
+                    f"Failed to decrypt data from UID: {uids[idx]} with error: {e}"
+                )
 
+        bt.logging.trace("Applying retrieve rewards")
         self.apply_reward_scores(uids, responses, rewards)
 
         return datas
@@ -737,31 +756,33 @@ class neuron:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
 
-        # try:
-        # Store some data
-        bt.logging.info("initiating store data")
-        await self.store_validator_data()
-        # except Exception as e:
-        #     import pdb; pdb.set_trace()
-        #     bt.logging.error(f"Failed to store data with exception: {e}")
-        #     pass
+        try:
+            # Store some data
+            bt.logging.info("initiating store data")
+            await self.store_validator_data()
+        except Exception as e:
+            import pdb
 
-        # try:
-        #     # Challenge some data
-        #     bt.logging.info("initiating challenge")
-        #     await self.challenge()
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
-        #     pass
+            pdb.set_trace()
+            bt.logging.error(f"Failed to store data with exception: {e}")
+            pass
 
-        # if self.step % 3 == 0:
-        #     try:
-        #         # Retrieve some data
-        #         bt.logging.info("initiating retrieve")
-        #         await self.retrieve()
-        #     except Exception as e:
-        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
-        #         pass
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            await self.challenge()
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
+            pass
+
+        if self.step % 3 == 0:
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                await self.retrieve()
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+                pass
 
         # TODO: set weights on chain at the end of the epoch (define an epoch length)
 

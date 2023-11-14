@@ -106,7 +106,6 @@ def add_args(cls, parser):
         default=3,
         help="Number of miners to store each piece of data on.",
     )
-
     parser.add_argument(
         "--neuron.challenge_k",
         type=int,
@@ -125,7 +124,6 @@ def add_args(cls, parser):
         help="The chunk factor to divide data.",
         default=4,
     )
-
     parser.add_argument(
         "--neuron.num_concurrent_forwards",
         type=int,
@@ -194,6 +192,12 @@ def add_args(cls, parser):
         type=int,
         help="The minimum number of TAO allowed to broadcast index updates to validator with a vpermit.",
         default=1000,
+    )
+    parser.add_argument(
+        "--neuron.verbose",
+        action="store_true",
+        help="If set, we will print verbose detailed logs.",
+        default=False,
     )
 
     # Redis arguments

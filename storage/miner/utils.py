@@ -17,9 +17,7 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
 
     # Commit each chunk of data
     randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
-    bt.logging.debug("n_chunks:", n_chunks)
     for index, chunk in enumerate(data_chunks):
-        bt.logging.debug("index:", index)
         c, m_val, r = committer.commit(chunk + str(seed).encode())
         c_hex = ecc_point_to_hex(c)
         randomness[index] = r
@@ -51,9 +49,9 @@ def load_from_filesystem(filepath):
 def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):
     """Compute a subsequent commitment based on the original data, previous seed, and new seed."""
     if verbose:
-        print("IN COMPUTE SUBESEQUENT COMMITMENT")
-        print("type of data     :", type(data))
-        print("type of prev_seed:", type(previous_seed))
-        print("type of new_seed :", type(new_seed))
+        bt.logging.debug("IN COMPUTE SUBESEQUENT COMMITMENT")
+        bt.logging.debug("type of data     :", type(data))
+        bt.logging.debug("type of prev_seed:", type(previous_seed))
+        bt.logging.debug("type of new_seed :", type(new_seed))
     proof = hash_data(data + previous_seed)
     return hash_data(str(proof).encode("utf-8") + new_seed), proof

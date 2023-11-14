@@ -21,7 +21,7 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
     """Verify a commitment using the proof, seed, and commitment."""
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
     if verbose:
-        print(
+        bt.logging.debug(
             "types: ",
             "proof",
             type(proof),
@@ -30,11 +30,11 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
             "commitment",
             type(commitment),
         )
-        print("recieved proof     : ", proof)
-        print("recieved seed      : ", seed)
-        print("recieved commitment: ", commitment)
-        print("excpected commitment:", expected_commitment)
-        print("type expected commit:", type(expected_commitment))
+        bt.logging.debug("recieved proof     : ", proof)
+        bt.logging.debug("recieved seed      : ", seed)
+        bt.logging.debug("recieved commitment: ", commitment)
+        bt.logging.debug("excpected commitment:", expected_commitment)
+        bt.logging.debug("type expected commit:", type(expected_commitment))
     return expected_commitment == commitment
 
 
@@ -116,7 +116,6 @@ def verify_retrieve_with_seed(synapse, verbose=False):
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
-        bt.logging.error(f"synapse {synapse}")
         return False
 
     return True
