@@ -40,7 +40,9 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
 
 def verify_challenge_with_seed(synapse, verbose=False):
     if synapse.commitment_hash == None or synapse.commitment_proof == None:
-        bt.logging.error(f"Missing commitment hash or proof.")
+        bt.logging.error(
+            f"Missing commitment hash or proof for synapse: {synapse.axon.dict()}."
+        )
         return False
 
     if not verify_chained_commitment(

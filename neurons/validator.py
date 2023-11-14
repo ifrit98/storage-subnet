@@ -212,7 +212,7 @@ class neuron:
             self.config.neuron.epoch_length = 100
         bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
 
-        self.prev_block = ttl_get_block(self)
+        self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
     def get_random_uids(
@@ -422,7 +422,7 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = self.get_random_uids(k=self.config.neuron.redundancy)
+        uids = self.get_random_uids(k=self.config.neuron.store_redundancy)
 
         updated_axons = []
         axons = [self.metagraph.axons[uid] for uid in uids]
@@ -442,13 +442,13 @@ class neuron:
             )
 
             # Log the results for monitoring purposes.
-            bt.logging.debug(f"Received responses: {responses}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"Received responses: {responses}")
 
             # Compute the rewards for the responses given proc time.
             rewards: torch.FloatTensor = torch.zeros(
                 len(responses), dtype=torch.float32
             ).to(self.device)
-            bt.logging.debug(f"Init rewards: {rewards}")
 
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
@@ -608,7 +608,7 @@ class neuron:
         """
         tasks = []
         uids = self.get_random_uids(
-            k=min(self.metagraph.n, self.config.neuron.challenge_k)
+            k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
         )
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
@@ -625,7 +625,7 @@ class neuron:
 
         # TODO: check and see if we have a dummy synapse (e.g. no data found, shouldn't penalize)
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-            if self.config.neruon.verbose:
+            if self.config.neuron.verbose:
                 bt.logging.debug(
                     f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
                 )
@@ -784,8 +784,6 @@ class neuron:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
                 pass
 
-        # TODO: set weights on chain at the end of the epoch (define an epoch length)
-
         time.sleep(12)
 
     def run(self):
@@ -794,6 +792,18 @@ class neuron:
         checkpoint(self)
         try:
             while True:
+                start_epoch = time.time()
+
+                # --- Wait until next step epoch.
+                current_block = self.subtensor.get_current_block()
+                while (
+                    current_block - self.prev_step_block
+                    < self.config.neuron.blocks_per_step
+                ):
+                    # --- Wait for next block.
+                    time.sleep(1)
+                    current_block = self.subtensor.get_current_block()
+
                 if not self.wallet.hotkey.ss58_address in self.metagraph.hotkeys:
                     raise Exception(
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
@@ -828,7 +838,7 @@ class neuron:
                 if should_reinit_wandb(self):
                     reinit_wandb(self)
 
-                self.prev_block = ttl_get_block(self)
+                self.prev_step_block = ttl_get_block(self)
                 self.step += 1
         except Exception as err:
             bt.logging.error("Error in training loop", str(err))
