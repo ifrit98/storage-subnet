@@ -565,7 +565,7 @@ class neuron:
             or self.config.neuron.override_chunk_size
         ):
             bt.logging.warning(
-                f"Incompatible chunk size, setting to default {self.config.neuron.override_chunk_size}"
+                f"Incompatible chunk size {chunk_size}, setting to default {self.config.neuron.override_chunk_size}"
             )
             chunk_size = self.config.neuron.override_chunk_size
 
