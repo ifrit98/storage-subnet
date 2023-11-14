@@ -78,6 +78,6 @@ def set_weights(self):
         version_key=validator.__spec_version__,
     )
     if result is True:
-        bt.logging.trace("set_weights on chain successfully!")
+        bt.logging.info("set_weights on chain successfully!")
     else:
         bt.logging.error("set_weights failed")

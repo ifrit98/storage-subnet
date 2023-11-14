@@ -96,7 +96,7 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--neuron.override_chunk_size",
-        default=24,
+        default=0,
         type=int,
         help="Override random chunk size to split data into for challenges.",
     )
