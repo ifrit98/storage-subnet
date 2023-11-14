@@ -26,6 +26,8 @@ from Crypto.Random import random
 from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from ..shared.merkle import MerkleTree
 
+import bittensor as bt
+
 
 def generate_file_size_with_lognormal(
     mu: float = np.log(10 * 1024**2), sigma: float = 1.5
@@ -121,9 +123,9 @@ def get_sorted_response_times(uids, responses):
         for idx, response in enumerate(responses)
     ]
     # Sorting in ascending order since lower process time is better
-    print(f"axon_times: {axon_times}")
+    bt.logging.debug(f"axon_times: {axon_times}")
     sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
-    print(f"sorted_axon_times: {sorted_axon_times}")
+    bt.logging.debug(f"sorted_axon_times: {sorted_axon_times}")
     return sorted_axon_times
 
 

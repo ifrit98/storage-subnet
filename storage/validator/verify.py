@@ -14,8 +14,10 @@ from ..shared.utils import (
     b64_decode,
 )
 
+import bittensor as bt
 
-def verify_chained_commitment(proof, seed, commitment, verbose=False):
+
+def verify_chained_commitment(proof, seed, commitment, verbose=True):
     """Verify a commitment using the proof, seed, and commitment."""
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
     if verbose:
@@ -38,13 +40,14 @@ def verify_chained_commitment(proof, seed, commitment, verbose=False):
 
 def verify_challenge_with_seed(synapse, verbose=False):
     if synapse.commitment_hash == None or synapse.commitment_proof == None:
-        print(f"Missing commitment hash or proof.")
+        bt.logging.error(f"Missing commitment hash or proof.")
         return False
 
     if not verify_chained_commitment(
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
-        print(f"Initial commitment hash does not match expected result.")
+        bt.logging.error(f"Initial commitment hash does not match expected result.")
+        bt.logging.error(f"synapse {synapse}")
         return False
 
     # TODO: Add checks and defensive programming here to handle all types
@@ -60,7 +63,8 @@ def verify_challenge_with_seed(synapse, verbose=False):
         hash_data(base64.b64decode(synapse.data_chunk) + str(synapse.seed).encode()),
         synapse.randomness,
     ):
-        print(f"Opening commitment failed")
+        bt.logging.error(f"Opening commitment failed")
+        bt.logging.error(f"synapse {synapse}")
         return False
 
     if not validate_merkle_proof(
@@ -68,7 +72,8 @@ def verify_challenge_with_seed(synapse, verbose=False):
         ecc_point_to_hex(commitment),
         synapse.merkle_root,
     ):
-        print(f"Merkle proof validation failed")
+        bt.logging.error(f"Merkle proof validation failed")
+        bt.logging.error(f"synapse {synapse}")
         return False
 
     return True
@@ -84,7 +89,8 @@ def verify_store_with_seed(synapse):
     # TODO: make these types the same:
     # e.g. send synapse.commitment_hash as an int for consistency
     if synapse.commitment_hash != str(reconstructed_hash):
-        print(f"Initial commitment hash does not match hash(data + seed)")
+        bt.logging.error(f"Initial commitment hash does not match hash(data + seed)")
+        bt.logging.error(f"synapse: {synapse}")
         return False
 
     committer = ECCommitment(
@@ -98,7 +104,8 @@ def verify_store_with_seed(synapse):
         hash_data(decoded_data + str(synapse.seed).encode()),
         synapse.randomness,
     ):
-        print(f"Opening commitment failed")
+        bt.logging.error(f"Opening commitment failed")
+        bt.logging.error(f"synapse: {synapse}")
         return False
 
     return True
@@ -108,7 +115,8 @@ def verify_retrieve_with_seed(synapse, verbose=False):
     if not verify_chained_commitment(
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
-        print(f"Initial commitment hash does not match expected result.")
+        bt.logging.error(f"Initial commitment hash does not match expected result.")
+        bt.logging.error(f"synapse {synapse}")
         return False
 
     return True

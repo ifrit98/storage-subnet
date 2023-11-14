@@ -165,10 +165,6 @@ def resync_metagraph(self: "validator.neuron.neuron"):
             new_moving_average[:min_len] = self.moving_averaged_scores[:min_len]
             self.moving_averaged_scores = new_moving_average
 
-        # Resize the gating model.
-        bt.logging.info("Re-syncing gating model")
-        self.gating_model.resync(previous_metagraph, self.metagraph)
-
         # Update the hotkeys.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
@@ -196,7 +192,7 @@ def check_uid_availability(
 
 
 def save_state(self):
-    r"""Save hotkeys, gating model, neuron model and moving average scores to filesystem."""
+    r"""Save hotkeys, neuron model and moving average scores to filesystem."""
     bt.logging.info("save_state()")
     try:
         neuron_state_dict = {

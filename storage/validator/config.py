@@ -163,7 +163,7 @@ def add_args(cls, parser):
         "--neuron.epoch_length_override",
         type=int,
         help="Override the default epoch length (how often we set weights).",
-        default=0,
+        default=5,
     )
     parser.add_argument(
         "--neuron.checkpoint_block_length",

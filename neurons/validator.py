@@ -171,22 +171,21 @@ class neuron:
 
         bt.logging.debug("serving ip to chain...")
         try:
-            axon = bt.axon(wallet=self.wallet, config=self.config)
+            self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            axon.attach(
+            self.axon.attach(
                 forward_fn=self.update_index,
             )
 
             try:
                 self.subtensor.serve_axon(
                     netuid=self.config.netuid,
-                    axon=axon,
+                    axon=self.axon,
                 )
             except Exception as e:
                 bt.logging.error(f"Failed to serve Axon with exception: {e}")
                 pass
 
-            del axon
         except Exception as e:
             bt.logging.error(f"Failed to create Axon initialize with exception: {e}")
             pass
@@ -211,6 +210,7 @@ class neuron:
             self.config.neuron.epoch_length = self.config.neuron.epoch_length_override
         else:
             self.config.neuron.epoch_length = 100
+        bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
 
         self.prev_block = ttl_get_block(self)
         self.step = 0
@@ -334,10 +334,12 @@ class neuron:
         vpermit_uids = torch.where(vpermits)[0]
 
         # Exclude your own uid
-        vpermit_uids = vpermit_uids[vpermit_uids != axon.hotkey.ss58_address]
+        vpermit_uids = vpermit_uids[
+            vpermit_uids
+            != self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
+        ]
         query_uids = torch.where(
-            self.metagraph.S[vpermit_uids]
-            > self.config.neuron.broadcast_stake_threshold
+            self.metagraph.S[vpermit_uids] > self.config.neuron.broadcast_stake_limit
         )[0]
         axons = [self.metagraph.axons[uid] for uid in query_uids]
 
@@ -439,7 +441,7 @@ class neuron:
             )
 
             # Log the results for monitoring purposes.
-            bt.logging.info(f"Received responses: {responses}")
+            bt.logging.debug(f"Received responses: {responses}")
 
             # Compute the rewards for the responses given proc time.
             rewards: torch.FloatTensor = torch.zeros(
@@ -481,7 +483,7 @@ class neuron:
                 # TODO: ensure this will not block
                 # TODO: potentially batch update after all miners have responded?
                 bt.logging.trace(f"Broadcasting update to all validators")
-                self.broadcast(response.axon.hotkey, data_hash, response_storage)
+                await self.broadcast(response.axon.hotkey, data_hash, response_storage)
 
             bt.logging.trace("Applying rewards")
             bt.logging.debug(f"responses: {responses}")
@@ -528,7 +530,7 @@ class neuron:
             return False, [
                 dummy_response
             ]  # no data found associated with this miner hotkey
-        bt.logging.debug(f"Challenge lookup keys: {keys}")
+        # bt.logging.debug(f"Challenge lookup keys: {keys}")
         data_hash = random.choice(keys).decode("utf-8")
         bt.logging.debug(f"Challenge lookup key: {data_hash}")
         data = get_metadata_from_hash(hotkey, data_hash, self.database)
@@ -735,30 +737,31 @@ class neuron:
         self.step += 1
         bt.logging.info(f"forward() {self.step}")
 
-        try:
-            # Store some data
-            bt.logging.trace("initiating store data")
-            await self.store_validator_data()
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
-            pass
+        # try:
+        # Store some data
+        bt.logging.info("initiating store data")
+        await self.store_validator_data()
+        # except Exception as e:
+        #     import pdb; pdb.set_trace()
+        #     bt.logging.error(f"Failed to store data with exception: {e}")
+        #     pass
 
-        try:
-            # Challenge some data
-            bt.logging.trace("initiating challenge")
-            await self.challenge()
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
-            pass
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     await self.challenge()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        #     pass
 
-        if self.step % 3 == 0:
-            try:
-                # Retrieve some data
-                bt.logging.trace("initiating retrieve")
-                await self.retrieve()
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
-                pass
+        # if self.step % 3 == 0:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         await self.retrieve()
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        #         pass
 
         # TODO: set weights on chain at the end of the epoch (define an epoch length)
 
@@ -788,11 +791,15 @@ class neuron:
                 self.loop.run_until_complete(run_forward())
 
                 # Resync the network state
+                bt.logging.info("Checking if should checkpoint")
                 if should_checkpoint(self):
+                    bt.logging.info(f"Checkpointing...")
                     checkpoint(self)
 
                 # Set the weights on chain.
+                bt.logging.info(f"Checking if should set weights")
                 if should_set_weights(self):
+                    bt.logging.info(f"Setting weights {self.moving_averaged_scores}")
                     set_weights(self)
                     save_state(self)
 

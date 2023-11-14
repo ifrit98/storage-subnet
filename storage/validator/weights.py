@@ -30,6 +30,16 @@ def should_set_weights(self) -> bool:
     if self.config.neuron.disable_set_weights:
         return False
 
+    bt.logging.debug(f"prev_block: {self.prev_block}")
+    bt.logging.debug(
+        f"a) ttl % epoch_length: {ttl_get_block(self) % self.config.neuron.epoch_length}"
+    )
+    bt.logging.debug(
+        f"b) prev_block % epoch_length: {self.prev_block % self.config.neuron.epoch_length}"
+    )
+    bt.logging.debug(
+        f"should set weights (a < b): {ttl_get_block(self) % self.config.neuron.epoch_length < self.prev_block % self.config.neuron.epoch_length}"
+    )
     return (
         ttl_get_block(self) % self.config.neuron.epoch_length
         < self.prev_block % self.config.neuron.epoch_length
@@ -59,7 +69,7 @@ def set_weights(self):
     bt.logging.trace("processed_weight_uids", processed_weight_uids)
 
     # Set the weights on chain via our subtensor connection.
-    self.subtensor.set_weights(
+    result = self.subtensor.set_weights(
         wallet=self.wallet,
         netuid=self.config.netuid,
         uids=processed_weight_uids,
@@ -67,3 +77,7 @@ def set_weights(self):
         wait_for_finalization=False,
         version_key=validator.__spec_version__,
     )
+    if result is True:
+        bt.logging.trace("set_weights on chain successfully!")
+    else:
+        bt.logging.error("set_weights failed")
