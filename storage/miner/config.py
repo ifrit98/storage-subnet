@@ -41,6 +41,8 @@ def check_config(cls, config: "bt.Config"):
 
 
 def add_args(cls, parser):
+    parser.add_argument("--netuid", type=int, default=21, help="The chain subnet uid.")
+    parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument(
         "--miner.name",
         type=str,
@@ -53,10 +55,8 @@ def add_args(cls, parser):
         help="Device to run the validator on.",
         default="cuda" if torch.cuda.is_available() else "cpu",
     )
+    parser.add_argument("--miner.verbose", default=False, action="store_true")
 
-    parser.add_argument("--netuid", type=int, default=21, help="The chain subnet uid.")
-    parser.add_argument("--verbose", default=False, action="store_true")
-    parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument(
         "--database.host", default="localhost", help="The host of the redis database."
     )

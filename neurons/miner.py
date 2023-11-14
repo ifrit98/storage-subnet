@@ -16,9 +16,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Bittensor Miner Template:
-
-# Step 1: Import necessary libraries and modules
 import os
 import sys
 import copy
@@ -187,16 +184,16 @@ class miner:
         bt.logging.info(f"Attaching forward functions to axon.")
         self.axon.attach(
             forward_fn=self.store,
-            # blacklist_fn=blacklist_fn,
-            # priority_fn=priority_fn,
+            blacklist_fn=self.store_blacklist_fn,
+            priority_fn=self.store_priority_fn,
         ).attach(
             forward_fn=self.challenge,
-            # blacklist_fn=blacklist_fn,
-            # priority_fn=priority_fn,
+            blacklist_fn=self.challenge_blacklist_fn,
+            priority_fn=self.challenge_priority_fn,
         ).attach(
             forward_fn=self.retrieve,
-            # blacklist_fn=blacklist_fn,
-            # priority_fn=priority_fn,
+            blacklist_fn=self.retrieve_blacklist_fn,
+            priority_fn=self.retrieve_priority_fn,
         )
 
         # Serve passes the axon information to the network + netuid we are hosting on.
@@ -257,8 +254,8 @@ class miner:
         )
         return total_size
 
-    def blacklist_fn(
-        self, synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
+    def store_blacklist_fn(
+        self, synapse: storage.protocol.Store
     ) -> typing.Tuple[bool, str]:
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
@@ -271,9 +268,7 @@ class miner:
         )
         return False, "Hotkey recognized!"
 
-    def priority_fn(
-        self, synapse: typing.Union[storage.protocol.Store, storage.protocol.Challenge]
-    ) -> float:
+    def store_priority_fn(self, synapse: storage.protocol.Store) -> float:
         caller_uid = self.metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
@@ -285,7 +280,58 @@ class miner:
         )
         return prirority
 
-    # This is the core miner function, which decides the miner's response to a valid, high-priority request.
+    def challenge_blacklist_fn(
+        self, synapse: storage.protocol.Challenge
+    ) -> typing.Tuple[bool, str]:
+        if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        return False, "Hotkey recognized!"
+
+    def challenge_priority_fn(self, synapse: storage.protocol.Challenge) -> float:
+        caller_uid = self.metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        prirority = float(
+            self.metagraph.S[caller_uid]
+        )  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
+        )
+        return prirority
+
+    def retrieve_blacklist_fn(
+        self, synapse: storage.protocol.Retrieve
+    ) -> typing.Tuple[bool, str]:
+        if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        return False, "Hotkey recognized!"
+
+    def retrieve_priority_fn(self, synapse: storage.protocol.Retrieve) -> float:
+        caller_uid = self.metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        prirority = float(
+            self.metagraph.S[caller_uid]
+        )  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
+        )
+        return prirority
+
     def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
         """
         Handles storing data requested by a synapse.
@@ -317,11 +363,10 @@ class miner:
 
         # Store the data with the hash as the key in the filesystem
         data_hash = hash_data(encrypted_byte_data)
-        bt.logging.debug(f"data_hash: {data_hash}")
         filepath = save_data_to_filesystem(
             encrypted_byte_data, self.config.database.directory, str(data_hash)
         )
-        bt.logging.debug(f"stored data in filepath: {filepath}")
+        bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
         miner_store = {
             "filepath": filepath,
             "prev_seed": str(synapse.seed),
@@ -332,7 +377,7 @@ class miner:
         dumped = json.dumps(miner_store).encode()
         bt.logging.debug(f"dumped: {dumped}")
         self.database.set(data_hash, dumped)
-        bt.logging.debug(f"set in database!")
+        bt.logging.trace(f"set {data_hash} in database!")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
@@ -340,12 +385,12 @@ class miner:
 
         # NOTE: Does this add anything of value?
         synapse.signature = self.wallet.hotkey.sign(str(m_val)).hex()
-        bt.logging.debug(f"signed m_val: {synapse.signature.hex()}")
+        bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
 
-        # CONCAT METHOD INITIAlIZE CHAIN
-        print(f"type(seed): {type(synapse.seed)}")
+        # Initialize the commitment hash with the initial commitment for chained proofs
+        bt.logging.trace(f"type(seed): {type(synapse.seed)}")
         synapse.commitment_hash = str(m_val)
-        bt.logging.debug(f"initial commitment_hash: {synapse.commitment_hash}")
+        bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
 
         bt.logging.debug(f"returning synapse: {synapse}")
         return synapse
@@ -367,7 +412,7 @@ class miner:
             storage.protocol.Challenge: The updated synapse with the response to the data challenge.
         """
         # Retrieve the data itself from miner storage
-        bt.logging.debug(f"challenge hash: {synapse.challenge_hash}")
+        bt.logging.debug(f"recieved challenge hash: {synapse.challenge_hash}")
         data = self.database.get(synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
@@ -389,14 +434,14 @@ class miner:
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed
         )
-        if self.config.verbose:
-            print(
+        if self.config.miner.verbose:
+            bt.logging.debug(
                 f"types: prev_seed {str(type(prev_seed))}, new_seed {str(type(new_seed))}, proof {str(type(proof))}"
             )
-            print(f"prev seed : {prev_seed}")
-            print(f"new seed  : {new_seed}")
-            print(f"proof     : {proof}")
-            print(f"commitment: {next_commitment}\n")
+            bt.logging.debug(f"prev seed : {prev_seed}")
+            bt.logging.debug(f"new seed  : {new_seed}")
+            bt.logging.debug(f"proof     : {proof}")
+            bt.logging.debug(f"commitment: {next_commitment}\n")
         synapse.commitment_hash = next_commitment
         synapse.commitment_proof = proof
 
@@ -405,6 +450,7 @@ class miner:
         self.database.set(synapse.challenge_hash, json.dumps(decoded).encode())
         bt.logging.debug(f"udpated miner storage: {decoded}")
 
+        # Chunk the data according to the provided chunk_size
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
         bt.logging.debug(f"data_chunks: {pformat(data_chunks)}")
 
@@ -424,17 +470,18 @@ class miner:
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
-        bt.logging.debug(f"commitment: {synapse.commitment}")
         synapse.data_chunk = base64.b64encode(chunks[synapse.challenge_index])
-        bt.logging.debug(f"data_chunk: {synapse.data_chunk}")
         synapse.randomness = randomness[synapse.challenge_index]
-        bt.logging.debug(f"randomness: {synapse.randomness}")
         synapse.merkle_proof = b64_encode(
             merkle_tree.get_proof(synapse.challenge_index)
         )
-        bt.logging.debug(f"merkle_proof: {synapse.merkle_proof}")
         synapse.merkle_root = merkle_tree.get_merkle_root()
-        bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
+        if self.config.miner.verbose:
+            bt.logging.debug(f"commitment: {synapse.commitment}")
+            bt.logging.debug(f"data_chunk: {synapse.data_chunk}")
+            bt.logging.debug(f"randomness: {synapse.randomness}")
+            bt.logging.debug(f"merkle_proof: {synapse.merkle_proof}")
+            bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
         return synapse
 
     def retrieve(self, synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
