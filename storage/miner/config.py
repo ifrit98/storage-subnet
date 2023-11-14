@@ -122,18 +122,6 @@ def add_args(cls, parser):
         default=0.0,
     )
     parser.add_argument(
-        "--miner.blacklist.prompt_cache_block_span",
-        type=int,
-        help="Amount of blocks to keep a prompt in cache",
-        default=7200,
-    )
-    parser.add_argument(
-        "--miner.blacklist.use_prompt_cache",
-        action="store_true",
-        help="If True, the miner will use the prompt cache to store recent request prompts.",
-        default=False,
-    )
-    parser.add_argument(
         "--miner.blacklist.min_request_period",
         type=int,
         help="Time period (in minute) to serve a maximum of 50 requests for each hotkey",

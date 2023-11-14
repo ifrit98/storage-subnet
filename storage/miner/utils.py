@@ -13,6 +13,26 @@ from ..shared.merkle import (
 
 
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
+    """
+    Commits chunks of data with a seed using a Merkle tree structure to create a proof of
+    integrity for each chunk. This function is used in environments where the integrity
+    and order of data need to be verifiable.
+
+    Parameters:
+    - committer: The committing object, which should have a commit method.
+    - data_chunks (list): A list of data chunks to be committed.
+    - n_chunks (int): The number of chunks expected to be committed.
+    - seed: A seed value that is combined with data chunks before commitment.
+
+    Returns:
+    - randomness (list): A list of randomness values associated with each data chunk's commitment.
+    - chunks (list): The list of original data chunks that were committed.
+    - points (list): A list of commitment points in hex format.
+    - merkle_tree (MerkleTree): A Merkle tree constructed from the commitment points.
+
+    This function handles the conversion of commitment points to hex format and adds them to the
+    Merkle tree. The completed tree represents the combined commitments.
+    """
     merkle_tree = MerkleTree()
 
     # Commit each chunk of data
@@ -31,6 +51,20 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
 
 
 def save_data_to_filesystem(data, directory, filename):
+    """
+    Saves data to the filesystem at the specified directory and filename. If the directory does
+    not exist, it is created.
+
+    Parameters:
+    - data: The data to be saved.
+    - directory (str): The directory path where the data should be saved.
+    - filename (str): The name of the file to save the data in.
+
+    Returns:
+    - file_path (str): The full path to the saved file.
+
+    This function is useful for persisting data to the disk.
+    """
     # Ensure the directory exists
     directory = os.path.expanduser(directory)
     os.makedirs(directory, exist_ok=True)
@@ -41,13 +75,40 @@ def save_data_to_filesystem(data, directory, filename):
 
 
 def load_from_filesystem(filepath):
+    """
+    Loads data from a file in the filesystem.
+
+    Parameters:
+    - filepath (str): The path to the file from which data is to be loaded.
+
+    Returns:
+    - data: The data read from the file.
+
+    This function is a straightforward utility for reading binary data from a file.
+    """
     with open(os.path.expanduser(filepath), "rb") as file:
         data = file.read()
     return data
 
 
 def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):
-    """Compute a subsequent commitment based on the original data, previous seed, and new seed."""
+    """
+    Computes a new commitment based on provided data and a change from an old seed to a new seed.
+    This function is typically used in cryptographic operations to update commitments without
+    altering the underlying data.
+
+    Parameters:
+    - data: The original data for which the commitment is being updated.
+    - previous_seed: The seed used in the previous commitment.
+    - new_seed: The seed to be used for the new commitment.
+    - verbose (bool): If True, additional debug information will be printed. Defaults to False.
+
+    Returns:
+    - A tuple containing the new commitment and the proof of the old commitment.
+
+    If verbose is set to True, debug information about the types and contents of the parameters
+    will be printed to aid in debugging.
+    """
     if verbose:
         bt.logging.debug("IN COMPUTE SUBESEQUENT COMMITMENT")
         bt.logging.debug("type of data     :", type(data))
