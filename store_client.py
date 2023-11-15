@@ -10,12 +10,13 @@ import bittensor as bt
 
 def add_args(parser):
     parser.add_argument(
-        "--netuid", type=str, default=22, help="Network unique identifier."
-    )
-    parser.add_argument(
         "--filepath",
         type=str,
+        required=True,
         help="Path of the data to store on the network.",
+    )
+    parser.add_argument(
+        "--netuid", type=str, default=22, help="Network unique identifier."
     )
     parser.add_argument(
         "--network", type=str, default="test", help="Network to connect to."
@@ -45,7 +46,17 @@ def main():
     dendrite = bt.dendrite(wallet=wallet)
     print(dendrite)
 
-    synapse = storage.protocol.Store(data_hash=config.data_hash)
+    with open(config.filepath, "rb") as f:
+        raw_data = f.read()
+
+    encrypted_data, encryption_payload = encrypt_data(
+        bytes(raw_data, "utf-8"),
+        wallet,
+    )
+    synapse = storage.protocol.StoreUser(
+        encrypted_data=base64.b64encode(encrypted_data),
+        encryption_payload=encryption_payload,
+    )
     print(synapse)
 
     sub = bt.subtensor(network=config.network)
@@ -72,20 +83,15 @@ def main():
             continue
 
         # Decrypt the response
-        encrypted_data = base64.b64decode(response.encrypted_data)
-        decrypted_data = decrypt_data_with_private_key(
-            encrypted_data,
-            response.encryption_payload,
-            bytes(wallet.coldkey.private_key.hex(), "utf-8"),
-        )
-        print(decrypted_data)
+        data_hash = response.data_hash
+        print("Data hash: {}".format(data_hash))
+        break
 
-    # Save the data
-    with open(config.filepath, "wb") as f:
-        f.write(decrypted_data)
-
-    print("Saved data to: {}".format(config.filepath))
+    print("Stored data from: {}".format(config.filepath))
 
 
 if __name__ == "__main__":
+    import sys
+
+    print(sys.argv)
     main()
