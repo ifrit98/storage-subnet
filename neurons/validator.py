@@ -668,7 +668,7 @@ class neuron:
         bt.logging.debug(f"inside retrieve_user_data")
 
         # Return the data to the client so that they can decrypt with their bittensor wallet
-        encrypted_data, encryption_payload = self.retrieve(synapse.data_hash)
+        encrypted_data, encryption_payload = await self.retrieve(synapse.data_hash)
         bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
         # Return the first element, whoever is fastest wins
         synapse.encrypted_data = encrypted_data
@@ -782,27 +782,27 @@ class neuron:
         self.step += 1
         bt.logging.info(f"forward step: {self.step}")
 
-        try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            await self.store_random_data()
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
+        # try:
+        #     # Store some data
+        #     bt.logging.info("initiating store data")
+        #     await self.store_random_data()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to store data with exception: {e}")
 
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            await self.challenge()
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     await self.challenge()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_steps == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                await self.retrieve()
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        # if self.step % self.config.neuron.retrieve_epoch_steps == 0:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         await self.retrieve()
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")

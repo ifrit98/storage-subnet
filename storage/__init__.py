@@ -29,3 +29,4 @@ __spec_version__ = (
 from . import protocol
 from . import validator
 from . import miner
+from . import cli
