@@ -6,7 +6,7 @@ import base64
 import argparse
 
 import storage
-from storage.validator.encryption import decrypt_data_with_private_key
+from storage.validator.encryption import encrypt_data
 
 import bittensor
 
@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 from .default_values import defaults
 
+bittensor.debug()
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -45,30 +46,73 @@ def get_hash_mapping(hash_file, filename):
         return None
 
 
-class RetrieveData:
+def save_hash_mapping(hash_file, filename, data_hash):
+    base_dir = os.path.basename(hash_file)
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+
+    try:
+        with open(hash_file, "r") as file:
+            hashes = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        hashes = {}
+
+    hashes[filename] = data_hash
+
+    with open(hash_file, "w") as file:
+        json.dump(hashes, file)
+
+
+def list_all_hashes(hash_file):
+    try:
+        with open(hash_file, "r") as file:
+            hashes = json.load(file)
+            return hashes
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+class StoreData:
     @staticmethod
     def run(cli):
-        r"""Retrieve data from the Bittensor network for the given data_hash."""
+        r"""Store data from local disk on the Bittensor network."""
 
         wallet = bittensor.wallet(
             name=cli.config.wallet.name, hotkey=cli.config.wallet.hotkey
         )
         bittensor.logging.debug("wallet:", wallet)
 
-        cli.config.storage_basepath = os.path.expanduser(cli.config.storage_basepath)
+        # Unlock the wallet
+        wallet.hotkey
+        wallet.coldkey
 
-        if not os.path.exists(cli.config.storage_basepath):
-            print("generating filepath.. {}".format(cli.config.storage_basepath))
-            os.makedirs(cli.config.storage_basepath)
-        outpath = os.path.expanduser(cli.config.storage_basepath)
-        outpath = os.path.join(outpath, cli.config.data_hash)
-        bittensor.logging.debug("outpath:", outpath)
+        cli.config.filepath = os.path.expanduser(cli.config.filepath)
+        if not os.path.exists(cli.config.filepath):
+            bittensor.logging.error(
+                "File does not exist: {}".format(cli.config.filepath)
+            )
+            return
+
+        with open(cli.config.filepath, "rb") as f:
+            raw_data = f.read()
+
+        encrypted_data, encryption_payload = encrypt_data(
+            bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
+            wallet,
+        )
+        synapse = storage.protocol.StoreUser(
+            encrypted_data=base64.b64encode(encrypted_data),
+            encryption_payload=encryption_payload,
+        )
+        bittensor.logging.debug(synapse)
+
+        # import pdb; pdb.set_trace()
+        hash_basepath = os.path.expanduser(cli.config.hash_basepath)
+        hash_filepath = os.path.join(hash_basepath, wallet.name + ".json")
+        bittensor.logging.debug("store hashes path:", hash_filepath)
 
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
-
-        synapse = storage.protocol.RetrieveUser(data_hash=cli.config.data_hash)
-        bittensor.logging.debug("synapse:", synapse)
 
         sub = bittensor.subtensor(network=cli.config.subtensor.network)
         bittensor.logging.debug("subtensor:", sub)
@@ -90,28 +134,35 @@ class RetrieveData:
         bittensor.logging.debug("axon responses:", responses)
 
         success = False
+        failure_modes = {"code": [], "message": []}
         for response in responses:
             if response.dendrite.status_code != 200:
+                failure_modes["code"].append(response.dendrite.status_code)
+                failure_modes["message"].append(response.dendrite.status_message)
                 continue
 
-            # Decrypt the response
-            encrypted_data = base64.b64decode(response.encrypted_data)
-            decrypted_data = decrypt_data_with_private_key(
-                encrypted_data,
-                response.encryption_payload,
-                bytes(wallet.coldkey.private_key.hex(), "utf-8"),
+            data_hash = (
+                response.data_hash.decode("utf-8")
+                if isinstance(response.data_hash, bytes)
+                else response.data_hash
             )
-            bittensor.logging.debug(decrypted_data)
+            print("Data hash: {}".format(data_hash))
             success = True
+            break
 
         if success:
-            # Save the data
-            with open(outpath, "wb") as f:
-                f.write(decrypted_data)
-
-            bittensor.logging.info("Saved retrieved data to: {}".format(outpath))
+            # Save hash mapping after successful storage
+            save_hash_mapping(
+                hash_filepath, filename=cli.config.filepath, data_hash=data_hash
+            )
+            bittensor.logging.info(
+                f"Stored {cli.config.filepath} on the Bittensor network with hash {data_hash}!"
+            )
         else:
-            bittensor.logging.error("Failed to retrieve data.")
+            bittensor.logging.error(f"Failed to store data at {cli.config.filepath}.")
+            bittensor.logging.error(
+                f"Response failure codes & messages {failure_modes}"
+            )
 
     @staticmethod
     def check_config(config: "bittensor.config"):
@@ -142,24 +193,15 @@ class RetrieveData:
             )
             config.wallet.hotkey = str(wallet_hotkey)
 
-        if not config.is_set("storage_basepath") and not config.no_prompt:
-            config.storage_basepath = Prompt.ask(
+        if not config.is_set("filepath") and not config.no_prompt:
+            config.filepath = Prompt.ask(
                 "Enter path to store retrieved data",
-                default=defaults.storage_basepath,
             )
-
-        if not config.is_set("data_hash") and not config.no_prompt:
-            config.data_hash = Prompt.ask("Enter hash of data to retrieve")
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
         retrieve_parser = parser.add_parser(
-            "get", help="""Retrieve data from the Bittensor network."""
-        )
-        retrieve_parser.add_argument(
-            "--data_hash",
-            type=str,
-            help="Data hash to retrieve in the Bittensor network.",
+            "put", help="""Store data on the Bittensor network."""
         )
         retrieve_parser.add_argument(
             "--hash_basepath",
@@ -174,10 +216,9 @@ class RetrieveData:
             help="Stake limit to exclude validator axons to query.",
         )
         retrieve_parser.add_argument(
-            "--storage_basepath",
+            "--filepath",
             type=str,
-            default=defaults.storage_basepath,
-            help="Path to store retrieved data.",
+            help="Path to data to store on the Bittensor network.",
         )
 
         bittensor.wallet.add_args(retrieve_parser)

@@ -60,7 +60,7 @@ def list_all_hashes(hash_file):
 def display_hashes_in_table(wallet_name, hashes_dict):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Filename", style="dim", width=30)
-    table.add_column("Data Hash", width=60)
+    table.add_column("Data Hash", width=120)
 
     for filename, data_hash in hashes_dict.items():
         table.add_row(filename, data_hash)
@@ -74,7 +74,7 @@ def create_unified_table(data):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Wallet Name", style="dim", width=20)
     table.add_column("Filename", width=30)
-    table.add_column("Data Hash", width=60)
+    table.add_column("Data Hash", width=200)
 
     for wallet_name, hashes in data.items():
         for filename, data_hash in hashes.items():

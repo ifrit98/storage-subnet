@@ -31,6 +31,7 @@ from rich.table import Table
 from tqdm import tqdm
 
 from .retrievecommand import RetrieveData
+from .storecommand import StoreData
 from .listcommand import ListLocalHashes
 
 # Create a console instance for CLI display.
@@ -47,14 +48,14 @@ ALIAS_TO_COMMAND = {
 }
 
 COMMANDS = {
-    # "store": {
-    #     "name": "store",
-    #     "aliases": ["s", "store"],
-    #     "help": "Commands for uploading storage to the Bittensor network.",
-    #     "commands": {
-    #         "put": StoreData, # Encrypt and store data on the network
-    #     },
-    # },
+    "store": {
+        "name": "store",
+        "aliases": ["s", "store"],
+        "help": "Commands for uploading storage to the Bittensor network.",
+        "commands": {
+            "put": StoreData,  # Encrypt and store data on the network
+        },
+    },
     "retrieve": {
         "name": "retrieve",
         "aliases": ["r", "retrieve"],
@@ -90,15 +91,9 @@ class cli:
 
         # If no config is provided, create a new one from args.
         if config == None:
-            print("\ncreaing config...")
             config = cli.create_config(args)
-            print(f"\nconfig after {str(config)}")
-
-        print("\nargs:", args)
-        print("\nconfig in cli:", config)
 
         self.config = config
-        print("self.config:", self.config)
         if self.config.command in ALIAS_TO_COMMAND:
             self.config.command = ALIAS_TO_COMMAND[self.config.command]
         else:
@@ -107,8 +102,7 @@ class cli:
 
         # Check if the config is valid.
         cli.check_config(self.config)
-        print("\nconfig after check config:", self.config)
-        # import pdb; pdb.set_trace()
+
         # If no_version_checking is not set or set as False in the config, version checking is done.
         if not self.config.get("no_version_checking", d=True):
             try:
@@ -166,16 +160,12 @@ class cli:
             bittensor.config: The configuration object for Bittensor CLI.
         """
         parser = cli.__create_parser__()
-        print("initial parser:", parser)
 
         # If no arguments are passed, print help text and exit the program.
         if len(args) == 0:
-            print("no args passed!")
             parser.print_help()
             sys.exit()
-        print()
-        print(f"parser: {parser}")
-        print(f"args: {args}")
+
         return bittensor.config(parser, args=args)
 
     @staticmethod
@@ -196,14 +186,14 @@ class cli:
                 if config["subcommand"] != None:
                     command_data["commands"][config["subcommand"]].check_config(config)
                 else:
-                    console.print(
+                    print(
                         f":cross_mark:[red]Missing subcommand for: {config.command}[/red]"
                     )
                     sys.exit(1)
             else:
                 command_data.check_config(config)
         else:
-            console.print(f":cross_mark:[red]Unknown command: {config.command}[/red]")
+            print(f":cross_mark:[red]Unknown command: {config.command}[/red]")
             sys.exit(1)
 
     def run(self):
@@ -221,7 +211,5 @@ class cli:
             else:
                 command_data.run(self)
         else:
-            console.print(
-                f":cross_mark:[red]Unknown command: {self.config.command}[/red]"
-            )
+            print(f":cross_mark:[red]Unknown command: {self.config.command}[/red]")
             sys.exit()
