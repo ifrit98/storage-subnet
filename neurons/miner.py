@@ -586,7 +586,6 @@ class miner:
         # Chunk the data according to the specified (random) chunk size
         filepath = decoded["filepath"]
         encrypted_data_bytes = load_from_filesystem(filepath)
-        bt.logging.debug(f"encrypted_data_bytes: {encrypted_data_bytes}")
 
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time

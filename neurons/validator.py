@@ -530,7 +530,7 @@ class neuron:
         data = make_random_file(maxsize=self.config.neuron.maxsize)
 
         # Encrypt the data
-        encrypted_data, encryption_payload = encrypt_data(data, wallet)
+        encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
 
         self.store_encrypted_data(encrypted_data, encryption_payload)
 
@@ -668,14 +668,12 @@ class neuron:
         bt.logging.debug(f"inside retrieve_user_data")
 
         # Return the data to the client so that they can decrypt with their bittensor wallet
-        async for encrypted_data, encryption_payload in self.retrieve(
-            synapse.data_hash
-        ):
-            bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
-            # Return the first element, whoever is fastest wins
-            synapse.encrypted_data = encrypted_data
-            synapse.encryption_payload = encryption_payload
-            return synapse
+        encrypted_data, encryption_payload = self.retrieve(synapse.data_hash)
+        bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
+        # Return the first element, whoever is fastest wins
+        synapse.encrypted_data = encrypted_data
+        synapse.encryption_payload = encryption_payload
+        return synapse
 
     async def retrieve(
         self, data_hash: str = None
@@ -770,11 +768,11 @@ class neuron:
                 update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
 
                 # TODO: get a temp link from the server to send back to the client instead
-                yield response.data, data["encryption_payload"]
+                return response.data, data["encryption_payload"]
 
             except Exception as e:
                 bt.logging.error(
-                    f"Failed to yield data from UID: {uids[idx]} with error: {e}"
+                    f"Failed to return data from UID: {uids[idx]} with error: {e}"
                 )
 
         bt.logging.trace("Applying retrieve rewards")
@@ -789,11 +787,7 @@ class neuron:
             bt.logging.info("initiating store data")
             await self.store_random_data()
         except Exception as e:
-            import pdb
-
-            pdb.set_trace()
             bt.logging.error(f"Failed to store data with exception: {e}")
-            pass
 
         try:
             # Challenge some data
@@ -801,16 +795,14 @@ class neuron:
             await self.challenge()
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
-            pass
 
-        if self.step % 3 == 0:
+        if self.step % self.config.neuron.retrieve_epoch_steps == 0:
             try:
                 # Retrieve some data
                 bt.logging.info("initiating retrieve")
                 await self.retrieve()
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
-                pass
 
     def run(self):
         bt.logging.info("run()")

@@ -107,6 +107,12 @@ def add_args(cls, parser):
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
+        "--neuron.retrieve_epoch_steps",
+        type=int,
+        default=2,
+        help="Number of steps to take before retrieving data.",
+    )
+    parser.add_argument(
         "--neuron.challenge_sample_size",
         type=int,
         default=5,
