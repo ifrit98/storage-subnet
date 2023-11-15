@@ -61,6 +61,21 @@ class Store(bt.Synapse):
     )
 
 
+class StoreUser(bt.Synapse):
+    # Data to store
+    encrypted_data: str  # base64 encoded string of encrypted data (bytes)
+    encryption_payload: str  # encrypted json serialized bytestring of encryption params
+
+    data_hash: typing.Optional[str] = None  # Miner storage lookup key
+
+    required_hash_fields: typing.List[str] = pydantic.Field(
+        ["encrypted_data", "encryption_payload"],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
+
 class Challenge(bt.Synapse):
     # Query parameters
     challenge_hash: str  # hash of the data to challenge
