@@ -169,12 +169,19 @@ class neuron:
         self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(self.device)
         bt.logging.debug(str(self.moving_averaged_scores))
 
+        self.my_subnet_uid = self.metagraph.hotkeys.index(
+            self.wallet.hotkey.ss58_address
+        )
+        bt.logging.info(f"Running validator on uid: {self.my_subnet_uid}")
+
         bt.logging.debug("serving ip to chain...")
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
             self.axon.attach(
                 forward_fn=self.update_index,
+            ).attach(
+                forward_fn=self.retrieve_user_data,
             )
 
             try:
@@ -189,6 +196,14 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to create Axon initialize with exception: {e}")
             pass
+
+        # Start  starts the validator's axon, making it active on the network.
+        bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
+        self.axon.start()
+
+        bt.logging.info(
+            f"Served axon {self.axon} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
 
         # Dendrite pool for querying the network.
         bt.logging.debug("loading", "dendrite_pool")
@@ -641,9 +656,20 @@ class neuron:
         bt.logging.trace("Applying challenge rewards")
         self.apply_reward_scores(uids, responses, rewards)
 
-    # TODO: IMPLEMENT A WAY FOR USERS TO RETREIVE DATA EXTERNALLY
-    async def retrieve_user_data(self, data_hash: str, wallet: bt.wallet):
-        pass
+    async def retrieve_user_data(
+        self, synapse: protocol.RetrieveUser
+    ) -> protocol.RetrieveUser:
+        bt.logging.debug(f"inside retrieve_user_data")
+
+        # Return the data to the client so that they can decrypt with their bittensor wallet
+        async for encrypted_data, encryption_payload in self.retrieve(
+            synapse.data_hash
+        ):
+            bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
+            # Return the first element, whoever is fastest wins
+            synapse.encrypted_data = encrypted_data
+            synapse.encryption_payload = encryption_payload
+            return synapse
 
     async def retrieve(
         self, data_hash: str = None
@@ -714,7 +740,7 @@ class neuron:
 
             if str(hash_data(decoded_data)) != data_hash:
                 bt.logging.error(
-                    f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
+                    f"Hash of recieved data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
                 )
                 rewards[idx] = -1.0
                 continue
@@ -727,7 +753,7 @@ class neuron:
                 rewards[idx] = 1.0
 
             try:
-                bt.logging.trace(f"Decrypting from UID: {uids[idx]}")
+                bt.logging.trace(f"Fetching AES payload from UID: {uids[idx]}")
 
                 # Load the data for this miner from validator storage
                 data = get_metadata_from_hash(hotkey, data_hash, self.database)
@@ -737,58 +763,49 @@ class neuron:
                 data["counter"] += 1
                 update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
 
-                # TODO: Add this decryption on the miner side provided the user logs in
-                # with their wallet! This way miners can send back a landing/login link
                 # TODO: get a temp link from the server to send back to the client instead
+                yield response.data, data["encryption_payload"]
 
-                # Encapsulate this function with args so only need to pass the wallet
-                # The partial func decrypts the data using the validator stored encryption keys
-                decrypt_user_data = partial(
-                    decrypt_data,
-                    encrypted_data=decoded_data,
-                    encryption_payload=data["encryption_payload"],
-                )
-                # Pass the user back the encrypted_data along with a function to decrypt it
-                # given their wallet which was used to encrypt in the first place
-                datas.append((decoded_data, decrypt_user_data))
             except Exception as e:
                 bt.logging.error(
-                    f"Failed to decrypt data from UID: {uids[idx]} with error: {e}"
+                    f"Failed to yield data from UID: {uids[idx]} with error: {e}"
                 )
 
         bt.logging.trace("Applying retrieve rewards")
         self.apply_reward_scores(uids, responses, rewards)
 
-        return datas
-
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward step: {self.step}")
+        time.sleep(1)
 
-        try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            await self.store_validator_data()
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
-            pass
+        # try:
+        #     # Store some data
+        #     bt.logging.info("initiating store data")
+        #     await self.store_validator_data(b"THIS IS A TEST OF THE PROTOCOL MOTHERFUCKER")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to store data with exception: {e}")
+        #     pass
 
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            await self.challenge()
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
-            pass
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     await self.challenge()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        #     pass
 
-        if self.step % 3 == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                await self.retrieve()
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
-                pass
+        # if self.step % 1 == 0:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         async_gen = self.retrieve()
+        #         async for encrypted_data, encryption_payload in async_gen:
+        #             bt.logging.debug(f"Encrypted user data: {encrypted_data}")
+        #             bt.logging.debug(f"AES Encryption Payload: {encryption_payload}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        #         pass
 
     def run(self):
         bt.logging.info("run()")

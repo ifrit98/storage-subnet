@@ -125,6 +125,22 @@ class Retrieve(bt.Synapse):
     )
 
 
+class RetrieveUser(bt.Synapse):
+    # Where to find the data
+    data_hash: str  # Miner storage lookup key
+
+    # Fetched data to return along with AES payload in base64 encoding
+    encrypted_data: typing.Optional[str] = None
+    encryption_payload: typing.Optional[str] = None
+
+    required_hash_fields: typing.List[str] = pydantic.Field(
+        ["data_hash"],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
+
 class Update(bt.Synapse):
     # Lookup key for where metadata is stored in validator index
     hotkey: str
