@@ -404,6 +404,7 @@ class neuron:
         Returns:
         - The status of the data storage operation.
         """
+
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
@@ -412,6 +413,9 @@ class neuron:
 
         # Encrypt the data
         encrypted_data, encryption_payload = encrypt_data(data, wallet)
+
+        # Hash the data
+        data_hash = hash_data(encrypted_data)
 
         # Convert to base64 for compactness
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
@@ -427,12 +431,11 @@ class neuron:
         # Select subset of miners to query (e.g. redunancy factor of N)
         uids = self.get_random_uids(k=self.config.neuron.store_redundancy)
 
-        updated_hotkeys = []
-        success_responses = []
-        data_to_broadcast = []
         broadcast_params = []
         axons = [self.metagraph.axons[uid] for uid in uids]
         failed_uids = [None]
+        all_failed_uids = []
+        all_success_uids = []
 
         retries = 0
         while len(failed_uids) and retries < 3:
@@ -467,9 +470,9 @@ class neuron:
                     continue  # Skip trying to store the data
 
                 rewards[idx] = 1.0
+                all_success_uids.append(uid)
 
-                data_hash = hash_data(encrypted_data)
-
+                # Prepare storage for the data for particular miner
                 response_storage = {
                     "prev_seed": synapse.seed,
                     "size": sys.getsizeof(encrypted_data),
@@ -486,7 +489,7 @@ class neuron:
                     f"Stored data in database with key: {response.axon.hotkey} | {data_hash}"
                 )
 
-                # Broadcast the update to all other validators
+                # Collect broadcast params to send the update to all other validators
                 broadcast_params.append((response.axon.hotkey, response_storage))
 
             if self.config.neuron.verbose:
@@ -497,6 +500,7 @@ class neuron:
 
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
+                all_failed_uids += failed_uids  # record these for the event
                 bt.logging.debug(f"Failed to store on uids: {failed_uids}")
                 uids = self.get_random_uids(k=len(failed_uids))
 
@@ -637,7 +641,13 @@ class neuron:
         bt.logging.trace("Applying challenge rewards")
         self.apply_reward_scores(uids, responses, rewards)
 
-    async def retrieve(self, data_hash=None):
+    # TODO: IMPLEMENT A WAY FOR USERS TO RETREIVE DATA EXTERNALLY
+    async def retrieve_user_data(self, data_hash: str, wallet: bt.wallet):
+        pass
+
+    async def retrieve(
+        self, data_hash: str = None
+    ) -> typing.Tuple[bytes, typing.Callable]:
         """
         Retrieves and verifies data from the network, ensuring integrity and correctness of the data associated with the given hash.
 
@@ -760,9 +770,6 @@ class neuron:
             bt.logging.info("initiating store data")
             await self.store_validator_data()
         except Exception as e:
-            import pdb
-
-            pdb.set_trace()
             bt.logging.error(f"Failed to store data with exception: {e}")
             pass
 
