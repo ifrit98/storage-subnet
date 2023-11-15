@@ -516,6 +516,7 @@ class neuron:
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
                 all_failed_uids += failed_uids  # record these for the event
+
                 bt.logging.debug(f"Failed to store on uids: {failed_uids}")
                 uids = self.get_random_uids(k=len(failed_uids))
 
@@ -777,35 +778,34 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         self.step += 1
         bt.logging.info(f"forward step: {self.step}")
-        time.sleep(1)
 
-        # try:
-        #     # Store some data
-        #     bt.logging.info("initiating store data")
-        #     await self.store_validator_data(b"THIS IS A TEST OF THE PROTOCOL MOTHERFUCKER")
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to store data with exception: {e}")
-        #     pass
+        try:
+            # Store some data
+            bt.logging.info("initiating store data")
+            await self.store_validator_data()
+        except Exception as e:
+            import pdb
 
-        # try:
-        #     # Challenge some data
-        #     bt.logging.info("initiating challenge")
-        #     await self.challenge()
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
-        #     pass
+            pdb.set_trace()
+            bt.logging.error(f"Failed to store data with exception: {e}")
+            pass
 
-        # if self.step % 1 == 0:
-        #     try:
-        #         # Retrieve some data
-        #         bt.logging.info("initiating retrieve")
-        #         async_gen = self.retrieve()
-        #         async for encrypted_data, encryption_payload in async_gen:
-        #             bt.logging.debug(f"Encrypted user data: {encrypted_data}")
-        #             bt.logging.debug(f"AES Encryption Payload: {encryption_payload}")
-        #     except Exception as e:
-        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
-        #         pass
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            await self.challenge()
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
+            pass
+
+        if self.step % 3 == 0:
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                await self.retrieve()
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+                pass
 
     def run(self):
         bt.logging.info("run()")
