@@ -30,17 +30,6 @@ def should_set_weights(self) -> bool:
     if self.config.neuron.disable_set_weights:
         return False
 
-    if self.config.neuron.verbose:
-        bt.logging.debug(f"prev_step_block: {self.prev_step_block}")
-        bt.logging.debug(
-            f"a) ttl % epoch_length: {ttl_get_block(self) % self.config.neuron.epoch_length}"
-        )
-        bt.logging.debug(
-            f"b) prev_step_block % epoch_length: {self.prev_step_block % self.config.neuron.epoch_length}"
-        )
-        bt.logging.debug(
-            f"should set weights (a < b): {ttl_get_block(self) % self.config.neuron.epoch_length < self.prev_step_block % self.config.neuron.epoch_length}"
-        )
     return (
         ttl_get_block(self) % self.config.neuron.epoch_length
         < self.prev_step_block % self.config.neuron.epoch_length

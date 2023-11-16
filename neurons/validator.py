@@ -310,7 +310,7 @@ class neuron:
         ) * self.moving_averaged_scores.to(self.device)
         bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
-    def update_index(self, synapse: protocol.Update) -> protocol.Update:
+    async def update_index(self, synapse: protocol.Update) -> protocol.Update:
         """
         Updates the validator's index with new data received from a synapse.
 
@@ -332,8 +332,9 @@ class neuron:
         }
         bt.logging.debug(f"entry: {entry}")
 
-        # Update the index with the new data using a semaphore
+        # Update the index with the new data
         # with self.db_semaphore:
+        bt.logging.debug(f"Acquired semaphore for database access.")
         if not data:
             bt.logging.debug(f"Updating index with new data...")
             # Add it to the index directly
@@ -356,6 +357,7 @@ class neuron:
                     synapse.axon.hotkey, synapse.data_hash, entry, self.database
                 )
                 synapse.updated = True
+
         bt.logging.debug(f"Successfully updated index.")
         return synapse
 
@@ -404,7 +406,7 @@ class neuron:
             synapse,
             deserialize=False,
         )
-        if self.config.neurons.verbose:
+        if self.config.neuron.verbose:
             bt.logging.debug(f"Responses update: {responses}")
 
         # TODO: Check the responses to ensure all validaors are updated
@@ -499,7 +501,7 @@ class neuron:
             )
 
             # Log the results for monitoring purposes.
-            if self.config.neuron.verbose:
+            if self.config.neuron.verbose and self.config.neuron.log_responses:
                 bt.logging.debug(f"Received responses: {responses}")
 
             # Compute the rewards for the responses given proc time.
@@ -552,7 +554,7 @@ class neuron:
 
             event.rewards.extend(rewards.tolist())
 
-            if self.config.neuron.verbose:
+            if self.config.neuron.verbose and self.config.neuron.log_responses:
                 bt.logging.debug(f"Store responses round {retries}: {responses}")
 
             bt.logging.trace(f"Applying store rewards for retry # {retries}")

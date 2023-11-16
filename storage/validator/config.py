@@ -152,7 +152,7 @@ def add_args(cls, parser):
         "--neuron.store_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=10,
+        default=20,
     )
     parser.add_argument(
         "--neuron.challenge_timeout",
@@ -170,7 +170,7 @@ def add_args(cls, parser):
         "--neuron.epoch_length_override",
         type=int,
         help="Override the default epoch length (how often we set weights).",
-        default=5,
+        default=100,
     )
     parser.add_argument(
         "--neuron.checkpoint_block_length",
@@ -212,6 +212,12 @@ def add_args(cls, parser):
         "--neuron.verbose",
         action="store_true",
         help="If set, we will print verbose detailed logs.",
+        default=False,
+    )
+    parser.add_argument(
+        "--neuron.log_responses",
+        action="store_true",
+        help="If set, we will log responses. These can be LONG.",
         default=False,
     )
 
