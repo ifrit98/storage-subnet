@@ -17,6 +17,9 @@ from traceback import print_exception
 from random import choice as random_choice
 from Crypto.Random import get_random_bytes, random
 
+from dataclasses import asdict
+from storage.validator.event import EventSchema
+
 from storage import protocol
 
 from storage.shared.ecc import (
@@ -408,12 +411,29 @@ class neuron:
     async def store_encrypted_data(
         self, encrypted_data: typing.Union[bytes, str], encryption_payload: dict
     ) -> bool:
+        event = EventSchema(
+            task_name="Store",
+            successful=[],
+            completion_times=[],
+            task_status_messages=[],
+            task_status_codes=[],
+            block=self.subtensor.get_current_block(),
+            uids=[],
+            step_length=0.0,
+            best_uid="",
+            best_hotkey="",
+            rewards=[],
+        )
+
+        start_time = time.time()
+
         encrypted_data = (
             encrypted_data.encode("utf-8")
             if isinstance(encrypted_data, str)
             else encrypted_data
         )
-        bt.logging.debug(f"Storing encrypted user data {encrypted_data}")
+
+        bt.logging.debug(f"Storing encrypted user data {encrypted_data[:24]}...")
 
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.neuron.curve)
@@ -439,8 +459,6 @@ class neuron:
         broadcast_params = []
         axons = [self.metagraph.axons[uid] for uid in uids]
         failed_uids = [None]
-        all_failed_uids = []
-        all_success_uids = []
 
         retries = 0
         while len(failed_uids) and retries < 3:
@@ -466,36 +484,48 @@ class neuron:
 
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
-                if not verify_store_with_seed(response):
+                success = verify_store_with_seed(response)
+                if success:
+                    bt.logging.debug(
+                        f"Successfully verified store commitment from UID: {uid}"
+                    )
+
+                    rewards[idx] = 1.0
+
+                    # Prepare storage for the data for particular miner
+                    response_storage = {
+                        "prev_seed": synapse.seed,
+                        "size": sys.getsizeof(encrypted_data),
+                        "counter": 0,
+                        "encryption_payload": encryption_payload,
+                    }
+                    bt.logging.debug(f"Storing data {response_storage}")
+
+                    # Store in the database according to the data hash and the miner hotkey
+                    add_metadata_to_hotkey(
+                        response.axon.hotkey, data_hash, response_storage, self.database
+                    )
+                    bt.logging.debug(
+                        f"Stored data in database with key: {response.axon.hotkey} | {data_hash}"
+                    )
+
+                    # Collect broadcast params to send the update to all other validators
+                    broadcast_params.append((response.axon.hotkey, response_storage))
+
+                else:
                     bt.logging.debug(
                         f"Failed to verify store commitment from UID: {uid}"
                     )
                     rewards[idx] = 0.0
                     failed_uids.append(uid)
-                    continue  # Skip trying to store the data
 
-                rewards[idx] = 1.0
-                all_success_uids.append(uid)
+                event.successful.append(success)
+                event.uids.append(uid)
+                event.completion_times.append(response.dendrite.process_time)
+                event.task_status_messages.append(response.dendrite.status_message)
+                event.task_status_codes.append(response.dendrite.status_code)
 
-                # Prepare storage for the data for particular miner
-                response_storage = {
-                    "prev_seed": synapse.seed,
-                    "size": sys.getsizeof(encrypted_data),
-                    "counter": 0,
-                    "encryption_payload": encryption_payload,
-                }
-                bt.logging.debug(f"Storing data {response_storage}")
-
-                # Store in the database according to the data hash and the miner hotkey
-                add_metadata_to_hotkey(
-                    response.axon.hotkey, data_hash, response_storage, self.database
-                )
-                bt.logging.debug(
-                    f"Stored data in database with key: {response.axon.hotkey} | {data_hash}"
-                )
-
-                # Collect broadcast params to send the update to all other validators
-                broadcast_params.append((response.axon.hotkey, response_storage))
+            event.rewards.extend(rewards.tolist())
 
             if self.config.neuron.verbose:
                 bt.logging.debug(f"Store responses round {retries}: {responses}")
@@ -515,14 +545,31 @@ class neuron:
                 failed_uids = []  # reset failed uids for next round
                 retries += 1
 
+        # Calculate step length
+        end_time = time.time()
+        event.step_length = end_time - start_time
+
+        # Determine the best UID based on rewards
+        if event.rewards:
+            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            event.best_uid = event.uids[best_index]
+            event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
+
         bt.logging.trace(f"Broadcasting update to all validators")
         for hotkey, data in broadcast_params:
             await self.broadcast(hotkey, data_hash, data)
 
-        if len(all_success_uids):
-            return True
+        # Log event
+        bt.logging.debug("event:", str(event))
+        if not self.config.neuron.dont_save_events:
+            logger.log("EVENTS", "events", **event)
 
-        return False
+        # Log the event to wandb
+        if not self.config.wandb.off:
+            wandb_event = EventSchema.from_dict(event)
+            self.wandb.log(asdict(wandb_event))
+
+        return any(event.successful)
 
     async def store_random_data(self):
         """
