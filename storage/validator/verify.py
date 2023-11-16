@@ -59,7 +59,7 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
 def verify_challenge_with_seed(synapse, verbose=False):
     if synapse.commitment_hash == None or synapse.commitment_proof == None:
         bt.logging.error(
-            f"Missing commitment hash or proof for synapse: {synapse.axon.dict()}."
+            f"Missing commitment hash or proof for synapse: {synapse.dendrite.dict()}."
         )
         return False
 
@@ -67,7 +67,7 @@ def verify_challenge_with_seed(synapse, verbose=False):
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
-        bt.logging.error(f"synapse {synapse}")
+        bt.logging.error(f"synapse {synapse.dendrite.dict()}")
         return False
 
     # TODO: Add checks and defensive programming here to handle all types
@@ -93,7 +93,7 @@ def verify_challenge_with_seed(synapse, verbose=False):
         synapse.merkle_root,
     ):
         bt.logging.error(f"Merkle proof validation failed")
-        bt.logging.error(f"synapse {synapse}")
+        bt.logging.error(f"synapse {synapse.dendrite.dict()}")
         return False
 
     return True
@@ -110,7 +110,7 @@ def verify_store_with_seed(synapse):
     # e.g. send synapse.commitment_hash as an int for consistency
     if synapse.commitment_hash != str(reconstructed_hash):
         bt.logging.error(f"Initial commitment hash does not match hash(data + seed)")
-        bt.logging.error(f"synapse: {synapse}")
+        bt.logging.error(f"synapse: {synapse.dendrite.dict()}")
         return False
 
     committer = ECCommitment(
@@ -125,7 +125,7 @@ def verify_store_with_seed(synapse):
         synapse.randomness,
     ):
         bt.logging.error(f"Opening commitment failed")
-        bt.logging.error(f"synapse: {synapse}")
+        bt.logging.error(f"synapse: {synapse.dendrite.dict()}")
         return False
 
     return True

@@ -190,6 +190,17 @@ python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
 
+Ensure that your wallet password is set as an environment variable with prefix `BT_COLD_PW_` so bittensor can autmatically inject this to unlock the coldkey for proper operation.
+
+```bash
+export BT_COLD_PW_<MYWALLETNAME>=xxxyyy
+
+# e.g.
+export BT_COLD_PW_DEFAULT=xxxyyy
+```
+
+This allows for restarting your process without having to input the wallet password each time.
+
 # Documentation for Storage CLI Interface
 
 ## Overview

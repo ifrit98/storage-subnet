@@ -39,8 +39,9 @@ class EventSchema:
     # Reward data
     rewards: List[float]  # Reward vector for given step
 
-    # Weights data
-    set_weights: Optional[List[List[float]]]
+    # Weights data and moving averages
+    set_weights: Optional[List[List[float]]] = None
+    moving_averaged_scores: Optional[List[float]] = None
 
     @staticmethod
     def from_dict(event_dict: dict) -> "EventSchema":

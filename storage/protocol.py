@@ -171,6 +171,8 @@ class Update(bt.Synapse):
     # This bytestring is itself encrypted by the originating wallet's coldkey and can only
     # be decrypted by the originating wallet.
 
+    updated: typing.Optional[bool] = None  # Whether or not the update was successful
+
     required_hash_fields: typing.List[str] = pydantic.Field(
         ["hotkey", "data_hash", "encryption_payload", "prev_seed", "size", "counter"],
         title="Required Hash Fields",

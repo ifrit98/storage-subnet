@@ -12,6 +12,8 @@ import argparse
 import traceback
 import bittensor as bt
 
+from loguru import logger
+from pprint import pformat
 from functools import partial
 from traceback import print_exception
 from random import choice as random_choice
@@ -166,6 +168,7 @@ class neuron:
             port=self.config.database.port,
             db=self.config.database.index,
         )
+        self.db_semaphore = asyncio.Semaphore()
 
         # Init Weights.
         bt.logging.debug("loading", "moving_averaged_scores")
@@ -285,10 +288,10 @@ class neuron:
             responses (List[Response]): A list of response objects received from the nodes.
             rewards (torch.FloatTensor): A tensor containing the computed reward values.
         """
-
-        bt.logging.debug(f"Applying rewards: {rewards}")
-        bt.logging.debug(f"Reward shape: {rewards.shape}")
-        bt.logging.debug(f"UIDs: {uids}")
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Applying rewards: {rewards}")
+            bt.logging.debug(f"Reward shape: {rewards.shape}")
+            bt.logging.debug(f"UIDs: {uids}")
         scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
         bt.logging.debug(f"Scaled rewards: {scaled_rewards}")
 
@@ -307,17 +310,18 @@ class neuron:
         ) * self.moving_averaged_scores.to(self.device)
         bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
-    def update_index(self, synapse: protocol.Update):
+    def update_index(self, synapse: protocol.Update) -> protocol.Update:
         """
         Updates the validator's index with new data received from a synapse.
 
         Parameters:
         - synapse (protocol.Update): The synapse object containing the update information.
         """
-        data = self.get_metadata_from_hash(synapse.data_hash, synapse.hotkey)
+        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
+        bt.logging.debug(f"data retreived in update: {data}")
         entry = {
             k: v
-            for k, v in synapse.dict()
+            for k, v in synapse.dict().items()
             if k
             in [
                 "prev_seed",
@@ -326,30 +330,43 @@ class neuron:
                 "encryption_payload",
             ]
         }
+        bt.logging.debug(f"entry: {entry}")
+
+        # Update the index with the new data using a semaphore
+        # with self.db_semaphore:
         if not data:
+            bt.logging.debug(f"Updating index with new data...")
             # Add it to the index directly
             add_metadata_to_hotkey(
                 synapse.axon.hotkey, synapse.data_hash, entry, self.database
             )
+            synapse.updated = True
         else:
             # Check for conflicts
+            bt.logging.debug(f"checking for conflicts...")
             local_entry = json.loads(database.get(synapse.key))
             if local_entry["counter"] > synapse.counter:
+                bt.logging.debug(f"Local entry has a higher counter, skipping...")
                 # Do nothing, we have a newer or current version
-                return
+                synapse.updated = False
             else:
+                bt.logging.debug(f"Updating index with existing data...")
                 # Update the index to the latest data
                 update_metadata_for_data_hash(
                     synapse.axon.hotkey, synapse.data_hash, entry, self.database
                 )
+                synapse.updated = True
+        bt.logging.debug(f"Successfully updated index.")
+        return synapse
 
     async def broadcast(self, hotkey, data_hash, data):
         """
         Broadcasts updates to all validators on the network for creating or updating an index value.
 
         Parameters:
-        - lookup_key: The key associated with the data to broadcast.
-        - data: The data to be broadcast to other validators.
+        - hotkey: The key associated with the data to broadcast.
+        - data_hash: The hash of the data to broadcast.
+        - data: The metadata to be broadcast to other validators.
         """
         # Determine axons to query from metagraph
         vpermits = self.metagraph.validator_permit
@@ -366,6 +383,10 @@ class neuron:
         )[0]
         axons = [self.metagraph.axons[uid] for uid in query_uids]
 
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Broadcasting to uids: {query_uids}")
+            bt.logging.debug(f"Broadcasting to axons: {axons}")
+
         # Create synapse store
         synapse = protocol.Update(
             hotkey=hotkey,
@@ -375,6 +396,7 @@ class neuron:
             counter=data["counter"],
             encryption_payload=data["encryption_payload"],
         )
+        bt.logging.debug(f"Update synapse sending: {synapse}")
 
         # Send synapse to all validator axons
         responses = await self.dendrite(
@@ -382,6 +404,8 @@ class neuron:
             synapse,
             deserialize=False,
         )
+        if self.config.neurons.verbose:
+            bt.logging.debug(f"Responses update: {responses}")
 
         # TODO: Check the responses to ensure all validaors are updated
 
@@ -423,6 +447,7 @@ class neuron:
             best_uid="",
             best_hotkey="",
             rewards=[],
+            moving_averaged_scores=[],
         )
 
         start_time = time.time()
@@ -443,7 +468,7 @@ class neuron:
 
         # Convert to base64 for compactness
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
-        bt.logging.debug(f"b64 encrypted user data {b64_encrypted_data}")
+        bt.logging.debug(f"b64 encrypted user data {b64_encrypted_data[:24]}...")
 
         synapse = protocol.Store(
             encrypted_data=b64_encrypted_data,
@@ -499,7 +524,7 @@ class neuron:
                         "counter": 0,
                         "encryption_payload": encryption_payload,
                     }
-                    bt.logging.debug(f"Storing data {response_storage}")
+                    bt.logging.debug(f"Storing data {pformat(response_storage)}")
 
                     # Store in the database according to the data hash and the miner hotkey
                     add_metadata_to_hotkey(
@@ -535,8 +560,6 @@ class neuron:
 
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
-                all_failed_uids += failed_uids  # record these for the event
-
                 bt.logging.debug(f"Failed to store on uids: {failed_uids}")
                 uids = self.get_random_uids(k=len(failed_uids))
 
@@ -555,19 +578,23 @@ class neuron:
             event.best_uid = event.uids[best_index]
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
-        bt.logging.trace(f"Broadcasting update to all validators")
-        for hotkey, data in broadcast_params:
-            await self.broadcast(hotkey, data_hash, data)
+        # Update event log with moving averaged scores
+        event.moving_averaged_scores = self.moving_averaged_scores.tolist()
 
         # Log event
         bt.logging.debug("event:", str(event))
         if not self.config.neuron.dont_save_events:
-            logger.log("EVENTS", "events", **event)
+            # import pdb; pdb.set_trace()
+            logger.log("EVENTS", "events", **event.__dict__)
 
         # Log the event to wandb
         if not self.config.wandb.off:
             wandb_event = EventSchema.from_dict(event)
             self.wandb.log(asdict(wandb_event))
+
+        bt.logging.trace(f"Broadcasting update to all validators")
+        for hotkey, data in broadcast_params:
+            await self.broadcast(hotkey, data_hash, data)
 
         return any(event.successful)
 
@@ -592,7 +619,7 @@ class neuron:
         # Encrypt the data
         encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
 
-        self.store_encrypted_data(encrypted_data, encryption_payload)
+        return await self.store_encrypted_data(encrypted_data, encryption_payload)
 
     async def handle_challenge(
         self, uid: int
@@ -842,27 +869,27 @@ class neuron:
         self.step += 1
         bt.logging.info(f"forward step: {self.step}")
 
-        try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            await self.store_random_data()
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
+        # try:
+        # Store some data
+        bt.logging.info("initiating store data")
+        await self.store_random_data()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to store data with exception: {e}")
 
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            await self.challenge()
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     await self.challenge()
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_steps == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                await self.retrieve()
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        # if self.step % self.config.neuron.retrieve_epoch_steps == 0:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         await self.retrieve()
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")
