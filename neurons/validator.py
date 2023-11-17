@@ -275,7 +275,7 @@ class neuron:
                 k - len(candidate_uids),
             )
         uids = torch.tensor(random.sample(available_uids, k))
-        return uids
+        return [1,2,11]
 
     def apply_reward_scores(self, uids, responses, rewards):
         """
@@ -380,9 +380,10 @@ class neuron:
             vpermit_uids
             != self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
         ]
-        query_uids = torch.where(
+        query_idxs = torch.where(
             self.metagraph.S[vpermit_uids] > self.config.neuron.broadcast_stake_limit
         )[0]
+        query_uids = vpermit_uids[query_idxs]
         axons = [self.metagraph.axons[uid] for uid in query_uids]
 
         if self.config.neuron.verbose:

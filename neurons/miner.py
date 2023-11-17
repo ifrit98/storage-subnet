@@ -491,12 +491,13 @@ class miner:
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
-        bt.logging.debug(f"committer: {committer}")
-        bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
-        bt.logging.debug(f"c: {c}")
-        bt.logging.debug(f"m_val: {m_val}")
-        bt.logging.debug(f"r: {r}")
+        if self.config.miner.verbose:
+            bt.logging.debug(f"committer: {committer}")
+            bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
+            bt.logging.debug(f"c: {c}")
+            bt.logging.debug(f"m_val: {m_val}")
+            bt.logging.debug(f"r: {r}")
 
         # Store the data with the hash as the key in the filesystem
         data_hash = hash_data(encrypted_byte_data)
@@ -529,7 +530,8 @@ class miner:
         synapse.commitment_hash = str(m_val)
         bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
 
-        bt.logging.debug(f"returning synapse: {synapse}")
+        if self.config.miner.verbose:
+            bt.logging.debug(f"returning synapse: {synapse}")
         return synapse
 
     def challenge(

@@ -206,7 +206,7 @@ def add_args(cls, parser):
         "--neuron.broadcast_stake_limit",
         type=int,
         help="The minimum number of TAO allowed to broadcast index updates to validator with a vpermit.",
-        default=1000,
+        default=4096,
     )
     parser.add_argument(
         "--neuron.verbose",
