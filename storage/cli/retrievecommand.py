@@ -47,11 +47,11 @@ def get_hash_mapping(hash_file, filename):
 
 class RetrieveData:
     """
-    Executes the 'get' command to retrieve data from the Bittensor network using a specific data hash. 
+    Executes the 'get' command to retrieve data from the Bittensor network using a specific data hash.
     This command is crucial for users who wish to access data stored on the network using its unique identifier.
 
     Usage:
-    The command fetches the data associated with the provided hash by querying validator axons with sufficient stake. 
+    The command fetches the data associated with the provided hash by querying validator axons with sufficient stake.
     The retrieved data is decrypted using the wallet's private key and stored at a specified location.
 
     The command caters to users who need to access specific data from the network, ensuring a secure and efficient retrieval process.
@@ -70,7 +70,7 @@ class RetrieveData:
     >>> stcli retrieve get --data_hash "123abc"
 
     Note:
-    This command is essential for individuals and applications that require access to specific data from the Bittensor network. 
+    This command is essential for individuals and applications that require access to specific data from the Bittensor network.
     It emphasizes security through encryption and selective querying of validator axons.
     """
 
@@ -86,7 +86,9 @@ class RetrieveData:
         cli.config.storage_basepath = os.path.expanduser(cli.config.storage_basepath)
 
         if not os.path.exists(cli.config.storage_basepath):
-            print("generating filepath.. {}".format(cli.config.storage_basepath))
+            bt.logging.info(
+                "generating filepath: {}".format(cli.config.storage_basepath)
+            )
             os.makedirs(cli.config.storage_basepath)
         outpath = os.path.expanduser(cli.config.storage_basepath)
         outpath = os.path.join(outpath, cli.config.data_hash)

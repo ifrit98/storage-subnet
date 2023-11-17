@@ -74,16 +74,16 @@ def list_all_hashes(hash_file):
 
 class StoreData:
     """
-    Executes the 'put' command to store data from the local disk on the Bittensor network. 
+    Executes the 'put' command to store data from the local disk on the Bittensor network.
     This command is essential for users who wish to upload and store data securely on the network.
 
     Usage:
-    The command encrypts and sends the data located at the specified file path to the network. 
-    The data is encrypted using the wallet's private key, ensuring secure storage. 
-    After successful storage, a unique hash corresponding to the data is generated and saved, 
+    The command encrypts and sends the data located at the specified file path to the network.
+    The data is encrypted using the wallet's private key, ensuring secure storage.
+    After successful storage, a unique hash corresponding to the data is generated and saved,
     allowing for easy retrieval of the data in the future.
 
-    This command is particularly useful for users looking to leverage the decentralized nature of the 
+    This command is particularly useful for users looking to leverage the decentralized nature of the
     Bittensor network for secure data storage.
 
     Optional arguments:
@@ -99,7 +99,7 @@ class StoreData:
     >>> stcli store put --filepath "/path/to/data.txt"
 
     Note:
-    This command is vital for users who need to store data on the Bittensor network securely. 
+    This command is vital for users who need to store data on the Bittensor network securely.
     It provides a streamlined process for encrypting and uploading data, with an emphasis on security and data integrity.
     """
 
@@ -176,7 +176,7 @@ class StoreData:
                 if isinstance(response.data_hash, bytes)
                 else response.data_hash
             )
-            print("Data hash: {}".format(data_hash))
+            bt.logging.debug("Data hash: {}".format(data_hash))
             success = True
             break
 

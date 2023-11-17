@@ -86,14 +86,14 @@ def create_unified_table(data):
 
 class ListLocalHashes:
     """
-    Executes the 'list' command to display a table of hashes associated with data stored in the Bittensor network. 
+    Executes the 'list' command to display a table of hashes associated with data stored in the Bittensor network.
     This command is used to list and manage hashes that correspond to data available for retrieval from the network.
 
     Usage:
-    The command iterates through all wallets within the specified wallet path and aggregates hashes from each wallet's designated hash file. 
+    The command iterates through all wallets within the specified wallet path and aggregates hashes from each wallet's designated hash file.
     It then displays these hashes in a unified table format, listing the wallet name, filename, and the corresponding data hash.
 
-    The command is particularly useful for users who store and manage data on the Bittensor network, as it provides an organized view 
+    The command is particularly useful for users who store and manage data on the Bittensor network, as it provides an organized view
     of all available data hashes across different wallets.
 
     Optional arguments:
@@ -108,8 +108,8 @@ class ListLocalHashes:
     >>> stcli retrieve list --hash_basepath ~/.bittensor/hashes
 
     Note:
-    This command is an essential tool for users who interact with data on the Bittensor network, 
-    allowing them to track and access data hashes conveniently. It helps in maintaining an organized record 
+    This command is an essential tool for users who interact with data on the Bittensor network,
+    allowing them to track and access data hashes conveniently. It helps in maintaining an organized record
     of data hashes for various applications and wallets.
     """
 
