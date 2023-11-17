@@ -275,7 +275,7 @@ class neuron:
                 k - len(candidate_uids),
             )
         uids = torch.tensor(random.sample(available_uids, k))
-        return [1,2,11]
+        return uids
 
     def apply_reward_scores(self, uids, responses, rewards):
         """
@@ -872,27 +872,27 @@ class neuron:
         self.step += 1
         bt.logging.info(f"forward step: {self.step}")
 
-        # try:
-        # Store some data
-        bt.logging.info("initiating store data")
-        await self.store_random_data()
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to store data with exception: {e}")
+        try:
+        Store some data
+            bt.logging.info("initiating store data")
+            await self.store_random_data()
+        except Exception as e:
+            bt.logging.error(f"Failed to store data with exception: {e}")
 
-        # try:
-        #     # Challenge some data
-        #     bt.logging.info("initiating challenge")
-        #     await self.challenge()
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            await self.challenge()
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        # if self.step % self.config.neuron.retrieve_epoch_steps == 0:
-        #     try:
-        #         # Retrieve some data
-        #         bt.logging.info("initiating retrieve")
-        #         await self.retrieve()
-        #     except Exception as e:
-        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        if self.step % self.config.neuron.retrieve_epoch_steps == 0:
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                await self.retrieve()
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")
