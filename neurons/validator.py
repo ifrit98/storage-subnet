@@ -584,17 +584,6 @@ class neuron:
         # Update event log with moving averaged scores
         event.moving_averaged_scores = self.moving_averaged_scores.tolist()
 
-        # Log event
-        bt.logging.debug("event:", str(event))
-        if not self.config.neuron.dont_save_events:
-            # import pdb; pdb.set_trace()
-            logger.log("EVENTS", "events", **event.__dict__)
-
-        # Log the event to wandb
-        if not self.config.wandb.off:
-            wandb_event = EventSchema.from_dict(event)
-            self.wandb.log(asdict(wandb_event))
-
         bt.logging.trace(f"Broadcasting update to all validators")
         for hotkey, data in broadcast_params:
             await self.broadcast(hotkey, data_hash, data)
@@ -821,6 +810,24 @@ class neuron:
 
         bt.logging.debug(f"Retrieving data with hash: {data_hash}")
 
+        # Initialize event schema
+        event = EventSchema(
+            task_name="Retrieve",
+            successful=[],
+            completion_times=[],
+            task_status_messages=[],
+            task_status_codes=[],
+            block=self.subtensor.get_current_block(),
+            uids=[],
+            step_length=0.0,
+            best_uid=-1,
+            best_hotkey="",
+            rewards=[],
+            set_weights=[],
+        )
+
+        start_time = time.time()
+
         # Make sure we have the most up-to-date hotkey info
         self.metagraph.sync(lite=True)
 
@@ -854,8 +861,10 @@ class neuron:
         ).to(self.device)
 
         datas = []
-        for idx, response in enumerate(responses):
-            bt.logging.debug(f"response: {response}")
+        for idx, (uid, response) in enumerate(zip(uids, responses)):
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"response: {response}")
+
             try:
                 decoded_data = base64.b64decode(response.data)
             except Exception as e:
@@ -872,12 +881,20 @@ class neuron:
                 rewards[idx] = -1.0
                 continue
 
-            if not verify_retrieve_with_seed(response):
+            if not success:
                 bt.logging.error(f"data verification failed! {response}")
                 rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
                 continue  # skip trying to decode the data
             else:
                 rewards[idx] = 1.0
+
+            success = verify_retrieve_with_seed(response)
+            event.uids.append(uid)
+            event.successful.append(success)
+            event.completion_times.append(time.time() - start_time)
+            event.task_status_messages.append(response.dendrite.status_message)
+            event.task_status_codes.append(response.dendrite.status_code)
+            event.rewards.append(rewards[idx].item())
 
             try:
                 bt.logging.trace(f"Fetching AES payload from UID: {uids[idx]}")
@@ -909,6 +926,16 @@ class neuron:
             # Store some data
             bt.logging.info("initiating store data")
             event = await self.store_random_data()
+
+            # Log event
+            if not self.config.neuron.dont_save_events:
+                logger.log("EVENTS", "events", **event.__dict__)
+
+            # Log the event to wandb
+            if not self.config.wandb.off:
+                wandb_event = EventSchema.from_dict(event.__dict__)
+                self.wandb.log(asdict(wandb_event))
+
         except Exception as e:
             bt.logging.error(f"Failed to store data with exception: {e}")
 
@@ -916,6 +943,16 @@ class neuron:
             # Challenge some data
             bt.logging.info("initiating challenge")
             event = await self.challenge()
+
+            # Log event
+            if not self.config.neuron.dont_save_events:
+                logger.log("EVENTS", "events", **event.__dict__)
+
+            # Log the event to wandb
+            if not self.config.wandb.off:
+                wandb_event = EventSchema.from_dict(event.__dict__)
+                self.wandb.log(asdict(wandb_event))
+
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
 
@@ -923,7 +960,17 @@ class neuron:
             try:
                 # Retrieve some data
                 bt.logging.info("initiating retrieve")
-                await self.retrieve()
+                event = await self.retrieve()
+
+                # Log event
+                if not self.config.neuron.dont_save_events:
+                    logger.log("EVENTS", "events", **event.__dict__)
+
+                # Log the event to wandb
+                if not self.config.wandb.off:
+                    wandb_event = EventSchema.from_dict(event.__dict__)
+                    self.wandb.log(asdict(wandb_event))
+
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
 

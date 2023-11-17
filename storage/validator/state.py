@@ -28,6 +28,7 @@ from math import floor
 from typing import Callable, Any
 from functools import lru_cache, update_wrapper
 
+import storage
 import storage.validator as validator
 import bittensor as bt
 
@@ -77,8 +78,8 @@ def init_wandb(self, reinit=False):
     """Starts a new wandb run."""
     tags = [
         self.wallet.hotkey.ss58_address,
-        validator.__version__,
-        str(validator.__spec_version__),
+        storage.__version__,
+        str(storage.__spec_version__),
         f"netuid_{self.metagraph.netuid}",
     ]
 

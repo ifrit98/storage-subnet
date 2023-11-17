@@ -48,17 +48,17 @@ class EventSchema:
         """Converts a dictionary to an EventSchema object."""
 
         return EventSchema(
-            completions=event_dict["completions"],
+            task_name=event_dict["task_name"],
+            successful=event_dict["successful"],
             completion_times=event_dict["completion_times"],
             task_status_messages=event_dict["task_status_messages"],
             task_status_codes=event_dict["task_status_codes"],
-            task_name=event_dict["task_name"],
             block=event_dict["block"],
             uids=event_dict["uids"],
-            prompt=event_dict["prompt"],
             step_length=event_dict["step_length"],
             best_uid=event_dict["best_uid"],
             best_hotkey=event_dict["best_hotkey"],
             rewards=event_dict["rewards"],
-            set_weights=None,
+            set_weights=event_dict["set_weights"],
+            moving_averaged_scores=event_dict["moving_averaged_scores"],
         )
