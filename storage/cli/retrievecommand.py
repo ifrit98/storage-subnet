@@ -46,6 +46,34 @@ def get_hash_mapping(hash_file, filename):
 
 
 class RetrieveData:
+    """
+    Executes the 'get' command to retrieve data from the Bittensor network using a specific data hash. 
+    This command is crucial for users who wish to access data stored on the network using its unique identifier.
+
+    Usage:
+    The command fetches the data associated with the provided hash by querying validator axons with sufficient stake. 
+    The retrieved data is decrypted using the wallet's private key and stored at a specified location.
+
+    The command caters to users who need to access specific data from the network, ensuring a secure and efficient retrieval process.
+
+    Optional arguments:
+    - --data_hash (str): The unique hash of the data to be retrieved.
+    - --hash_basepath (str): The base path where hash files are stored. Defaults to '~/.bittensor/hashes'.
+    - --stake_limit (float): The stake limit for excluding validator axons from the query.
+    - --storage_basepath (str): The path to store the retrieved data. Defaults to '~/.bittensor/storage'.
+
+    The resulting output includes:
+    - Success or failure message regarding data retrieval.
+    - Location where the retrieved data is saved (if successful).
+
+    Example usage:
+    >>> stcli retrieve get --data_hash "123abc"
+
+    Note:
+    This command is essential for individuals and applications that require access to specific data from the Bittensor network. 
+    It emphasizes security through encryption and selective querying of validator axons.
+    """
+
     @staticmethod
     def run(cli):
         r"""Retrieve data from the Bittensor network for the given data_hash."""

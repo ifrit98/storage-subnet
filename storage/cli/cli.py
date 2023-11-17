@@ -181,7 +181,6 @@ class cli:
         if config.command in COMMANDS:
             command = config.command
             command_data = COMMANDS[command]
-            # import pdb; pdb.set_trace()
             if isinstance(command_data, dict):
                 if config["subcommand"] != None:
                     command_data["commands"][config["subcommand"]].check_config(config)
