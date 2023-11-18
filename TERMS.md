@@ -4,7 +4,7 @@
 
 #### Introduction
 
-Welcome to [Your Decentralized Storage Network] (“Service”). These Terms of Service (“Terms”) govern your access to and use of our services, including any applications, websites, software, and content provided on or through [Your Service URL]. By using our Service, you agree to be bound by these Terms. If you do not agree to these Terms, do not use our Service.
+Welcome to Philanthropic storage (“Service”). These Terms of Service (“Terms”) govern your access to and use of our services, including any applications, websites, software, and content provided on or through [Your Service URL]. By using our Service, you agree to be bound by these Terms. If you do not agree to these Terms, do not use our Service.
 
 #### 1. Acceptance of Terms
 
@@ -46,4 +46,4 @@ These Terms shall be governed and construed in accordance with the laws of your 
 
 #### 10. Contact Us
 
-If you have any questions about these Terms, please contact us at [philtensor@gmail.com].
+If you have any questions about these Terms, please contact us at [philanthropic21@gmail.com].
