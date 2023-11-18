@@ -123,7 +123,6 @@ def get_sorted_response_times(uids, responses):
         for idx, response in enumerate(responses)
     ]
     # Sorting in ascending order since lower process time is better
-    bt.logging.debug(f"axon_times: {axon_times}")
     sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
     bt.logging.debug(f"sorted_axon_times: {sorted_axon_times}")
     return sorted_axon_times

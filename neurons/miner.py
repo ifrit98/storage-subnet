@@ -604,7 +604,7 @@ class miner:
         # update the commitment seed challenge hash in storage
         decoded["prev_seed"] = new_seed.decode("utf-8")
         self.database.set(synapse.challenge_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated miner storage: {decoded}")
+        bt.logging.debug(f"udpated miner storage: {pformat(decoded)}")
 
         # Chunk the data according to the provided chunk_size
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
@@ -696,7 +696,7 @@ class miner:
         # store new seed
         decoded["prev_seed"] = synapse.seed
         self.database.set(synapse.data_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated retrieve miner storage: {decoded}")
+        bt.logging.debug(f"udpated retrieve miner storage: {pformat(decoded)}")
 
         # Return base64 data
         synapse.data = base64.b64encode(encrypted_data_bytes)

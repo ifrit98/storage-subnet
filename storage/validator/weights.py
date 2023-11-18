@@ -22,7 +22,7 @@ import wandb
 import torch
 import bittensor as bt
 from storage.validator.state import ttl_get_block
-import storage.validator as validator
+from storage import __spec_version__ as spec_version
 
 
 def should_set_weights(self) -> bool:
@@ -65,7 +65,7 @@ def set_weights(self):
         uids=processed_weight_uids,
         weights=processed_weights,
         wait_for_finalization=False,
-        version_key=validator.__spec_version__,
+        version_key=spec_version,
     )
     if result is True:
         bt.logging.info("set_weights on chain successfully!")

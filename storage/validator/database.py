@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import bittensor as bt
 
 
 # Function to add metadata to a hash in Redis
@@ -34,7 +35,9 @@ def add_metadata_to_hotkey(hotkey, data_hash, metadata, database):
     metadata_json = json.dumps(metadata)
     # Use HSET to associate the data hash with the hotkey
     database.hset(hotkey, data_hash, metadata_json)
-    print(f"Associated data hash {data_hash} with hotkey {hotkey}.")
+    bt.logging.debug(
+        f"Associated data hash {data_hash} and metadata with hotkey {hotkey}."
+    )
 
 
 def get_all_data_for_hotkey(hotkey, database, return_hashes=False):
@@ -76,7 +79,9 @@ def update_metadata_for_data_hash(hotkey, data_hash, new_metadata, database):
     new_metadata_json = json.dumps(new_metadata)
     # Update the field in the hash with the new metadata
     database.hset(hotkey, data_hash, new_metadata_json)
-    print(f"Updated metadata for data hash {data_hash} under hotkey {hotkey}.")
+    bt.logging.debug(
+        f"Updated metadata for data hash {data_hash} under hotkey {hotkey}."
+    )
 
 
 def get_metadata_from_hash(hotkey, data_hash, database):
@@ -98,7 +103,7 @@ def get_metadata_from_hash(hotkey, data_hash, database):
         metadata = json.loads(metadata_json)
         return metadata
     else:
-        print(f"No metadata found for {data_hash} in hash {hotkey}.")
+        bt.logging.debug(f"No metadata found for {data_hash} in hash {hotkey}.")
         return None
 
 

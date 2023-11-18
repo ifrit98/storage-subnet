@@ -25,6 +25,7 @@ import math
 import hashlib as rpccheckhealth
 
 from math import floor
+from loguru import logger
 from typing import Callable, Any
 from functools import lru_cache, update_wrapper
 
@@ -237,3 +238,14 @@ def load_state(self):
         )
     except Exception as e:
         bt.logging.warning(f"Failed to load model with error: {e}")
+
+
+def log_event(self, event):
+    # Log event
+    if not self.config.neuron.dont_save_events:
+        logger.log("EVENTS", "events", **event.__dict__)
+
+    # Log the event to wandb
+    if not self.config.wandb.off:
+        wandb_event = EventSchema.from_dict(event.__dict__)
+        self.wandb.log(asdict(wandb_event))

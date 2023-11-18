@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import base64
+from pprint import pformat
 
 from ..shared.ecc import (
     hash_data,
@@ -59,7 +60,7 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
 def verify_challenge_with_seed(synapse, verbose=False):
     if synapse.commitment_hash == None or synapse.commitment_proof == None:
         bt.logging.error(
-            f"Missing commitment hash or proof for synapse: {synapse.dendrite.dict()}."
+            f"Missing commitment hash or proof for synapse: {pformat(synapse.dendrite.dict())}."
         )
         return False
 
@@ -67,7 +68,7 @@ def verify_challenge_with_seed(synapse, verbose=False):
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
-        bt.logging.error(f"synapse {synapse.dendrite.dict()}")
+        bt.logging.error(f"synapse {pformat(synapse.dendrite.dict())}")
         return False
 
     # TODO: Add checks and defensive programming here to handle all types
@@ -83,8 +84,11 @@ def verify_challenge_with_seed(synapse, verbose=False):
         hash_data(base64.b64decode(synapse.data_chunk) + str(synapse.seed).encode()),
         synapse.randomness,
     ):
-        bt.logging.error(f"Opening commitment failed")
-        bt.logging.error(f"synapse {synapse}")
+        if verbose:
+            bt.logging.error(f"Opening commitment failed!")
+            bt.logging.error(f"commitment: {synapse.commitment}")
+            bt.logging.error(f"seed      : {synapse.seed}")
+            bt.logging.error(f"synapse   : {pformat(synapse.dendrite.dict())}")
         return False
 
     if not validate_merkle_proof(
@@ -92,25 +96,36 @@ def verify_challenge_with_seed(synapse, verbose=False):
         ecc_point_to_hex(commitment),
         synapse.merkle_root,
     ):
-        bt.logging.error(f"Merkle proof validation failed")
-        bt.logging.error(f"synapse {synapse.dendrite.dict()}")
+        if verbose:
+            bt.logging.error(f"Merkle proof validation failed!")
+            bt.logging.error(f"commitment  : {synapse.commitment}")
+            bt.logging.error(f"merkle root : {merkle_root}")
+            bt.logging.error(f"merkle proof: {pformat(merkle_proof)}")
+            bt.logging.error(f"synapse     : {pformat(synapse.dendrite.dict())}")
         return False
 
     return True
 
 
-def verify_store_with_seed(synapse):
+def verify_store_with_seed(synapse, verbose=False):
     # TODO: Add checks and defensive programming here to handle all types
     # (bytes, str, hex, ecc point, etc)
-    decoded_data = base64.b64decode(synapse.encrypted_data)
+    try:
+        decoded_data = base64.b64decode(synapse.encrypted_data)
+    except Exception as e:
+        bt.logging.error(f"Could not decode data with error: {e}")
+        return False
+
     seed_value = str(synapse.seed).encode()
     reconstructed_hash = hash_data(decoded_data + seed_value)
 
-    # TODO: make these types the same:
     # e.g. send synapse.commitment_hash as an int for consistency
     if synapse.commitment_hash != str(reconstructed_hash):
-        bt.logging.error(f"Initial commitment hash does not match hash(data + seed)")
-        bt.logging.error(f"synapse: {synapse.dendrite.dict()}")
+        if verbose:
+            bt.logging.error(f"Initial commitment hash != hash(data + seed)")
+            bt.logging.error(f"commitment hash   : {commitment_hash}")
+            bt.logging.error(f"reconstructed hash: {reconstructed_hash}")
+            bt.logging.error(f"synapse           : {synapse.dendrite.dict()}")
         return False
 
     committer = ECCommitment(
@@ -136,6 +151,11 @@ def verify_retrieve_with_seed(synapse, verbose=False):
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
+        if verboses:
+            bt.logging.error(f"synapse {synapse.dendrite.dict()}")
+            bt.logging.error(f"commitment_proof: {synapse.commitment_proof}")
+            bt.logging.error(f"seed            : {synapse.seed}")
+            bt.logging.error(f"commitment_hash : {synapse.commitment_hash}")
         return False
 
     return True

@@ -74,6 +74,7 @@ from storage.validator.state import (
     save_state,
     init_wandb,
     ttl_get_block,
+    log_event,
 )
 
 from storage.validator.weights import (
@@ -330,7 +331,7 @@ class neuron:
                 "encryption_payload",
             ]
         }
-        bt.logging.debug(f"entry: {entry}")
+        bt.logging.debug(f"entry: {pformat(entry)}")
 
         # Update the index with the new data
         # with self.db_semaphore:
@@ -399,7 +400,7 @@ class neuron:
             counter=data["counter"],
             encryption_payload=data["encryption_payload"],
         )
-        bt.logging.debug(f"Update synapse sending: {synapse}")
+        bt.logging.debug(f"Update synapse sending: {pformat(synapse)}")
 
         # Send synapse to all validator axons
         responses = await self.dendrite(
@@ -626,7 +627,8 @@ class neuron:
         - Tuple[bool, protocol.Challenge]: A tuple containing the verification result and the challenge.
         """
         hotkey = self.metagraph.hotkeys[uid]
-        bt.logging.debug(f"Handling challenge from hotkey: {hotkey}")
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Handling challenge from hotkey: {hotkey}")
 
         keys = self.database.hkeys(hotkey)
         if keys == []:
@@ -928,13 +930,7 @@ class neuron:
             event = await self.store_random_data()
 
             # Log event
-            if not self.config.neuron.dont_save_events:
-                logger.log("EVENTS", "events", **event.__dict__)
-
-            # Log the event to wandb
-            if not self.config.wandb.off:
-                wandb_event = EventSchema.from_dict(event.__dict__)
-                self.wandb.log(asdict(wandb_event))
+            log_event(self, event)
 
         except Exception as e:
             bt.logging.error(f"Failed to store data with exception: {e}")
@@ -945,13 +941,7 @@ class neuron:
             event = await self.challenge()
 
             # Log event
-            if not self.config.neuron.dont_save_events:
-                logger.log("EVENTS", "events", **event.__dict__)
-
-            # Log the event to wandb
-            if not self.config.wandb.off:
-                wandb_event = EventSchema.from_dict(event.__dict__)
-                self.wandb.log(asdict(wandb_event))
+            log_event(self, event)
 
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
@@ -963,13 +953,7 @@ class neuron:
                 event = await self.retrieve()
 
                 # Log event
-                if not self.config.neuron.dont_save_events:
-                    logger.log("EVENTS", "events", **event.__dict__)
-
-                # Log the event to wandb
-                if not self.config.wandb.off:
-                    wandb_event = EventSchema.from_dict(event.__dict__)
-                    self.wandb.log(asdict(wandb_event))
+                log_event(self, event)
 
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
