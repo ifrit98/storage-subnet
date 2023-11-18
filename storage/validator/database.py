@@ -156,3 +156,41 @@ def get_all_hotkeys_for_data_hash(data_hash, database):
             hotkeys.append(hotkey)
 
     return hotkeys
+
+
+def update_ranking_data(hotkey, rankings, database):
+    """
+    Updates the ranking data for a specific hotkey.
+
+    Parameters:
+        hotkey (str): The key representing the hotkey.
+        rankings (dict): The new ranking data to associate with the hotkey.
+        database (redis.Redis): The Redis client instance.
+    """
+    # Serialize the new ranking data as a JSON string
+    rankings_json = json.dumps(rankings)
+    # Update the field in the hash with the new ranking data
+    database.hset(hotkey, "rankings", rankings_json)
+    bt.logging.debug(f"Updated ranking data for hotkey {hotkey}.")
+
+
+def retrieve_ranking_data(hotkey, database):
+    """
+    Retrieves ranking data from a hash in Redis for the given hotkey.
+
+    Parameters:
+        hotkey (str): The key representing the hotkey.
+        databse (redis.Redis): The Redis client instance.
+
+    Returns:
+        The deserialized ranking data as a dictionary, or None if not found.
+    """
+    # Get the JSON string from Redis
+    rankings_json = database.hget(hotkey, "rankings")
+    if rankings_json:
+        # Deserialize the JSON string to a Python dictionary
+        rankings = json.loads(rankings_json)
+        return rankings
+    else:
+        bt.logging.debug(f"No ranking data found for {hotkey}.")
+        return None
