@@ -6,6 +6,8 @@ Subnet 21 implements a novel, multi-layered zero-knowledge interactive proof-of-
 
 We consider this system to be an important stepping stone so that bittensor can fulfill it's mission of democratizing intelligence, and a decentralized AWS platform is a key brick in this wall. 
 
+**NOTICE** Using this software, you must implicitly agree to the Terms and Agreements provided in [this](TERMS.md) document.
+
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
 # Table of Contents for Subnet 21 Documentation
