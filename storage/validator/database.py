@@ -220,11 +220,11 @@ def register_miner(ss58_address, database):
 
 def get_tier_factor(ss58_address, database):
     tier = database.hget(f"stats:{ss58_address}", "tier")
-    if tier == "Diamond":
+    if tier == b"Diamond":
         return DIAMOND_TIER_REWARD_FACTOR
-    elif tier == "Gold":
+    elif tier == b"Gold":
         return GOLD_TIER_REWARD_FACTOR
-    elif tier == "Silver":
+    elif tier == b"Silver":
         return SILVER_TIER_REWARD_FACTOR
     else:
         return BRONZE_TIER_REWARD_FACTOR

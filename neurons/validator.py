@@ -189,13 +189,13 @@ class neuron:
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            # self.axon.attach(
-            #     forward_fn=self.update_index,
-            # ).attach(
-            #     forward_fn=self.retrieve_user_data,
-            # ).attach(
-            #     forward_fn=self.store_user_data,
-            # )
+            self.axon.attach(
+                forward_fn=self.update_index,
+            ).attach(
+                forward_fn=self.retrieve_user_data,
+            ).attach(
+                forward_fn=self.store_user_data,
+            )
 
             try:
                 self.subtensor.serve_axon(
@@ -752,10 +752,15 @@ class neuron:
         uids = self.get_random_uids(
             k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
         )
+        responses = []
         for uid in uids:
-            tasks.append(asyncio.create_task(self.handle_challenge(uid)))
+            response = await self.handle_challenge(uid)
+            responses.append(response)
+        #     tasks.append(asyncio.create_task(self.handle_challenge(uid)))
 
-        responses = await asyncio.gather(*tasks)
+        # bt.logging.debug(f"Tasks appended: {tasks}")
+        # responses = await asyncio.gather(*tasks)
+
         if self.config.neuron.verbose:
             bt.logging.debug(f"Challenge repsonses: {responses}")
 
@@ -770,7 +775,7 @@ class neuron:
                     f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
                 )
 
-            hotkey = self.metagraph.hotkeys[uid]
+            hotkey = self.hotkeys[uid]
 
             # Update the challenge statistics
             update_statistics(
@@ -785,12 +790,12 @@ class neuron:
             rewards[idx] = 1.0 * tier_factor if verified else -1.0
 
             # Log the event data for this specific challenge
-            event.uids.append(uid)
+            event.uids.append(uid.item())
             event.successful.append(verified)
             event.completion_times.append(response[0].dendrite.process_time)
             event.task_status_messages.append(response[0].dendrite.status_message)
             event.task_status_codes.append(response[0].dendrite.status_code)
-            event.rewards.append(rewards[idx])
+            event.rewards.append(rewards[idx].item())
 
         # Calculate the total step length for all challenges
         event.step_length = time.time() - start_time
@@ -1004,16 +1009,18 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to store data with exception: {e}")
 
-        # try:
-        #     # Challenge some data
-        #     bt.logging.info("initiating challenge")
-        #     event = await self.challenge()
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            event = await self.challenge()
+            bt.logging.debug(f"CHALLENGE EVENT {event}")
 
-        #     # Log event
-        #     log_event(self, event)
+            # Log event
+            # import pdb; pdb.set_trace()
+            log_event(self, event)  # TODO: THIS CAUSES A BUS ERROR...
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
 
         if self.step % self.config.neuron.retrieve_epoch_length == 0:
             try:
