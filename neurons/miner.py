@@ -624,7 +624,7 @@ class miner:
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        bt.logging.debug(f"merkle_tree: {pformt(merkle_tree)}")
+        bt.logging.debug(f"merkle_tree: {pformat(merkle_tree)}")
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
