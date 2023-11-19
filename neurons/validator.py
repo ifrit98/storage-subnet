@@ -950,6 +950,9 @@ class neuron:
             if self.config.neuron.verbose:
                 bt.logging.trace(f"STORE EVENT LOG: {event}")
 
+            if not self.config.wandb.off:
+                self.wandb.log(stats)
+
             # Log event
             log_event(self, event)
 
@@ -963,6 +966,9 @@ class neuron:
 
             if self.config.neuron.verbose:
                 bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
+
+            if not self.config.wandb.off:
+                self.wandb.log(stats)
 
             # Log event
             log_event(self, event)
@@ -984,6 +990,9 @@ class neuron:
                 # Log event
                 log_event(self, event)
 
+                if not self.config.wandb.off:
+                    self.wandb.log(stats)
+
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
@@ -992,6 +1001,19 @@ class neuron:
                 # Compute tiers
                 bt.logging.info("Computing tiers")
                 await compute_all_tiers(self.database)
+
+                # Fetch miner statistics and usage data.
+                stats = {
+                    key.decode("utf-8").split(":")[-1]: {
+                        k.decode("utf-8"): v.decode("utf-8")
+                        for k, v in self.database.hgetall(key).items()
+                    }
+                    for key in self.database.scan_iter(f"stats:*")
+                }
+
+                # Log the statistics event to wandb.
+                if not self.config.wandb.off:
+                    self.wandb.log(stats)
 
             except Exception as e:
                 bt.logging.error(f"Failed to compute tiers with exception: {e}")

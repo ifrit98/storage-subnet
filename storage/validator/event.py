@@ -18,7 +18,12 @@
 
 import bittensor as bt
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict
+
+
+@dataclass
+class MinerStatistics:
+    statistics: Dict[str, Dict[str, str]]
 
 
 @dataclass
