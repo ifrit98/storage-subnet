@@ -279,6 +279,10 @@ class miner:
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
+        if synapse.data_hash in safe_key_search(self.database, "*"):
+            # Ignore requests to overwrite existing data
+            bt.logging.trace(f"Blacklisting existing data {synapse.data_hash}")
+            return True, "Data already in storage!"
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
@@ -622,7 +626,7 @@ class miner:
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        bt.logging.debug(f"merkle_tree: {merkle_tree}")
+        bt.logging.debug(f"merkle_tree: {pformt(merkle_tree)}")
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]

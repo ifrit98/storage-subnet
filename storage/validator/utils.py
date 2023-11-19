@@ -17,7 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import math
+import torch
 import numpy as np
 from typing import Dict, List, Any, Union, Optional, Tuple
 
@@ -97,65 +97,6 @@ def get_random_chunksize(minsize: int = 24, maxsize: int = 512) -> int:
     return random.randint(minsize, maxsize)
 
 
-def get_sorted_response_times(uids, responses):
-    """
-    Sorts a list of axons based on their response times.
-
-    This function pairs each uid with its corresponding axon's response time,
-    and then sorts this list in ascending order. Lower response times are considered better.
-
-    Args:
-        uids (List[int]): List of unique identifiers for each axon.
-        responses (List[Response]): List of Response objects corresponding to each axon.
-
-    Returns:
-        List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
-
-    Example:
-        >>> get_sorted_response_times([1, 2, 3], [response1, response2, response3])
-        [(2, 0.1), (1, 0.2), (3, 0.3)]
-    """
-    axon_times = [
-        (
-            uids[idx],
-            response.axon.process_time if response.axon.process_time != None else 100,
-        )
-        for idx, response in enumerate(responses)
-    ]
-    # Sorting in ascending order since lower process time is better
-    sorted_axon_times = sorted(axon_times, key=lambda x: x[1])
-    bt.logging.debug(f"sorted_axon_times: {sorted_axon_times}")
-    return sorted_axon_times
-
-
-def scale_rewards_by_response_time(uids, responses, rewards):
-    sorted_axon_times = get_sorted_response_times(uids, responses)
-
-    # Extract only the process times
-    process_times = [proc_time for _, proc_time in sorted_axon_times]
-
-    # Find min and max values for normalization, avoid division by zero
-    min_time = min(process_times)
-    max_time = max(process_times) if max(process_times) > min_time else min_time + 1
-
-    # Normalize these times to a scale of 0 to 1 (inverted)
-    normalized_scores = [
-        (max_time - proc_time) / (max_time - min_time) for proc_time in process_times
-    ]
-
-    # Create a mapping from uid to its normalized score
-    uid_to_normalized_score = {
-        uid: normalized_score
-        for (uid, _), normalized_score in zip(sorted_axon_times, normalized_scores)
-    }
-
-    # Scale the rewards by these normalized scores
-    for i, uid in enumerate(uids):
-        rewards[i] += rewards[i] * uid_to_normalized_score.get(uid, 0)
-
-    return rewards
-
-
 def check_uid_availability(
     metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
 ) -> bool:
@@ -176,6 +117,41 @@ def check_uid_availability(
             return False
     # Available otherwise.
     return True
+
+
+def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
+    """Returns k available random uids from the metagraph.
+    Args:
+        k (int): Number of uids to return.
+        exclude (List[int]): List of uids to exclude from the random sampling.
+    Returns:
+        uids (torch.LongTensor): Randomly sampled available uids.
+    Notes:
+        If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
+    """
+    candidate_uids = []
+    avail_uids = []
+
+    for uid in range(self.metagraph.n.item()):
+        uid_is_available = check_uid_availability(
+            self.metagraph, uid, self.config.neuron.vpermit_tao_limit
+        )
+        uid_is_not_excluded = exclude is None or uid not in exclude
+
+        if uid_is_available:
+            avail_uids.append(uid)
+            if uid_is_not_excluded:
+                candidate_uids.append(uid)
+
+    # Check if candidate_uids contain enough for querying, if not grab all avaliable uids
+    available_uids = candidate_uids
+    if len(candidate_uids) < k:
+        available_uids += random.sample(
+            [uid for uid in avail_uids if uid not in candidate_uids],
+            k - len(candidate_uids),
+        )
+    uids = torch.tensor(random.sample(available_uids, k))
+    return [1, 2, 3, 4, 6]  # uids.tolist()
 
 
 def select_subset_uids(uids: List[int], N: int):

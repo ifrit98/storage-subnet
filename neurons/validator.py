@@ -47,8 +47,8 @@ from storage.validator.utils import (
     make_random_file,
     get_random_chunksize,
     select_subset_uids,
-    scale_rewards_by_response_time,
     check_uid_availability,
+    get_random_uids,
 )
 
 from storage.validator.encryption import (
@@ -61,7 +61,6 @@ from storage.validator.verify import (
     verify_challenge_with_seed,
     verify_retrieve_with_seed,
 )
-
 
 from storage.validator.config import config, check_config, add_args
 
@@ -77,6 +76,8 @@ from storage.validator.state import (
     log_event,
 )
 
+from storage.validator.reward import apply_reward_scores
+
 from storage.validator.weights import (
     should_set_weights,
     set_weights,
@@ -89,9 +90,12 @@ from storage.validator.database import (
     get_all_data_hashes,
     get_all_hotkeys_for_data_hash,
     update_metadata_for_data_hash,
+)
+
+from storage.validator.bonding import (
+    miner_is_registered,
     update_statistics,
     get_tier_factor,
-    miner_is_registered,
     compute_all_tiers,
 )
 
@@ -189,13 +193,13 @@ class neuron:
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            self.axon.attach(
-                forward_fn=self.update_index,
-            ).attach(
-                forward_fn=self.retrieve_user_data,
-            ).attach(
-                forward_fn=self.store_user_data,
-            )
+            # self.axon.attach(
+            #     forward_fn=self.update_index,
+            # ).attach(
+            #     forward_fn=self.retrieve_user_data,
+            # ).attach(
+            #     forward_fn=self.store_user_data,
+            # )
 
             try:
                 self.subtensor.serve_axon(
@@ -246,75 +250,6 @@ class neuron:
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
-    def get_random_uids(
-        self, k: int, exclude: typing.List[int] = None
-    ) -> torch.LongTensor:
-        """Returns k available random uids from the metagraph.
-        Args:
-            k (int): Number of uids to return.
-            exclude (List[int]): List of uids to exclude from the random sampling.
-        Returns:
-            uids (torch.LongTensor): Randomly sampled available uids.
-        Notes:
-            If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
-        """
-        candidate_uids = []
-        avail_uids = []
-
-        for uid in range(self.metagraph.n.item()):
-            uid_is_available = check_uid_availability(
-                self.metagraph, uid, self.config.neuron.vpermit_tao_limit
-            )
-            uid_is_not_excluded = exclude is None or uid not in exclude
-
-            if uid_is_available:
-                avail_uids.append(uid)
-                if uid_is_not_excluded:
-                    candidate_uids.append(uid)
-
-        # Check if candidate_uids contain enough for querying, if not grab all avaliable uids
-        available_uids = candidate_uids
-        if len(candidate_uids) < k:
-            available_uids += random.sample(
-                [uid for uid in avail_uids if uid not in candidate_uids],
-                k - len(candidate_uids),
-            )
-        uids = torch.tensor(random.sample(available_uids, k))
-        return uids
-
-    def apply_reward_scores(self, uids, responses, rewards):
-        """
-        Adjusts the moving average scores for a set of UIDs based on their response times and reward values.
-
-        This should reflect the distribution of axon response times (minmax norm)
-
-        Parameters:
-            uids (List[int]): A list of UIDs for which rewards are being applied.
-            responses (List[Response]): A list of response objects received from the nodes.
-            rewards (torch.FloatTensor): A tensor containing the computed reward values.
-        """
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Applying rewards: {rewards}")
-            bt.logging.debug(f"Reward shape: {rewards.shape}")
-            bt.logging.debug(f"UIDs: {uids}")
-        scaled_rewards = scale_rewards_by_response_time(uids, responses, rewards)
-        bt.logging.debug(f"Scaled rewards: {scaled_rewards}")
-
-        # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
-        # shape: [ metagraph.n ]
-        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, torch.tensor(uids).to(self.device), scaled_rewards
-        ).to(self.device)
-        bt.logging.debug(f"Scattered rewards: {scattered_rewards}")
-
-        # Update moving_averaged_scores with rewards produced by this step.
-        # shape: [ metagraph.n ]
-        alpha: float = self.config.neuron.moving_average_alpha
-        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-            1 - alpha
-        ) * self.moving_averaged_scores.to(self.device)
-        bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
-
     async def update_index(self, synapse: protocol.Update) -> protocol.Update:
         """
         Updates the validator's index with new data received from a synapse.
@@ -326,7 +261,7 @@ class neuron:
         bt.logging.debug(f"data retreived in update: {data}")
         entry = {
             k: v
-            for k, v in synapse.dict().items()
+            for k, v in synapse.dict()
             if k
             in [
                 "prev_seed",
@@ -404,7 +339,8 @@ class neuron:
             counter=data["counter"],
             encryption_payload=data["encryption_payload"],
         )
-        bt.logging.debug(f"Update synapse sending: {pformat(synapse)}")
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"Update synapse sending: {pformat(synapse.dict())}")
 
         # Send synapse to all validator axons
         responses = await self.dendrite(
@@ -487,10 +423,12 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = self.get_random_uids(k=self.config.neuron.store_redundancy)
+        uids = get_random_uids(self, k=self.config.neuron.store_redundancy)
 
         broadcast_params = []
         axons = [self.metagraph.axons[uid] for uid in uids]
+        # TODO: Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
+        # before sending another storage request (cap them, do not allow higher than tier allow)
         failed_uids = [None]
 
         retries = 0
@@ -577,12 +515,14 @@ class neuron:
                 bt.logging.debug(f"Store responses round {retries}: {responses}")
 
             bt.logging.trace(f"Applying store rewards for retry # {retries}")
-            self.apply_reward_scores(uids, responses, rewards)
+            apply_reward_scores(
+                self, uids, responses, rewards, timeout=self.config.neuron.store_timeout
+            )
 
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
                 bt.logging.debug(f"Failed to store on uids: {failed_uids}")
-                uids = self.get_random_uids(k=len(failed_uids))
+                uids = get_random_uids(self, k=len(failed_uids))
 
                 bt.logging.debug(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
@@ -694,9 +634,12 @@ class neuron:
             )
             chunk_size = 0
 
-        bt.logging.debug(f"chunk size {chunk_size}")
         num_chunks = data["size"] // chunk_size
-        bt.logging.debug(f"num chunks {num_chunks}")
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"chunk size {chunk_size}")
+            bt.logging.debug(f"num chunks {num_chunks}")
+
+        # Setup new Common-Reference-String for this challenge
         g, h = setup_CRS()
 
         synapse = protocol.Challenge(
@@ -749,8 +692,8 @@ class neuron:
 
         start_time = time.time()
         tasks = []
-        uids = self.get_random_uids(
-            k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
+        uids = get_random_uids(
+            self, k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
         )
         responses = []
         for uid in uids:
@@ -783,10 +726,10 @@ class neuron:
 
             # Apply reward for this challenge
             tier_factor = get_tier_factor(hotkey, self.database)
-            rewards[idx] = 1.0 * tier_factor if verified else -1.0
+            rewards[idx] = 1.0 * tier_factor if verified else -1.0 * tier_factor
 
             # Log the event data for this specific challenge
-            event.uids.append(uid.item())
+            event.uids.append(uid)
             event.successful.append(verified)
             event.completion_times.append(response[0].dendrite.process_time)
             event.task_status_messages.append(response[0].dendrite.status_message)
@@ -798,7 +741,9 @@ class neuron:
 
         responses = [response[0] for (verified, response) in responses]
         bt.logging.trace("Applying challenge rewards")
-        self.apply_reward_scores(uids, responses, rewards)
+        apply_reward_scores(
+            self, uids, responses, rewards, timeout=self.config.neuron.challenge_timeout
+        )
 
         # Determine the best UID based on rewards
         if event.rewards:
@@ -874,6 +819,8 @@ class neuron:
             hotkey = (
                 hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
             )  # ensure str
+            if hotkey == self.wallet.hotkey.ss58_address:
+                continue  # skip querying yourself
             uid = self.metagraph.hotkeys.index(hotkey)
             axons_to_query.append(self.metagraph.axons[uid])
             uids.append(uid)
@@ -980,7 +927,9 @@ class neuron:
                 )
 
         bt.logging.trace("Applying retrieve rewards")
-        self.apply_reward_scores(uids, responses, rewards)
+        apply_reward_scores(
+            self, uids, responses, rewards, timeout=self.config.neuron.retrieve_timeout
+        )
 
         # Determine the best UID based on rewards
         if event.rewards:
@@ -991,13 +940,15 @@ class neuron:
         yield event  # finally yield the event
 
     async def forward(self) -> torch.Tensor:
-        self.step += 1
         bt.logging.info(f"forward step: {self.step}")
 
         try:
             # Store some data
             bt.logging.info("initiating store data")
             event = await self.store_random_data()
+
+            if self.config.neuron.verbose:
+                bt.logging.trace(f"STORE EVENT LOG: {event}")
 
             # Log event
             log_event(self, event)
@@ -1010,8 +961,11 @@ class neuron:
             bt.logging.info("initiating challenge")
             event = await self.challenge()
 
+            if self.config.neuron.verbose:
+                bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
+
             # Log event
-            log_event(self, event)  # TODO: THIS CAUSES A BUS ERROR...
+            log_event(self, event)
 
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
@@ -1023,6 +977,9 @@ class neuron:
                 async for event in self.retrieve():
                     if isinstance(event, EventSchema):
                         break
+
+                if self.config.neuron.verbose:
+                    bt.logging.trace(f"RETRIEVE EVENT LOG: {event}")
 
                 # Log event
                 log_event(self, event)
@@ -1097,6 +1054,7 @@ class neuron:
                     bt.logging.debug(f"block at end of step: {self.prev_step_block}")
                     bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
                 self.step += 1
+
         except Exception as err:
             bt.logging.error("Error in training loop", str(err))
             bt.logging.debug(print_exception(type(err), err, err.__traceback__))
@@ -1108,3 +1066,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# TODO: ADD WANDB LOGGING FOR MINER STATISTICS (CREATE A LEADERBOARD!!)
