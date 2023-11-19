@@ -193,13 +193,13 @@ class neuron:
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            # self.axon.attach(
-            #     forward_fn=self.update_index,
-            # ).attach(
-            #     forward_fn=self.retrieve_user_data,
-            # ).attach(
-            #     forward_fn=self.store_user_data,
-            # )
+            self.axon.attach(
+                forward_fn=self.update_index,
+            ).attach(
+                forward_fn=self.retrieve_user_data,
+            ).attach(
+                forward_fn=self.store_user_data,
+            )
 
             try:
                 self.subtensor.serve_axon(
