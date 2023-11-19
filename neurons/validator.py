@@ -554,11 +554,11 @@ class neuron:
         # Update event log with moving averaged scores
         event.moving_averaged_scores = self.moving_averaged_scores.tolist()
 
-        # bt.logging.trace(f"Broadcasting update to all validators")
-        # tasks = [
-        #     self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
-        # ]
-        # await asyncio.gather(*tasks)
+        bt.logging.trace(f"Broadcasting update to all validators")
+        tasks = [
+            self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
+        ]
+        await asyncio.gather(*tasks)
 
         return event
 
@@ -776,7 +776,7 @@ class neuron:
         async for (encrypted_data, encryption_payload) in self.retrieve(
             synapse.data_hash, yield_event=False
         ):
-            bt.logging.debug(
+            bt.logging.trace(
                 f"INSIDE ASYNC GEN FOR: {encrypted_data} | {encryption_payload}"
             )
             if encrypted_data == None:
@@ -966,72 +966,72 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        # try:
-        #     # Store some data
-        #     bt.logging.info("initiating store data")
-        #     event = await self.store_random_data()
+        try:
+            # Store some data
+            bt.logging.info("initiating store data")
+            event = await self.store_random_data()
 
-        #     if self.config.neuron.verbose:
-        #         bt.logging.trace(f"STORE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.trace(f"STORE EVENT LOG: {event}")
 
-        #     # Log event
-        #     log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to store data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to store data with exception: {e}")
 
-        # try:
-        #     # Challenge some data
-        #     bt.logging.info("initiating challenge")
-        #     event = await self.challenge()
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            event = await self.challenge()
 
-        #     if self.config.neuron.verbose:
-        #         bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
 
-        #     # Log event
-        #     log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        # if self.step % self.config.neuron.retrieve_epoch_length == 0:
-        #     try:
-        #         # Retrieve some data
-        #         bt.logging.info("initiating retrieve")
-        #         async for event in self.retrieve():
-        #             if isinstance(event, EventSchema):
-        #                 break
+        if self.step % self.config.neuron.retrieve_epoch_length == 0:
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                async for event in self.retrieve():
+                    if isinstance(event, EventSchema):
+                        break
 
-        #         if self.config.neuron.verbose:
-        #             bt.logging.trace(f"RETRIEVE EVENT LOG: {event}")
+                if self.config.neuron.verbose:
+                    bt.logging.trace(f"RETRIEVE EVENT LOG: {event}")
 
-        #         # Log event
-        #         log_event(self, event)
+                # Log event
+                log_event(self, event)
 
-        #     except Exception as e:
-        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
-        # if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
-        #     try:
-        #         # Compute tiers
-        #         bt.logging.info("Computing tiers")
-        #         await compute_all_tiers(self.database)
+        if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
+            try:
+                # Compute tiers
+                bt.logging.info("Computing tiers")
+                await compute_all_tiers(self.database)
 
-        #         # Fetch miner statistics and usage data.
-        #         stats = {
-        #             key.decode("utf-8").split(":")[-1]: {
-        #                 k.decode("utf-8"): v.decode("utf-8")
-        #                 for k, v in self.database.hgetall(key).items()
-        #             }
-        #             for key in self.database.scan_iter(f"stats:*")
-        #         }
+                # Fetch miner statistics and usage data.
+                stats = {
+                    key.decode("utf-8").split(":")[-1]: {
+                        k.decode("utf-8"): v.decode("utf-8")
+                        for k, v in self.database.hgetall(key).items()
+                    }
+                    for key in self.database.scan_iter(f"stats:*")
+                }
 
-        #         # Log the statistics event to wandb.
-        #         if not self.config.wandb.off:
-        #             self.wandb.log(stats)
+                # Log the statistics event to wandb.
+                if not self.config.wandb.off:
+                    self.wandb.log(stats)
 
-        #     except Exception as e:
-        #         bt.logging.error(f"Failed to compute tiers with exception: {e}")
+            except Exception as e:
+                bt.logging.error(f"Failed to compute tiers with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")
@@ -1103,4 +1103,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# TODO: ADD WANDB LOGGING FOR MINER STATISTICS (CREATE A LEADERBOARD!!)
