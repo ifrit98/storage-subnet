@@ -151,7 +151,7 @@ def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor
             k - len(candidate_uids),
         )
     uids = torch.tensor(random.sample(available_uids, k))
-    return [1, 2, 3, 4, 6]  # uids.tolist()
+    return uids.tolist()
 
 
 def select_subset_uids(uids: List[int], N: int):
