@@ -7,6 +7,7 @@ import argparse
 
 import storage
 from storage.validator.encryption import encrypt_data
+from storage.shared.ecc import hash_data
 
 import bittensor
 
@@ -21,7 +22,6 @@ from tqdm import tqdm
 
 from .default_values import defaults
 
-bittensor.debug()
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -130,13 +130,20 @@ class StoreData:
             bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
             wallet,
         )
+        bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:200]}")
+        bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
+        bittensor.logging.trace(
+            f"CLI B64ENCODED DATA: {base64.b64encode(encrypted_data)}"
+        )
+        bittensor.logging.trace(
+            f"CLI hash(encrypted_data): {hash_data(encrypted_data)})"
+        )
         synapse = storage.protocol.StoreUser(
             encrypted_data=base64.b64encode(encrypted_data),
             encryption_payload=encryption_payload,
         )
-        bittensor.logging.debug(synapse)
+        bittensor.logging.debug(f"sending synapse: {synapse}")
 
-        # import pdb; pdb.set_trace()
         hash_basepath = os.path.expanduser(cli.config.hash_basepath)
         hash_filepath = os.path.join(hash_basepath, wallet.name + ".json")
         bittensor.logging.debug("store hashes path:", hash_filepath)
@@ -176,7 +183,7 @@ class StoreData:
                 if isinstance(response.data_hash, bytes)
                 else response.data_hash
             )
-            bt.logging.debug("Data hash: {}".format(data_hash))
+            bittensor.logging.debug("recieved data hash: {}".format(data_hash))
             success = True
             break
 
@@ -230,27 +237,33 @@ class StoreData:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        retrieve_parser = parser.add_parser(
+        store_parser = parser.add_parser(
             "put", help="""Store data on the Bittensor network."""
         )
-        retrieve_parser.add_argument(
+        store_parser.add_argument(
             "--hash_basepath",
             type=str,
             default=defaults.hash_basepath,
             help="Path to store hashes",
         )
-        retrieve_parser.add_argument(
+        store_parser.add_argument(
             "--stake_limit",
             type=float,
             default=1000,
             help="Stake limit to exclude validator axons to query.",
         )
-        retrieve_parser.add_argument(
+        store_parser.add_argument(
             "--filepath",
             type=str,
             help="Path to data to store on the Bittensor network.",
         )
+        store_parser.add_argument(
+            "--netuid",
+            type=str,
+            default=defaults.netuid,
+            help="Network identifier for the Bittensor network.",
+        )
 
-        bittensor.wallet.add_args(retrieve_parser)
-        bittensor.subtensor.add_args(retrieve_parser)
-        bittensor.logging.add_args(retrieve_parser)
+        bittensor.wallet.add_args(store_parser)
+        bittensor.subtensor.add_args(store_parser)
+        bittensor.logging.add_args(store_parser)

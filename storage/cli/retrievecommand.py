@@ -86,7 +86,7 @@ class RetrieveData:
         cli.config.storage_basepath = os.path.expanduser(cli.config.storage_basepath)
 
         if not os.path.exists(cli.config.storage_basepath):
-            bt.logging.info(
+            bittensor.logging.info(
                 "generating filepath: {}".format(cli.config.storage_basepath)
             )
             os.makedirs(cli.config.storage_basepath)
@@ -208,6 +208,12 @@ class RetrieveData:
             type=str,
             default=defaults.storage_basepath,
             help="Path to store retrieved data.",
+        )
+        retrieve_parser.add_argument(
+            "--netuid",
+            type=str,
+            default=defaults.netuid,
+            help="Network identifier for the Bittensor network.",
         )
 
         bittensor.wallet.add_args(retrieve_parser)

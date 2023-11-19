@@ -279,10 +279,6 @@ class miner:
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        if synapse.data_hash in safe_key_search(self.database, "*"):
-            # Ignore requests to overwrite existing data
-            bt.logging.trace(f"Blacklisting existing data {synapse.data_hash}")
-            return True, "Data already in storage!"
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
@@ -489,6 +485,8 @@ class miner:
         """
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
+        bt.logging.trace(f"SYNAPSE.B64ENCRPYTED_DATA: {synapse.encrypted_data[:200]}")
+        bt.logging.trace(f"B64DECODED ENCRYPTED_DATA: {encrypted_byte_data[:200]}")
 
         # Commit to the entire data block
         committer = ECCommitment(
@@ -497,11 +495,11 @@ class miner:
         )
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
         if self.config.miner.verbose:
-            bt.logging.debug(f"committer: {committer}")
-            bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
-            bt.logging.debug(f"c: {c}")
-            bt.logging.debug(f"m_val: {m_val}")
-            bt.logging.debug(f"r: {r}")
+            bt.logging.trace(f"committer: {committer}")
+            bt.logging.trace(f"encrypted_byte_data: {encrypted_byte_data}")
+            bt.logging.trace(f"c: {c}")
+            bt.logging.trace(f"m_val: {m_val}")
+            bt.logging.trace(f"r: {r}")
 
         # Store the data with the hash as the key in the filesystem
         data_hash = hash_data(encrypted_byte_data)

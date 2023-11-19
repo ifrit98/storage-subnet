@@ -194,11 +194,11 @@ class neuron:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
             self.axon.attach(
-                forward_fn=self.update_index,
-            ).attach(
                 forward_fn=self.retrieve_user_data,
             ).attach(
                 forward_fn=self.store_user_data,
+            ).attach(
+                forward_fn=self.update_index,
             )
 
             try:
@@ -363,17 +363,27 @@ class neuron:
         Returns:
         - The result of the store_data method.
         """
+        bt.logging.trace(f"Inside store_user_data...".upper())
         # Store user data with the user's wallet as encryption key
         event = await self.store_encrypted_data(
-            encrypted_data=synapse.encrypted_data,
+            encrypted_data=base64.b64decode(synapse.encrypted_data),
             encryption_payload=synapse.encryption_payload,
         )
-
+        bt.logging.trace(f"Finished store_encrypted_data... event: {event}")
         if any(event.successful):
+            bt.logging.trace(
+                f"VALIDATOR synapse.encrypted_data  : {synapse.encrypted_data[:200]}"
+            )
+            bt.logging.trace(
+                f"VALIDATOR synapse.b64 decoded data: {base64.b64decode(synapse.encrypted_data)}"
+            )
             synapse.data_hash = hash_data(base64.b64decode(synapse.encrypted_data))
+            bt.logging.debug(f"VALIDATOR stored user data w/ hash: {synapse.data_hash}")
+
         else:
             bt.logging.error(f"Failed to store user data")
 
+        bt.logging.trace(f"Returning synapse: {synapse}")
         return synapse
 
     async def store_encrypted_data(
@@ -402,17 +412,19 @@ class neuron:
             else encrypted_data
         )
 
-        bt.logging.debug(f"Storing encrypted user data {encrypted_data[:24]}...")
+        bt.logging.debug(f"STORING USER ENCRYPTED: {encrypted_data[:200]}...")
 
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
         # Hash the data
         data_hash = hash_data(encrypted_data)
+        bt.logging.debug(f"DATA HASH SENDING TO MINERS: {data_hash}")
 
         # Convert to base64 for compactness
+        # TODO: Don't do this if it's already b64 encoded. (Check first)
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
-        bt.logging.debug(f"b64 encrypted user data {b64_encrypted_data[:24]}...")
+        bt.logging.debug(f"B64 ENCRYPTED DATA {b64_encrypted_data[:200]}...")
 
         synapse = protocol.Store(
             encrypted_data=b64_encrypted_data,
@@ -542,11 +554,11 @@ class neuron:
         # Update event log with moving averaged scores
         event.moving_averaged_scores = self.moving_averaged_scores.tolist()
 
-        bt.logging.trace(f"Broadcasting update to all validators")
-        tasks = [
-            self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
-        ]
-        await asyncio.gather(*tasks)
+        # bt.logging.trace(f"Broadcasting update to all validators")
+        # tasks = [
+        #     self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
+        # ]
+        # await asyncio.gather(*tasks)
 
         return event
 
@@ -756,12 +768,20 @@ class neuron:
     async def retrieve_user_data(
         self, synapse: protocol.RetrieveUser
     ) -> protocol.RetrieveUser:
-        bt.logging.debug(f"inside retrieve_user_data")
+        bt.logging.trace(f"inside retrieve_user_data")
+
+        bt.logging.debug(f"looking up user data hash: {synapse.data_hash}")
 
         # Return the data to the client so that they can decrypt with their bittensor wallet
-        encrypted_data, encryption_payload = await self.retrieve(
-            synapse.data_hash, return_event=False
-        )
+        async for (encrypted_data, encryption_payload) in self.retrieve(
+            synapse.data_hash, yield_event=False
+        ):
+            bt.logging.debug(
+                f"INSIDE ASYNC GEN FOR: {encrypted_data} | {encryption_payload}"
+            )
+            if encrypted_data == None:
+                break
+
         bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
         # Return the first element, whoever is fastest wins
         synapse.encrypted_data = encrypted_data
@@ -769,7 +789,7 @@ class neuron:
         return synapse
 
     async def retrieve(
-        self, data_hash: str = None
+        self, data_hash: str = None, yield_event: bool = True
     ) -> typing.Tuple[bytes, typing.Callable]:
         """
         Retrieves and verifies data from the network, ensuring integrity and correctness of the data associated with the given hash.
@@ -838,12 +858,13 @@ class neuron:
             synapse,
             deserialize=False,
         )
-
+        bt.logging.trace(f"Retrieved responses: {responses}")
         rewards: torch.FloatTensor = torch.zeros(
             len(responses), dtype=torch.float32
         ).to(self.device)
 
         for idx, (uid, response) in enumerate(zip(uids, responses)):
+            bt.logging.debug(f"uid: {uid} | response: {response}")
             if self.config.neuron.verbose:
                 bt.logging.debug(f"response: {response}")
 
@@ -937,77 +958,80 @@ class neuron:
             event.best_uid = event.uids[best_index]
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
-        yield event  # finally yield the event
+        if yield_event:
+            yield event  # finally yield the event
+        else:
+            None, None
 
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            event = await self.store_random_data()
+        # try:
+        #     # Store some data
+        #     bt.logging.info("initiating store data")
+        #     event = await self.store_random_data()
 
-            if self.config.neuron.verbose:
-                bt.logging.trace(f"STORE EVENT LOG: {event}")
+        #     if self.config.neuron.verbose:
+        #         bt.logging.trace(f"STORE EVENT LOG: {event}")
 
-            # Log event
-            log_event(self, event)
+        #     # Log event
+        #     log_event(self, event)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to store data with exception: {e}")
 
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            event = await self.challenge()
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     event = await self.challenge()
 
-            if self.config.neuron.verbose:
-                bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
+        #     if self.config.neuron.verbose:
+        #         bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
 
-            # Log event
-            log_event(self, event)
+        #     # Log event
+        #     log_event(self, event)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_length == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                async for event in self.retrieve():
-                    if isinstance(event, EventSchema):
-                        break
+        # if self.step % self.config.neuron.retrieve_epoch_length == 0:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         async for event in self.retrieve():
+        #             if isinstance(event, EventSchema):
+        #                 break
 
-                if self.config.neuron.verbose:
-                    bt.logging.trace(f"RETRIEVE EVENT LOG: {event}")
+        #         if self.config.neuron.verbose:
+        #             bt.logging.trace(f"RETRIEVE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+        #         # Log event
+        #         log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
-        if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
-            try:
-                # Compute tiers
-                bt.logging.info("Computing tiers")
-                await compute_all_tiers(self.database)
+        # if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
+        #     try:
+        #         # Compute tiers
+        #         bt.logging.info("Computing tiers")
+        #         await compute_all_tiers(self.database)
 
-                # Fetch miner statistics and usage data.
-                stats = {
-                    key.decode("utf-8").split(":")[-1]: {
-                        k.decode("utf-8"): v.decode("utf-8")
-                        for k, v in self.database.hgetall(key).items()
-                    }
-                    for key in self.database.scan_iter(f"stats:*")
-                }
+        #         # Fetch miner statistics and usage data.
+        #         stats = {
+        #             key.decode("utf-8").split(":")[-1]: {
+        #                 k.decode("utf-8"): v.decode("utf-8")
+        #                 for k, v in self.database.hgetall(key).items()
+        #             }
+        #             for key in self.database.scan_iter(f"stats:*")
+        #         }
 
-                # Log the statistics event to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log(stats)
+        #         # Log the statistics event to wandb.
+        #         if not self.config.wandb.off:
+        #             self.wandb.log(stats)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to compute tiers with exception: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to compute tiers with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")
