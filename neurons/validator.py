@@ -950,9 +950,6 @@ class neuron:
             if self.config.neuron.verbose:
                 bt.logging.trace(f"STORE EVENT LOG: {event}")
 
-            if not self.config.wandb.off:
-                self.wandb.log(stats)
-
             # Log event
             log_event(self, event)
 
@@ -966,9 +963,6 @@ class neuron:
 
             if self.config.neuron.verbose:
                 bt.logging.trace(f"CHALLENGE EVENT LOG: {event}")
-
-            if not self.config.wandb.off:
-                self.wandb.log(stats)
 
             # Log event
             log_event(self, event)
@@ -989,9 +983,6 @@ class neuron:
 
                 # Log event
                 log_event(self, event)
-
-                if not self.config.wandb.off:
-                    self.wandb.log(stats)
 
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
