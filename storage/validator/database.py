@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import asyncio
 import bittensor as bt
 
 
@@ -68,7 +69,7 @@ def add_metadata_to_hotkey(ss58_address, data_hash, metadata, database):
     )
 
 
-def is_miner_registered(ss58_address, database):
+def miner_is_registered(ss58_address, database):
     """
     Checks if a miner is registered in the database.
 
@@ -231,7 +232,7 @@ def get_tier_factor(ss58_address, database):
 
 def update_statistics(ss58_address, success, task_type, database):
     # Check and see if this miner is registered.
-    if not miner_is_reigstered(ss58_address, database):
+    if not miner_is_registered(ss58_address, database):
         register_miner(ss58_address, database)
 
     # Update statistics in the stats hash
@@ -251,11 +252,20 @@ def update_statistics(ss58_address, success, task_type, database):
         if success:
             database.hincrby(stats_key, "retrieval_successes", 1)
     else:
-        raise ValueError(f"Invalid task type {task_type}.")
+        bt.logging.error(f"Invalid task type {task_type}.")
 
 
-async def compute_tier(ss58_address, database):
-    stats_key = f"stats:{ss58_address}"
+async def compute_tier(stats_key, database):
+    data = database.hgetall(stats_key)
+
+    registered = miner_is_registered(stats_key, database)
+    if not data:
+        bt.logging.warning(f"No statistics data found for {stats_key}! Skipping...")
+        return
+
+    bt.logging.trace(f"Data for {stats_key}: {data}")
+    bt.logging.trace(f"Computing tier for {stats_key}.")
+
     # Get the number of successful challenges
     challenge_successes = int(database.hget(stats_key, "challenge_successes"))
     # Get the number of successful retrievals
@@ -270,8 +280,12 @@ async def compute_tier(ss58_address, database):
     store_attempts = int(database.hget(stats_key, "store_attempts"))
 
     # Compute the success rate for each task type
-    challenge_success_rate = challenge_successes / challenge_attempts
-    retrieval_success_rate = retrieval_successes / retrieval_attempts
+    challenge_success_rate = (
+        challenge_successes / challenge_attempts if challenge_attempts > 0 else 0
+    )
+    retrieval_success_rate = (
+        retrieval_successes / retrieval_attempts if retrieval_attempts > 0 else 0
+    )
     store_success_rate = store_successes / store_attempts
     total_successes = challenge_successes + retrieval_successes + store_successes
 
@@ -281,38 +295,36 @@ async def compute_tier(ss58_address, database):
         and store_success_rate >= DIAMOND_STORE_SUCCESS_RATE
         and total_successes >= DIAMOND_TIER_TOTAL_SUCCESSES
     ):
-        tier = "Diamond"
+        tier = b"Diamond"
     elif (
         challenge_success_rate >= GOLD_CHALLENGE_SUCCESS_RATE
         and retrieval_success_rate >= GOLD_RETRIEVAL_SUCCESS_RATE
         and store_success_rate >= GOLD_STORE_SUCCESS_RATE
         and total_successes >= GOLD_TIER_TOTAL_SUCCESSES
     ):
-        tier = "Gold"
+        tier = b"Gold"
     elif (
         challenge_success_rate >= SILVER_CHALLENGE_SUCCESS_RATE
         and retrieval_success_rate >= SILVER_RETRIEVAL_SUCCESS_RATE
         and store_success_rate >= SILVER_STORE_SUCCESS_RATE
         and total_successes >= SILVER_TIER_TOTAL_SUCCESSES
     ):
-        tier = "Silver"
+        tier = b"Silver"
     else:
-        tier = "Bronze"
+        tier = b"Bronze"
 
     # (Potentially) set the new tier in the stats hash
     current_tier = database.hget(stats_key, "tier")
     if tier != current_tier:
         database.hset(stats_key, "tier", tier)
-        bt.logging.debug(
-            f"Updated tier for {ss58_address} from {current_tier} to {tier}."
-        )
+        bt.logging.debug(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
-        if tier == "Diamond":
+        if tier == b"Diamond":
             storage_limit = STORAGE_LIMIT_DIAMOND
-        elif tier == "Gold":
+        elif tier == b"Gold":
             storage_limit = STORAGE_LIMIT_GOLD
-        elif tier == "Silver":
+        elif tier == b"Silver":
             storage_limit = STORAGE_LIMIT_SILVER
         else:
             storage_limit = STORAGE_LIMIT_BRONZE
@@ -320,17 +332,17 @@ async def compute_tier(ss58_address, database):
         current_limit = database.hget(stats_key, "storage_limit")
         database.hset(stats_key, "storage_limit", storage_limit)
         bt.logging.debug(
-            f"Storage limit for {ss58_address} set from {current_limit} -> {storage_limit} bytes."
+            f"Storage limit for {stats_key} set from {current_limit} -> {storage_limit} bytes."
         )
 
 
 async def compute_all_tiers(database):
     # Iterate over all miners
     """
-    Computes the tier for all miners in the database. 
-    
+    Computes the tier for all miners in the database.
+
     This function should be called periodically to update the tier for all miners.
     """
-    miners = [miner async for miner in database.iscan(match="stats:*")]
+    miners = [miner for miner in database.scan_iter("stats:*")]
     tasks = [compute_tier(miner, database) for miner in miners]
     await asyncio.gather(*tasks)

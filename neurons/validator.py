@@ -91,6 +91,8 @@ from storage.validator.database import (
     update_metadata_for_data_hash,
     update_statistics,
     get_tier_factor,
+    miner_is_registered,
+    compute_all_tiers,
 )
 
 
@@ -187,13 +189,13 @@ class neuron:
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            self.axon.attach(
-                forward_fn=self.update_index,
-            ).attach(
-                forward_fn=self.retrieve_user_data,
-            ).attach(
-                forward_fn=self.store_user_data,
-            )
+            # self.axon.attach(
+            #     forward_fn=self.update_index,
+            # ).attach(
+            #     forward_fn=self.retrieve_user_data,
+            # ).attach(
+            #     forward_fn=self.store_user_data,
+            # )
 
             try:
                 self.subtensor.serve_axon(
@@ -768,6 +770,8 @@ class neuron:
                     f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
                 )
 
+            hotkey = self.metagraph.hotkeys[uid]
+
             # Update the challenge statistics
             update_statistics(
                 ss58_address=hotkey,
@@ -809,7 +813,9 @@ class neuron:
         bt.logging.debug(f"inside retrieve_user_data")
 
         # Return the data to the client so that they can decrypt with their bittensor wallet
-        encrypted_data, encryption_payload = await self.retrieve(synapse.data_hash)
+        encrypted_data, encryption_payload = await self.retrieve(
+            synapse.data_hash, return_event=False
+        )
         bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
         # Return the first element, whoever is fastest wins
         synapse.encrypted_data = encrypted_data
@@ -889,7 +895,6 @@ class neuron:
             len(responses), dtype=torch.float32
         ).to(self.device)
 
-        datas = []
         for idx, (uid, response) in enumerate(zip(uids, responses)):
             if self.config.neuron.verbose:
                 bt.logging.debug(f"response: {response}")
@@ -932,6 +937,7 @@ class neuron:
                 rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
 
                 # Update the retrieve statistics
+                bt.logging.trace(f"Updating retrieve statistics for {hotkey}")
                 update_statistics(
                     ss58_address=hotkey,
                     success=False,
@@ -965,15 +971,23 @@ class neuron:
                 update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
 
                 # TODO: get a temp link from the server to send back to the client instead
-                return response.data, data["encryption_payload"]
+                yield response.data, data["encryption_payload"]
 
             except Exception as e:
                 bt.logging.error(
-                    f"Failed to return data from UID: {uids[idx]} with error: {e}"
+                    f"Failed to yield data from UID: {uids[idx]} with error: {e}"
                 )
 
         bt.logging.trace("Applying retrieve rewards")
         self.apply_reward_scores(uids, responses, rewards)
+
+        # Determine the best UID based on rewards
+        if event.rewards:
+            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            event.best_uid = event.uids[best_index]
+            event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
+
+        yield event  # finally yield the event
 
     async def forward(self) -> torch.Tensor:
         self.step += 1
@@ -990,22 +1004,24 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to store data with exception: {e}")
 
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            event = await self.challenge()
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     event = await self.challenge()
 
-            # Log event
-            log_event(self, event)
+        #     # Log event
+        #     log_event(self, event)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
 
         if self.step % self.config.neuron.retrieve_epoch_length == 0:
             try:
                 # Retrieve some data
                 bt.logging.info("initiating retrieve")
-                event = await self.retrieve()
+                async for event in self.retrieve():
+                    if isinstance(event, EventSchema):
+                        break
 
                 # Log event
                 log_event(self, event)
@@ -1017,7 +1033,7 @@ class neuron:
             try:
                 # Compute tiers
                 bt.logging.info("Computing tiers")
-                await compute_all_tiers(self)
+                await compute_all_tiers(self.database)
 
             except Exception as e:
                 bt.logging.error(f"Failed to compute tiers with exception: {e}")
