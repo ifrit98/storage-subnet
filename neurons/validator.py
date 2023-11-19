@@ -89,6 +89,8 @@ from storage.validator.database import (
     get_all_data_hashes,
     get_all_hotkeys_for_data_hash,
     update_metadata_for_data_hash,
+    update_statistics,
+    get_tier_factor,
 )
 
 
@@ -513,13 +515,12 @@ class neuron:
 
             for idx, (uid, response) in enumerate(zip(uids, responses)):
                 # Verify the commitment
+                hotkey = self.metagraph.hotkeys[uid]
                 success = verify_store_with_seed(response)
                 if success:
                     bt.logging.debug(
                         f"Successfully verified store commitment from UID: {uid}"
                     )
-
-                    rewards[idx] = 1.0
 
                     # Prepare storage for the data for particular miner
                     response_storage = {
@@ -532,21 +533,35 @@ class neuron:
 
                     # Store in the database according to the data hash and the miner hotkey
                     add_metadata_to_hotkey(
-                        response.axon.hotkey, data_hash, response_storage, self.database
+                        hotkey,
+                        data_hash,
+                        response_storage,
+                        self.database,
                     )
                     bt.logging.debug(
-                        f"Stored data in database with key: {response.axon.hotkey} | {data_hash}"
+                        f"Stored data in database with key: {hotkey} | {data_hash}"
                     )
 
                     # Collect broadcast params to send the update to all other validators
-                    broadcast_params.append((response.axon.hotkey, response_storage))
+                    broadcast_params.append((hotkey, response_storage))
 
                 else:
                     bt.logging.debug(
                         f"Failed to verify store commitment from UID: {uid}"
                     )
-                    rewards[idx] = 0.0
                     failed_uids.append(uid)
+
+                # Update the storage statistics
+                update_statistics(
+                    ss58_address=hotkey,
+                    success=success,
+                    task_type="store",
+                    database=self.database,
+                )
+
+                # Apply reward for this store
+                tier_factor = get_tier_factor(hotkey, self.database)
+                rewards[idx] = 1.0 * tier_factor if success else 0.0
 
                 event.successful.append(success)
                 event.uids.append(uid)
@@ -586,8 +601,10 @@ class neuron:
         event.moving_averaged_scores = self.moving_averaged_scores.tolist()
 
         bt.logging.trace(f"Broadcasting update to all validators")
-        for hotkey, data in broadcast_params:
-            await self.broadcast(hotkey, data_hash, data)
+        tasks = [
+            self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
+        ]
+        await asyncio.gather(*tasks)
 
         return event
 
@@ -610,6 +627,7 @@ class neuron:
         data = make_random_file(maxsize=self.config.neuron.maxsize)
 
         # Encrypt the data
+        # TODO: create and use a throwaway wallet (never decrypable)
         encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
 
         return await self.store_encrypted_data(encrypted_data, encryption_payload)
@@ -750,8 +768,17 @@ class neuron:
                     f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
                 )
 
+            # Update the challenge statistics
+            update_statistics(
+                ss58_address=hotkey,
+                success=verified,
+                task_type="challenge",
+                database=self.database,
+            )
+
             # Apply reward for this challenge
-            rewards[idx] = 1.0 if verified else 0.0
+            tier_factor = get_tier_factor(hotkey, self.database)
+            rewards[idx] = 1.0 * tier_factor if verified else -1.0
 
             # Log the event data for this specific challenge
             event.uids.append(uid)
@@ -759,7 +786,7 @@ class neuron:
             event.completion_times.append(response[0].dendrite.process_time)
             event.task_status_messages.append(response[0].dendrite.status_message)
             event.task_status_codes.append(response[0].dendrite.status_code)
-            event.rewards.append(1.0 if verified else 0.0)
+            event.rewards.append(rewards[idx])
 
         # Calculate the total step length for all challenges
         event.step_length = time.time() - start_time
@@ -874,6 +901,14 @@ class neuron:
                     f"Failed to decode data from UID: {uids[idx]} with error {e}"
                 )
                 rewards[idx] = -1.0
+
+                # Update the retrieve statistics
+                update_statistics(
+                    ss58_address=hotkey,
+                    success=False,
+                    task_type="retrieve",
+                    database=self.database,
+                )
                 continue
 
             if str(hash_data(decoded_data)) != data_hash:
@@ -881,16 +916,36 @@ class neuron:
                     f"Hash of recieved data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
                 )
                 rewards[idx] = -1.0
+
+                # Update the retrieve statistics
+                update_statistics(
+                    ss58_address=hotkey,
+                    success=False,
+                    task_type="retrieve",
+                    database=self.database,
+                )
                 continue
 
+            success = verify_retrieve_with_seed(response)
             if not success:
                 bt.logging.error(f"data verification failed! {response}")
                 rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
+
+                # Update the retrieve statistics
+                update_statistics(
+                    ss58_address=hotkey,
+                    success=False,
+                    task_type="retrieve",
+                    database=self.database,
+                )
                 continue  # skip trying to decode the data
             else:
-                rewards[idx] = 1.0
+                # Success. Reward based on miner tier
+                tier_factor = get_tier_factor(
+                    self.metagraph.hotkeys[uid], self.database
+                )
+                rewards[idx] = 1.0 * tier_factor
 
-            success = verify_retrieve_with_seed(response)
             event.uids.append(uid)
             event.successful.append(success)
             event.completion_times.append(time.time() - start_time)
@@ -946,7 +1001,7 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_steps == 0:
+        if self.step % self.config.neuron.retrieve_epoch_length == 0:
             try:
                 # Retrieve some data
                 bt.logging.info("initiating retrieve")
@@ -957,6 +1012,15 @@ class neuron:
 
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data with exception: {e}")
+
+        if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
+            try:
+                # Compute tiers
+                bt.logging.info("Computing tiers")
+                await compute_all_tiers(self)
+
+            except Exception as e:
+                bt.logging.error(f"Failed to compute tiers with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")

@@ -20,13 +20,41 @@ import json
 import bittensor as bt
 
 
-# Function to add metadata to a hash in Redis
-def add_metadata_to_hotkey(hotkey, data_hash, metadata, database):
+# Constants for storage limits in bytes
+STORAGE_LIMIT_DIAMOND = 100000 * 10**9  # 100000 GB in bytes
+STORAGE_LIMIT_GOLD = 10000 * 10**9  # 10000 GB in bytes
+STORAGE_LIMIT_SILVER = 1000 * 10**9  # 1000 GB in bytes
+STORAGE_LIMIT_BRONZE = 100 * 10**9  # 100 GB in bytes
+
+DIAMOND_STORE_SUCCESS_RATE = 0.995  # 1/200 chance of failure
+DIAMOND_RETRIEVAL_SUCCESS_RATE = 0.9999  # 1/100000 chance of failure
+DIAMOND_CHALLENGE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+
+GOLD_STORE_SUCCESS_RATE = 0.99  # 1/100 chance of failure
+GOLD_RETRIEVAL_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+GOLD_CHALLENGE_SUCCESS_RATE = 0.99  # 1/100 chance of failure
+
+SILVER_STORE_SUCCESS_RATE = 0.98  # 1/50 chance of failure
+SILVER_RETRIEVAL_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+SILVER_CHALLENGE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+
+DIAMOND_TIER_REWARD_FACTOR = 1.0
+GOLD_TIER_REWARD_FACTOR = 0.5
+SILVER_TIER_REWARD_FACTOR = 0.25
+BRONZE_TIER_REWARD_FACTOR = 0.1
+
+DIAMOND_TIER_TOTAL_SUCCESSES = 10**11
+GOLD_TIER_TOTAL_SUCCESSES = 10**9
+SILVER_TIER_TOTAL_SUCCESSES = 10**7
+
+
+# Functioßn to add metadata to a hash in Redis
+def add_metadata_to_hotkey(ss58_address, data_hash, metadata, database):
     """
     Associates a data hash and its metadata with a hotkey in Redis.
 
     Parameters:
-        hotkey (str): The primary key representing the hotkey.
+        ss58_address (str): The primary key representing the hotkey.
         data_hash (str): The subkey representing the data hash.
         metadata (dict): The metadata to associate with the data hash.
         database (redis.Redis): The Redis client instance.
@@ -34,25 +62,39 @@ def add_metadata_to_hotkey(hotkey, data_hash, metadata, database):
     # Serialize the metadata as a JSON string
     metadata_json = json.dumps(metadata)
     # Use HSET to associate the data hash with the hotkey
-    database.hset(hotkey, data_hash, metadata_json)
+    database.hset(ss58_address, data_hash, metadata_json)
     bt.logging.debug(
-        f"Associated data hash {data_hash} and metadata with hotkey {hotkey}."
+        f"Associated data hash {data_hash} and metadata with hotkey {ss58_address}."
     )
 
 
-def get_all_data_for_hotkey(hotkey, database, return_hashes=False):
+def is_miner_registered(ss58_address, database):
+    """
+    Checks if a miner is registered in the database.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        True if the miner is registered, False otherwise.
+    """
+    return database.exists(f"stats:{ss58_address}")
+
+
+def get_all_data_for_hotkey(ss58_address, database, return_hashes=False):
     """
     Retrieves all data hashes and their metadata for a given hotkey.
 
     Parameters:
-        hotkey (str): The key representing the hotkey.
+        ss58_address (str): The key representing the hotkey.
         database (redis.Redis): The Redis client instance.
 
     Returns:
         A dictionary where keys are data hashes and values are the associated metadata.
     """
     # Fetch all fields (data hashes) and values (metadata) for the hotkey
-    all_data_hashes = database.hgetall(hotkey)
+    all_data_hashes = database.hgetall(ss58_address)
 
     # Return only the hashes themselves if specified
     if return_hashes:
@@ -65,12 +107,12 @@ def get_all_data_for_hotkey(hotkey, database, return_hashes=False):
     }
 
 
-def update_metadata_for_data_hash(hotkey, data_hash, new_metadata, database):
+def update_metadata_for_data_hash(ss58_address, data_hash, new_metadata, database):
     """
     Updates the metadata for a specific data hash associated with a hotkey.
 
     Parameters:
-        hotkey (str): The key representing the hotkey.
+        ss58_address (str): The key representing the hotkey.
         data_hash (str): The subkey representing the data hash to update.
         new_metadata (dict): The new metadata to associate with the data hash.
         database (redis.Redis): The Redis client instance.
@@ -78,13 +120,13 @@ def update_metadata_for_data_hash(hotkey, data_hash, new_metadata, database):
     # Serialize the new metadata as a JSON string
     new_metadata_json = json.dumps(new_metadata)
     # Update the field in the hash with the new metadata
-    database.hset(hotkey, data_hash, new_metadata_json)
+    database.hset(ss58_address, data_hash, new_metadata_json)
     bt.logging.debug(
-        f"Updated metadata for data hash {data_hash} under hotkey {hotkey}."
+        f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
     )
 
 
-def get_metadata_from_hash(hotkey, data_hash, database):
+def get_metadata_from_hash(ss58_address, data_hash, database):
     """
     Retrieves metadata from a hash in Redis for the given field_key.
 
@@ -97,13 +139,13 @@ def get_metadata_from_hash(hotkey, data_hash, database):
         The deserialized metadata as a dictionary, or None if not found.
     """
     # Get the JSON string from Redis
-    metadata_json = database.hget(hotkey, data_hash)
+    metadata_json = database.hget(ss58_address, data_hash)
     if metadata_json:
         # Deserialize the JSON string to a Python dictionary
         metadata = json.loads(metadata_json)
         return metadata
     else:
-        bt.logging.debug(f"No metadata found for {data_hash} in hash {hotkey}.")
+        bt.logging.debug(f"No metadata found for {data_hash} in hash {ss58_address}.")
         return None
 
 
@@ -158,39 +200,137 @@ def get_all_hotkeys_for_data_hash(data_hash, database):
     return hotkeys
 
 
-def update_ranking_data(hotkey, rankings, database):
-    """
-    Updates the ranking data for a specific hotkey.
+def register_miner(ss58_address, database):
+    # Initialize statistics for a new miner in a separate hash
+    database.hmset(
+        f"stats:{ss58_address}",
+        {
+            "store_attempts": 0,
+            "store_successes": 0,
+            "challenge_successes": 0,
+            "challenge_attempts": 0,
+            "retrieval_successes": 0,
+            "retrieval_attempts": 0,
+            "tier": "Bronze",  # Init to bronze status
+            "storage_limit": STORAGE_LIMIT_BRONZE,  # in GB
+        },
+    )
 
-    Parameters:
-        hotkey (str): The key representing the hotkey.
-        rankings (dict): The new ranking data to associate with the hotkey.
-        database (redis.Redis): The Redis client instance.
-    """
-    # Serialize the new ranking data as a JSON string
-    rankings_json = json.dumps(rankings)
-    # Update the field in the hash with the new ranking data
-    database.hset(hotkey, "rankings", rankings_json)
-    bt.logging.debug(f"Updated ranking data for hotkey {hotkey}.")
 
-
-def retrieve_ranking_data(hotkey, database):
-    """
-    Retrieves ranking data from a hash in Redis for the given hotkey.
-
-    Parameters:
-        hotkey (str): The key representing the hotkey.
-        databse (redis.Redis): The Redis client instance.
-
-    Returns:
-        The deserialized ranking data as a dictionary, or None if not found.
-    """
-    # Get the JSON string from Redis
-    rankings_json = database.hget(hotkey, "rankings")
-    if rankings_json:
-        # Deserialize the JSON string to a Python dictionary
-        rankings = json.loads(rankings_json)
-        return rankings
+def get_tier_factor(ss58_address, database):
+    tier = database.hget(f"stats:{ss58_address}", "tier")
+    if tier == "Diamond":
+        return DIAMOND_TIER_REWARD_FACTOR
+    elif tier == "Gold":
+        return GOLD_TIER_REWARD_FACTOR
+    elif tier == "Silver":
+        return SILVER_TIER_REWARD_FACTOR
     else:
-        bt.logging.debug(f"No ranking data found for {hotkey}.")
-        return None
+        return BRONZE_TIER_REWARD_FACTOR
+
+
+def update_statistics(ss58_address, success, task_type, database):
+    # Check and see if this miner is registered.
+    if not miner_is_reigstered(ss58_address, database):
+        register_miner(ss58_address, database)
+
+    # Update statistics in the stats hash
+    stats_key = f"stats:{ss58_address}"
+    database.hincrby(stats_key, "store_attempts", 1)
+
+    if task_type == "store":
+        database.hincrby(stats_key, "store_attempts", 1)
+        if success:
+            database.hincrby(stats_key, "store_successes", 1)
+    elif task_type == "challenge":
+        database.hincrby(stats_key, "challenge_attempts", 1)
+        if success:
+            database.hincrby(stats_key, "challenge_successes", 1)
+    elif task_type == "retrieval":
+        database.hincrby(stats_key, "retrieval_attempts", 1)
+        if success:
+            database.hincrby(stats_key, "retrieval_successes", 1)
+    else:
+        raise ValueError(f"Invalid task type {task_type}.")
+
+
+async def compute_tier(ss58_address, database):
+    stats_key = f"stats:{ss58_address}"
+    # Get the number of successful challenges
+    challenge_successes = int(database.hget(stats_key, "challenge_successes"))
+    # Get the number of successful retrievals
+    retrieval_successes = int(database.hget(stats_key, "retrieval_successes"))
+    # Get the number of successful stores
+    store_successes = int(database.hget(stats_key, "store_successes"))
+    # Get the number of total challenges
+    challenge_attempts = int(database.hget(stats_key, "challenge_attempts"))
+    # Get the number of total retrievals
+    retrieval_attempts = int(database.hget(stats_key, "retrieval_attempts"))
+    # Get the number of total stores
+    store_attempts = int(database.hget(stats_key, "store_attempts"))
+
+    # Compute the success rate for each task type
+    challenge_success_rate = challenge_successes / challenge_attempts
+    retrieval_success_rate = retrieval_successes / retrieval_attempts
+    store_success_rate = store_successes / store_attempts
+    total_successes = challenge_successes + retrieval_successes + store_successes
+
+    if (
+        challenge_success_rate >= DIAMOND_CHALLENGE_SUCCESS_RATE
+        and retrieval_success_rate >= DIAMOND_RETRIEVAL_SUCCESS_RATE
+        and store_success_rate >= DIAMOND_STORE_SUCCESS_RATE
+        and total_successes >= DIAMOND_TIER_TOTAL_SUCCESSES
+    ):
+        tier = "Diamond"
+    elif (
+        challenge_success_rate >= GOLD_CHALLENGE_SUCCESS_RATE
+        and retrieval_success_rate >= GOLD_RETRIEVAL_SUCCESS_RATE
+        and store_success_rate >= GOLD_STORE_SUCCESS_RATE
+        and total_successes >= GOLD_TIER_TOTAL_SUCCESSES
+    ):
+        tier = "Gold"
+    elif (
+        challenge_success_rate >= SILVER_CHALLENGE_SUCCESS_RATE
+        and retrieval_success_rate >= SILVER_RETRIEVAL_SUCCESS_RATE
+        and store_success_rate >= SILVER_STORE_SUCCESS_RATE
+        and total_successes >= SILVER_TIER_TOTAL_SUCCESSES
+    ):
+        tier = "Silver"
+    else:
+        tier = "Bronze"
+
+    # (Potentially) set the new tier in the stats hash
+    current_tier = database.hget(stats_key, "tier")
+    if tier != current_tier:
+        database.hset(stats_key, "tier", tier)
+        bt.logging.debug(
+            f"Updated tier for {ss58_address} from {current_tier} to {tier}."
+        )
+
+        # Update the storage limit
+        if tier == "Diamond":
+            storage_limit = STORAGE_LIMIT_DIAMOND
+        elif tier == "Gold":
+            storage_limit = STORAGE_LIMIT_GOLD
+        elif tier == "Silver":
+            storage_limit = STORAGE_LIMIT_SILVER
+        else:
+            storage_limit = STORAGE_LIMIT_BRONZE
+
+        current_limit = database.hget(stats_key, "storage_limit")
+        database.hset(stats_key, "storage_limit", storage_limit)
+        bt.logging.debug(
+            f"Storage limit for {ss58_address} set from {current_limit} -> {storage_limit} bytes."
+        )
+
+
+async def compute_all_tiers(database):
+    # Iterate over all miners
+    """
+    Computes the tier for all miners in the database. 
+    
+    This function should be called periodically to update the tier for all miners.
+    """
+    miners = [miner async for miner in database.iscan(match="stats:*")]
+    tasks = [compute_tier(miner, database) for miner in miners]
+    await asyncio.gather(*tasks)

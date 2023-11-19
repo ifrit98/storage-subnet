@@ -107,7 +107,7 @@ def add_args(cls, parser):
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
-        "--neuron.retrieve_epoch_steps",
+        "--neuron.retrieve_epoch_length",
         type=int,
         default=2,
         help="Number of steps to take before retrieving data.",
@@ -177,6 +177,12 @@ def add_args(cls, parser):
         type=int,
         help="Blocks before a checkpoint is saved.",
         default=100,
+    )
+    parser.add_argument(
+        "--neuron.compute_tiers_epoch_length",
+        type=int,
+        help="Epoch length for computing tiers.",
+        default=500,
     )
     parser.add_argument(
         "--neuron.blocks_per_step",
