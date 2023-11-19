@@ -754,12 +754,8 @@ class neuron:
         )
         responses = []
         for uid in uids:
-            response = await self.handle_challenge(uid)
-            responses.append(response)
-        #     tasks.append(asyncio.create_task(self.handle_challenge(uid)))
-
-        # bt.logging.debug(f"Tasks appended: {tasks}")
-        # responses = await asyncio.gather(*tasks)
+            tasks.append(asyncio.create_task(self.handle_challenge(uid)))
+        responses = await asyncio.gather(*tasks)
 
         if self.config.neuron.verbose:
             bt.logging.debug(f"Challenge repsonses: {responses}")
@@ -1013,10 +1009,8 @@ class neuron:
             # Challenge some data
             bt.logging.info("initiating challenge")
             event = await self.challenge()
-            bt.logging.debug(f"CHALLENGE EVENT {event}")
 
             # Log event
-            # import pdb; pdb.set_trace()
             log_event(self, event)  # TODO: THIS CAUSES A BUS ERROR...
 
         except Exception as e:
