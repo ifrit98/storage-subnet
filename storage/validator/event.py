@@ -22,11 +22,6 @@ from typing import List, Optional, Dict
 
 
 @dataclass
-class MinerStatistics:
-    statistics: Dict[str, Dict[str, str]]
-
-
-@dataclass
 class EventSchema:
     task_name: str  # Task type, e.g. 'store', 'challenge', 'retrieve' 'broadcast'
     successful: List[bool]  # List of whether or not the task was successful or not
