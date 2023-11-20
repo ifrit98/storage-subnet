@@ -161,7 +161,7 @@ def get_all_hotkeys_for_data_hash(data_hash, database):
     return hotkeys
 
 
-def calculate_total_hotkey_storage(database, hotkey):
+def calculate_total_hotkey_storage(hotkey, database):
     """
     Calculates the total storage used by a hotkey in the database.
 
@@ -180,6 +180,33 @@ def calculate_total_hotkey_storage(database, hotkey):
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
     return total_storage
+
+
+def hotkey_at_capacity(hotkey, database):
+    """
+    Checks if the hotkey is at capacity.
+
+    Parameters:
+        database (redis.Redis): The Redis client instance.
+        hotkey (str): The key representing the hotkey.
+
+    Returns:
+        True if the hotkey is at capacity, False otherwise.
+    """
+    # Get the total storage used by the hotkey
+    total_storage = calculate_total_hotkey_storage(hotkey, database)
+    # Check if the hotkey is at capacity
+    byte_limit = database.hget(f"stats:{hotkey}", "stoarge_limit")
+    try:
+        limit = int(byte_limit)
+    except exception as e:
+        bt.logging.error(f"Could not parse storage limit for {hotkey}.")
+        return False
+    if total_storage >= limit:
+        bt.logging.debug(f"Hotkey {hotkey} is at max capacity {limit // 10**9} GB.")
+        return True
+    else:
+        return False
 
 
 def calculate_total_network_storage(database):

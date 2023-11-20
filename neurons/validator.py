@@ -90,6 +90,7 @@ from storage.validator.database import (
     get_all_data_hashes,
     get_all_hotkeys_for_data_hash,
     update_metadata_for_data_hash,
+    hotkey_at_capacity,
 )
 
 from storage.validator.bonding import (
@@ -258,7 +259,6 @@ class neuron:
         - synapse (protocol.Update): The synapse object containing the update information.
         """
         data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
-        bt.logging.debug(f"data retreived in update: {data}")
         entry = {
             k: v
             for k, v in synapse.dict()
@@ -270,13 +270,15 @@ class neuron:
                 "encryption_payload",
             ]
         }
-        bt.logging.debug(f"entry: {pformat(entry)}")
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"update data retreived: {data}")
+            bt.logging.debug(f"update entry: {pformat(entry)}")
 
         # Update the index with the new data
         # with self.db_semaphore:
-        bt.logging.debug(f"Acquired semaphore for database access.")
+        bt.logging.trace(f"Acquired semaphore for database access.")
         if not data:
-            bt.logging.debug(f"Updating index with new data...")
+            bt.logging.trace(f"Updating index with new data...")
             # Add it to the index directly
             add_metadata_to_hotkey(
                 synapse.axon.hotkey, synapse.data_hash, entry, self.database
@@ -284,21 +286,21 @@ class neuron:
             synapse.updated = True
         else:
             # Check for conflicts
-            bt.logging.debug(f"checking for conflicts...")
+            bt.logging.trace(f"checking for conflicts...")
             local_entry = json.loads(database.get(synapse.key))
             if local_entry["counter"] > synapse.counter:
-                bt.logging.debug(f"Local entry has a higher counter, skipping...")
+                bt.logging.trace(f"Local entry has a higher counter, skipping...")
                 # Do nothing, we have a newer or current version
                 synapse.updated = False
             else:
-                bt.logging.debug(f"Updating index with existing data...")
+                bt.logging.trace(f"Updating index with existing data...")
                 # Update the index to the latest data
                 update_metadata_for_data_hash(
                     synapse.axon.hotkey, synapse.data_hash, entry, self.database
                 )
                 synapse.updated = True
 
-        bt.logging.debug(f"Successfully updated index.")
+        bt.logging.trace(f"Successfully updated index.")
         return synapse
 
     async def broadcast(self, hotkey, data_hash, data):
@@ -310,6 +312,7 @@ class neuron:
         - data_hash: The hash of the data to broadcast.
         - data: The metadata to be broadcast to other validators.
         """
+        bt.logging.trace("broadcasting data.")
         # Determine axons to query from metagraph
         vpermits = self.metagraph.validator_permit
         vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
@@ -327,7 +330,7 @@ class neuron:
         axons = [self.metagraph.axons[uid] for uid in query_uids]
 
         if self.config.neuron.verbose:
-            bt.logging.debug(f"Broadcasting to uids: {query_uids}")
+            bt.logging.debug(f"Broadcasting to uids : {query_uids}")
             bt.logging.debug(f"Broadcasting to axons: {axons}")
 
         # Create synapse store
@@ -363,27 +366,26 @@ class neuron:
         Returns:
         - The result of the store_data method.
         """
-        bt.logging.trace(f"Inside store_user_data...".upper())
+        bt.logging.trace(f"In store_user_data.")
         # Store user data with the user's wallet as encryption key
         event = await self.store_encrypted_data(
             encrypted_data=base64.b64decode(synapse.encrypted_data),
             encryption_payload=synapse.encryption_payload,
         )
-        bt.logging.trace(f"Finished store_encrypted_data... event: {event}")
+        bt.logging.debug(f"Finished store_encrypted_data... event: {event}")
         if any(event.successful):
-            bt.logging.trace(
-                f"VALIDATOR synapse.encrypted_data  : {synapse.encrypted_data[:200]}"
-            )
-            bt.logging.trace(
-                f"VALIDATOR synapse.b64 decoded data: {base64.b64decode(synapse.encrypted_data)}"
-            )
             synapse.data_hash = hash_data(base64.b64decode(synapse.encrypted_data))
-            bt.logging.debug(f"VALIDATOR stored user data w/ hash: {synapse.data_hash}")
-
+            if self.config.neuron.verbose:
+                bt.logging.debug(
+                    f"synapse.encrypted_data  : {synapse.encrypted_data[:200]}"
+                )
+                bt.logging.debug(
+                    f"synapse.b64 decoded data: {base64.b64decode(synapse.encrypted_data)[:200]}"
+                )
+                bt.logging.debug(f"stored user data w/ hash: {synapse.data_hash}")
         else:
             bt.logging.error(f"Failed to store user data")
 
-        bt.logging.trace(f"Returning synapse: {synapse}")
         return synapse
 
     async def store_encrypted_data(
@@ -412,19 +414,20 @@ class neuron:
             else encrypted_data
         )
 
-        bt.logging.debug(f"STORING USER ENCRYPTED: {encrypted_data[:200]}...")
-
         # Setup CRS for this round of validation
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
         # Hash the data
         data_hash = hash_data(encrypted_data)
-        bt.logging.debug(f"DATA HASH SENDING TO MINERS: {data_hash}")
 
         # Convert to base64 for compactness
         # TODO: Don't do this if it's already b64 encoded. (Check first)
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
-        bt.logging.debug(f"B64 ENCRYPTED DATA {b64_encrypted_data[:200]}...")
+
+        if self.config.neuron.verbose:
+            bt.logging.debug(f"storing user data: {encrypted_data[:200]}...")
+            bt.logging.debug(f"storing user hash: {data_hash}")
+            bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:200]}...")
 
         synapse = protocol.Store(
             encrypted_data=b64_encrypted_data,
@@ -436,11 +439,17 @@ class neuron:
 
         # Select subset of miners to query (e.g. redunancy factor of N)
         uids = get_random_uids(self, k=self.config.neuron.store_redundancy)
+        # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
+        # before sending another storage request (do not allow higher than tier allow)
+        # TODO: keep selecting UIDs until we get N that are not at capacity
+        avaialble_uids = [
+            uid
+            for uid in uids
+            if not hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+        ]
 
         broadcast_params = []
-        axons = [self.metagraph.axons[uid] for uid in uids]
-        # TODO: Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
-        # before sending another storage request (cap them, do not allow higher than tier allow)
+        axons = [self.metagraph.axons[uid] for uid in avaialble_uids]
         failed_uids = [None]
 
         retries = 0
@@ -458,7 +467,11 @@ class neuron:
 
             # Log the results for monitoring purposes.
             if self.config.neuron.verbose and self.config.neuron.log_responses:
-                bt.logging.debug(f"Received responses: {responses}")
+                bt.logging.debug(f"Initial store round 1.")
+                [
+                    bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                    for response in responses
+                ]
 
             # Compute the rewards for the responses given proc time.
             rewards: torch.FloatTensor = torch.zeros(
@@ -481,7 +494,9 @@ class neuron:
                         "counter": 0,
                         "encryption_payload": encryption_payload,
                     }
-                    bt.logging.debug(f"Storing data {pformat(response_storage)}")
+                    bt.logging.trace(
+                        f"Storing UID {uid} data {pformat(response_storage)}"
+                    )
 
                     # Store in the database according to the data hash and the miner hotkey
                     add_metadata_to_hotkey(
@@ -498,7 +513,7 @@ class neuron:
                     broadcast_params.append((hotkey, response_storage))
 
                 else:
-                    bt.logging.debug(
+                    bt.logging.error(
                         f"Failed to verify store commitment from UID: {uid}"
                     )
                     failed_uids.append(uid)
@@ -524,19 +539,23 @@ class neuron:
             event.rewards.extend(rewards.tolist())
 
             if self.config.neuron.verbose and self.config.neuron.log_responses:
-                bt.logging.debug(f"Store responses round {retries}: {responses}")
+                bt.logging.debug(f"Store responses round: {retries}")
+                [
+                    bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                    for response in responses
+                ]
 
-            bt.logging.trace(f"Applying store rewards for retry # {retries}")
+            bt.logging.trace(f"Applying store rewards for retry: {retries}")
             apply_reward_scores(
                 self, uids, responses, rewards, timeout=self.config.neuron.store_timeout
             )
 
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
-                bt.logging.debug(f"Failed to store on uids: {failed_uids}")
+                bt.logging.trace(f"Failed to store on uids: {failed_uids}")
                 uids = get_random_uids(self, k=len(failed_uids))
 
-                bt.logging.debug(f"Retrying with new uids: {uids}")
+                bt.logging.trace(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
                 failed_uids = []  # reset failed uids for next round
                 retries += 1
@@ -600,7 +619,7 @@ class neuron:
         """
         hotkey = self.metagraph.hotkeys[uid]
         if self.config.neuron.verbose:
-            bt.logging.debug(f"Handling challenge from hotkey: {hotkey}")
+            bt.logging.trace(f"Handling challenge from hotkey: {hotkey}")
 
         keys = self.database.hkeys(hotkey)
         if keys == []:
@@ -618,15 +637,12 @@ class neuron:
                 dummy_response
             ]  # no data found associated with this miner hotkey
 
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Challenge lookup keys: {keys}")
-
         data_hash = random.choice(keys).decode("utf-8")
         data = get_metadata_from_hash(hotkey, data_hash, self.database)
 
         if self.config.neuron.verbose:
-            bt.logging.debug(f"Challenge lookup key: {data_hash}")
-            bt.logging.debug(f"Challenge data: {data}")
+            bt.logging.trace(f"Challenge lookup key: {data_hash}")
+            bt.logging.trace(f"Challenge data: {data}")
 
         try:
             chunk_size = (
@@ -648,8 +664,8 @@ class neuron:
 
         num_chunks = data["size"] // chunk_size
         if self.config.neuron.verbose:
-            bt.logging.debug(f"chunk size {chunk_size}")
-            bt.logging.debug(f"num chunks {num_chunks}")
+            bt.logging.trace(f"challenge chunk size: {chunk_size}")
+            bt.logging.trace(f"challenge num chunks: {num_chunks}")
 
         # Setup new Common-Reference-String for this challenge
         g, h = setup_CRS()
@@ -712,8 +728,11 @@ class neuron:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
         responses = await asyncio.gather(*tasks)
 
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Challenge repsonses: {responses}")
+        if self.config.neuron.verbose and self.config.neuron.log_responses:
+            [
+                bt.logging.trace(f"Challenge response {uid} | {response}")
+                for uid, response in zip(uids, responses)
+            ]
 
         # Compute the rewards for the responses given the prompt.
         rewards: torch.FloatTensor = torch.zeros(
@@ -722,7 +741,7 @@ class neuron:
 
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
             if self.config.neuron.verbose:
-                bt.logging.debug(
+                bt.logging.trace(
                     f"Challenge idx {idx} uid {uid} verified {verified} response {response}"
                 )
 
@@ -769,23 +788,20 @@ class neuron:
         self, synapse: protocol.RetrieveUser
     ) -> protocol.RetrieveUser:
         bt.logging.trace(f"inside retrieve_user_data")
-
-        bt.logging.debug(f"looking up user data hash: {synapse.data_hash}")
+        bt.logging.debug(f"looking up user data with hash: {synapse.data_hash}")
 
         # Return the data to the client so that they can decrypt with their bittensor wallet
         async for (encrypted_data, encryption_payload) in self.retrieve(
             synapse.data_hash, yield_event=False
         ):
-            bt.logging.trace(
-                f"INSIDE ASYNC GEN FOR: {encrypted_data} | {encryption_payload}"
-            )
+            bt.logging.debug(f"recieved encrypted_Data {encrypted_data[:200]}")
             if encrypted_data == None:
                 break
 
-        bt.logging.debug(f"recieved encrypted_Data {encrypted_data}")
-        # Return the first element, whoever is fastest wins
-        synapse.encrypted_data = encrypted_data
-        synapse.encryption_payload = encryption_payload
+            # Return the first element, whoever is fastest wins
+            synapse.encrypted_data = encrypted_data
+            synapse.encryption_payload = encryption_payload
+
         return synapse
 
     async def retrieve(
@@ -845,7 +861,7 @@ class neuron:
             axons_to_query.append(self.metagraph.axons[uid])
             uids.append(uid)
             if self.config.neuron.verbose:
-                bt.logging.debug(f"appending hotkey: {hotkey}")
+                bt.logging.trace(f"appending hotkey: {hotkey}")
 
         # query all N (from redundancy factor) with M challenges (x% of the total data)
         # see who returns the data fastest (passes verification), and rank them highest
@@ -858,16 +874,16 @@ class neuron:
             synapse,
             deserialize=False,
         )
-        bt.logging.trace(f"Retrieved responses: {responses}")
+        if self.config.neuron.verbose and self.config.neuron.log_responses:
+            [
+                bt.logging.trace(f"Retrieve response: {uid} | {response}")
+                for uid, response in zip(uids, responses)
+            ]
         rewards: torch.FloatTensor = torch.zeros(
             len(responses), dtype=torch.float32
         ).to(self.device)
 
         for idx, (uid, response) in enumerate(zip(uids, responses)):
-            bt.logging.debug(f"uid: {uid} | response: {response}")
-            if self.config.neuron.verbose:
-                bt.logging.debug(f"response: {response}")
-
             try:
                 decoded_data = base64.b64decode(response.data)
             except Exception as e:
@@ -938,13 +954,16 @@ class neuron:
                 data["prev_seed"] = synapse.seed
                 data["counter"] += 1
                 update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
+                bt.logging.trace(
+                    f"Updated metadata for UID: {uids} with data: {pformat(data)}"
+                )
 
                 # TODO: get a temp link from the server to send back to the client instead
                 yield response.data, data["encryption_payload"]
 
             except Exception as e:
                 bt.logging.error(
-                    f"Failed to yield data from UID: {uids[idx]} with error: {e}"
+                    f"Failed to yield data from UID: {uids} with error: {e}"
                 )
 
         bt.logging.trace("Applying retrieve rewards")
