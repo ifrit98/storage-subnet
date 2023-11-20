@@ -19,6 +19,7 @@
 import os
 import json
 import bittensor as bt
+import storage
 
 from ..shared.ecc import (
     ecc_point_to_hex,
@@ -28,7 +29,6 @@ from ..shared.ecc import (
 from ..shared.merkle import (
     MerkleTree,
 )
-
 
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     """
