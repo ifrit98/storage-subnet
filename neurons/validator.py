@@ -825,7 +825,7 @@ class neuron:
         else:
             hotkeys = get_all_hotkeys_for_data_hash(data_hash, self.database)
 
-        bt.logging.debug(f"Retrieving data with hash: {data_hash}")
+        bt.logging.info(f"Retrieving data with hash: {data_hash}")
 
         # Initialize event schema
         event = EventSchema(
