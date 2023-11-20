@@ -201,13 +201,13 @@ def add_args(cls, parser):
         "--wandb.project_name",
         type=str,
         help="The name of the project where you are sending the new run.",
-        default="storage-miner",
+        default="philanthropic-thunder",
     )
     parser.add_argument(
         "--wandb.entity",
         type=str,
         help="An entity is a username or team name where youre sending runs.",
-        default="opentensor-dev",
+        default="philanthrope",
     )
     parser.add_argument(
         "--wandb.offline",
