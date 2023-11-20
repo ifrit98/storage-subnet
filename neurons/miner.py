@@ -238,7 +238,6 @@ class miner:
 
         # Filter out keys that contain a period (temporary, remove later)
         filtered_keys = [key for key in all_keys if b"." not in key]
-        bt.logging.debug("filtered_keys:", filtered_keys)
 
         # Get the size of each data object and sum them up
         total_size = sum(
@@ -486,8 +485,10 @@ class miner:
         """
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
-        bt.logging.trace(f"SYNAPSE.B64ENCRPYTED_DATA: {synapse.encrypted_data[:200]}")
-        bt.logging.trace(f"B64DECODED ENCRYPTED_DATA: {encrypted_byte_data[:200]}")
+
+        if self.config.miner.verbose:
+            bt.logging.debug(f"store b64encrypted data: {synapse.encrypted_data[:200]}")
+            bt.logging.debug(f"store b64decrypted data: {encrypted_byte_data[:200]}")
 
         # Commit to the entire data block
         committer = ECCommitment(
@@ -496,11 +497,11 @@ class miner:
         )
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
         if self.config.miner.verbose:
-            bt.logging.trace(f"committer: {committer}")
-            bt.logging.trace(f"encrypted_byte_data: {encrypted_byte_data}")
-            bt.logging.trace(f"c: {c}")
-            bt.logging.trace(f"m_val: {m_val}")
-            bt.logging.trace(f"r: {r}")
+            bt.logging.debug(f"committer: {committer}")
+            bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
+            bt.logging.debug(f"c: {c}")
+            bt.logging.debug(f"m_val: {m_val}")
+            bt.logging.debug(f"r: {r}")
 
         # Store the data with the hash as the key in the filesystem
         data_hash = hash_data(encrypted_byte_data)
@@ -516,9 +517,7 @@ class miner:
 
         # Dump the metadata to json and store in redis
         dumped = json.dumps(miner_store).encode()
-        bt.logging.debug(f"dumped: {dumped}")
         self.database.set(data_hash, dumped)
-        bt.logging.trace(f"set {data_hash} in database!")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
@@ -526,15 +525,15 @@ class miner:
 
         # NOTE: Does this add anything of value?
         synapse.signature = self.wallet.hotkey.sign(str(m_val)).hex()
-        bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
 
         # Initialize the commitment hash with the initial commitment for chained proofs
-        bt.logging.trace(f"type(seed): {type(synapse.seed)}")
         synapse.commitment_hash = str(m_val)
-        bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
-
         if self.config.miner.verbose:
-            bt.logging.debug(f"returning synapse: {synapse}")
+            bt.logging.trace(f"metadata: {pformat(dumped)}")
+            bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
+            bt.logging.trace(f"type(seed): {type(synapse.seed)}")
+            bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
+
         return synapse
 
     def challenge(
@@ -576,11 +575,10 @@ class miner:
         data = self.database.get(synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
-            bt.logging.error(f"keys found: {self.database.keys('*')}")
             return synapse
 
         decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug(f"decoded data: {decoded}")
+        bt.logging.debug(f"decoded data: {pformat(decoded)}")
 
         # Chunk the data according to the specified (random) chunk size
         filepath = decoded["filepath"]
@@ -611,7 +609,6 @@ class miner:
 
         # Chunk the data according to the provided chunk_size
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
-        bt.logging.debug(f"data_chunks: {pformat(data_chunks)}")
 
         # Extract setup params
         g = hex_to_ecc_point(synapse.g, synapse.curve)
@@ -625,7 +622,6 @@ class miner:
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        bt.logging.debug(f"merkle_tree: {pformat(merkle_tree)}")
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
@@ -676,11 +672,10 @@ class miner:
         """
         # Fetch the data from the miner database
         data = self.database.get(synapse.data_hash)
-        bt.logging.debug("retireved data:", data)
 
         # Decode the data + metadata from bytes to json
         decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug("retrieve decoded data:", decoded)
+        bt.logging.debug(f"retrieve decoded data: {pformat(decoded)}")
 
         # load the data from the filesystem
         filepath = decoded["filepath"]
