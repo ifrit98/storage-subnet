@@ -153,7 +153,9 @@ def init_wandb(self, reinit=False):
         key: copy.deepcopy(self.config.get(key, None))
         for key in ("neuron", "reward", "netuid", "wandb")
     }
-    wandb_config["neuron"].pop("full_path", None)
+    
+    if wandb_config["neuron"] is not None:
+        wandb_config["neuron"].pop("full_path", None)
 
     self.wandb = wandb.init(
         anonymous="allow",
@@ -162,7 +164,7 @@ def init_wandb(self, reinit=False):
         entity=self.config.wandb.entity,
         config=wandb_config,
         mode="offline" if self.config.wandb.offline else "online",
-        dir=self.config.neuron.full_path,
+        dir=self.config.neuron.full_path if self.config.neuron is not None else "wandb_logs",
         tags=tags,
         notes=self.config.wandb.notes,
     )
