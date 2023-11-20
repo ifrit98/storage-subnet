@@ -18,6 +18,9 @@
 
 import os
 import json
+import storage
+import wandb
+import copy
 import bittensor as bt
 
 from ..shared.ecc import (
@@ -28,7 +31,6 @@ from ..shared.ecc import (
 from ..shared.merkle import (
     MerkleTree,
 )
-
 
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     """
@@ -134,3 +136,39 @@ def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):
         bt.logging.debug("type of new_seed :", type(new_seed))
     proof = hash_data(data + previous_seed)
     return hash_data(str(proof).encode("utf-8") + new_seed), proof
+
+def init_wandb(self, reinit=False):
+    """Starts a new wandb run."""
+    tags = [
+        self.wallet.hotkey.ss58_address,
+        storage.__version__,
+        str(storage.__spec_version__),
+        f"netuid_{self.metagraph.netuid}",
+    ]
+
+    if self.config.mock:
+        tags.append("mock")
+
+    wandb_config = {
+        key: copy.deepcopy(self.config.get(key, None))
+        for key in ("neuron", "reward", "netuid", "wandb")
+    }
+    
+    if wandb_config["neuron"] is not None:
+        wandb_config["neuron"].pop("full_path", None)
+
+    self.wandb = wandb.init(
+        anonymous="allow",
+        reinit=reinit,
+        project=self.config.wandb.project_name,
+        entity=self.config.wandb.entity,
+        config=wandb_config,
+        mode="offline" if self.config.wandb.offline else "online",
+        dir=self.config.neuron.full_path if self.config.neuron is not None else "wandb_logs",
+        tags=tags,
+        notes=self.config.wandb.notes,
+    )
+    bt.logging.success(
+        prefix="Started a new wandb run",
+        sufix=f"<blue> {self.wandb.name} </blue>",
+    )

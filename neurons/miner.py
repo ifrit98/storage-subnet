@@ -65,6 +65,7 @@ from storage.miner.utils import (
     save_data_to_filesystem,
     load_from_filesystem,
     commit_data_with_seed,
+    init_wandb,
 )
 
 from storage.miner.config import (
