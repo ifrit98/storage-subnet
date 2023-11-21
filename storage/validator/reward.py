@@ -34,9 +34,9 @@ def calculate_sigmoid_params(timeout):
     Returns:
     - tuple: A tuple containing the 'steepness' and 'shift' values for the current timeout.
     """
-    base_timeout = 10
-    base_steepness = 1
-    base_shift = 4
+    base_timeout = 1  # 10
+    base_steepness = 10  # 1
+    base_shift = 0.3  # 4
 
     # Calculate the ratio of the current timeout to the base timeout
     ratio = timeout / base_timeout

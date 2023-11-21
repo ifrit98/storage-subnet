@@ -93,9 +93,6 @@ async def compute_tier(stats_key, database):
         bt.logging.warning(f"No statistics data found for {stats_key}! Skipping...")
         return
 
-    bt.logging.trace(f"Data for {stats_key}: {data}")
-    bt.logging.trace(f"Computing tier for {stats_key}.")
-
     # Get the number of successful challenges
     challenge_successes = int(database.hget(stats_key, "challenge_successes"))
     # Get the number of successful retrievals
@@ -147,7 +144,7 @@ async def compute_tier(stats_key, database):
     current_tier = database.hget(stats_key, "tier")
     if tier != current_tier:
         database.hset(stats_key, "tier", tier)
-        bt.logging.debug(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
+        bt.logging.trace(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
         if tier == b"Diamond":
@@ -161,7 +158,7 @@ async def compute_tier(stats_key, database):
 
         current_limit = database.hget(stats_key, "storage_limit")
         database.hset(stats_key, "storage_limit", storage_limit)
-        bt.logging.debug(
+        bt.logging.trace(
             f"Storage limit for {stats_key} set from {current_limit} -> {storage_limit} bytes."
         )
 
