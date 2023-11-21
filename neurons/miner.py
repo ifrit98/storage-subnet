@@ -126,17 +126,17 @@ class miner:
         bt.logging.info("miner.__init__()")
 
         # Init device.
-        bt.logging.debug("loading", "device")
+        bt.logging.debug("loading device")
         self.device = torch.device(self.config.miner.device)
         bt.logging.debug(str(self.device))
 
         # Init subtensor
-        bt.logging.debug("loading", "subtensor")
+        bt.logging.debug("loading subtensor")
         self.subtensor = bt.subtensor(config=self.config)
         bt.logging.debug(str(self.subtensor))
 
         # Init wallet.
-        bt.logging.debug("loading", "wallet")
+        bt.logging.debug("loading wallet")
         self.wallet = bt.wallet(config=self.config)
         self.wallet.create_if_non_existent()
         if not self.config.wallet._mock:
@@ -150,7 +150,7 @@ class miner:
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
         # Init metagraph.
-        bt.logging.debug("loading", "metagraph")
+        bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
             netuid=self.config.netuid, network=self.subtensor.network, sync=False
         )  # Make sure not to sync without passing subtensor
@@ -172,7 +172,7 @@ class miner:
 
         # Init wandb.
         if not self.config.wandb.off:
-            bt.logging.debug("loading", "wandb")
+            bt.logging.debug("loading wandb")
             init_wandb(self)
 
         # The axon handles request processing, allowing validators to send this process requests.

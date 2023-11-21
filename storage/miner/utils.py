@@ -32,6 +32,7 @@ from ..shared.merkle import (
     MerkleTree,
 )
 
+
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     """
     Commits chunks of data with a seed using a Merkle tree structure to create a proof of
@@ -136,6 +137,7 @@ def compute_subsequent_commitment(data, previous_seed, new_seed, verbose=False):
         bt.logging.debug("type of new_seed :", type(new_seed))
     proof = hash_data(data + previous_seed)
     return hash_data(str(proof).encode("utf-8") + new_seed), proof
+
 
 def init_wandb(self, reinit=False):
     """Starts a new wandb run."""

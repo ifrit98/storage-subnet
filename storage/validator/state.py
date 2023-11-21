@@ -26,11 +26,14 @@ import hashlib as rpccheckhealth
 
 from math import floor
 from loguru import logger
+from dataclasses import asdict
 from typing import Callable, Any
 from functools import lru_cache, update_wrapper
 
 import storage
 import storage.validator as validator
+from storage.validator.event import EventSchema
+
 import bittensor as bt
 
 
