@@ -694,7 +694,7 @@ class miner:
         # store new seed
         decoded["prev_seed"] = synapse.seed
         self.database.set(synapse.data_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated retrieve miner storage: {pformat(decoded)}")
+        bt.logging.debug(f"updated retrieve miner storage: \n{pformat(decoded)}")
 
         # Return base64 data
         synapse.data = base64.b64encode(encrypted_data_bytes)
