@@ -20,11 +20,31 @@ import json
 import asyncio
 import bittensor as bt
 
+import redis
 
-# Function to add metadata to a hash in Redis
+database = db = redis.StrictRedis("localhost", 6379, 1)
+hotkey = ss58_address = "5H1CaMTf6XvzSYLcLe4AhnXwttQ4z3ry6fy9XzS9wrxV5vFA"
+updater_hotkey = "5DU7XMB42qnZF2GxXdkW6Cr8dho734ue1PrfKDBUcUAqEKBY"
+data_hash = (
+    "30207882824849456500512637190778999913565856759543620533747899842526447165760"
+)
+data_hash2 = "123456789"
+
+metadata = {
+    "prev_seed": "c678132a237505ee773aaee733fdfc3ed99f59310ad6a86e7ee4feab92e823e3",
+    "size": 161851493,
+    "version": 0,
+    "encryption_payload": {
+        "nonce": "82bd50b0ff44c408b78b0c67c407b48c470d8f24626f9c22",
+        "ciphertext": "cf3092fcc88cf838154d23d39f2e946cc91ce49613411b85f64a520b766ce00fb2fa69e1fcd0faa2ffacc9afc321a5fcdc4bedce69e007edf7fb04c997e8f08c038931daceba92a2572d3b9363ca99c5ae03f219f99e39bb134ffeea622d91784e57d5782d876df72b030ecdc9f7c88dbda0a67c5b05dfe8ff00c82db9907ba4f7d0ab2033fb644a6bcef1e47db59448e2c2e2d3c9996f604fcf6ee3978a11edf39fa9a57114daf0601aee4af0124622235c8fdadd4b0b",
+    },
+    "updated_by": "5C86aJ2uQawR6P6veaJQXNK9HaWh6NMbUhTiLs65kq4ZW3NH",
+}
+
+
 def add_metadata_to_hotkey(ss58_address, data_hash, metadata, database):
     """
-    Associates a data hash and its metadata with a hotkey in Redis.
+    Associates a data hash and its metadata with a hotkey in Redis, with versioning.
 
     Parameters:
         ss58_address (str): The primary key representing the hotkey.
@@ -32,151 +52,99 @@ def add_metadata_to_hotkey(ss58_address, data_hash, metadata, database):
         metadata (dict): The metadata to associate with the data hash.
         database (redis.Redis): The Redis client instance.
     """
+    # Get the current latest version number
+    current_version = database.hlen(f"{ss58_address}:{data_hash}")
+    new_version = current_version + 1
+
     # Serialize the metadata as a JSON string
     metadata_json = json.dumps(metadata)
-    # Use HSET to associate the data hash with the hotkey
-    database.hset(ss58_address, data_hash, metadata_json)
-    bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
 
-
-def get_all_data_for_hotkey(ss58_address, database, return_hashes=False):
-    """
-    Retrieves all data hashes and their metadata for a given hotkey.
-
-    Parameters:
-        ss58_address (str): The key representing the hotkey.
-        database (redis.Redis): The Redis client instance.
-
-    Returns:
-        A dictionary where keys are data hashes and values are the associated metadata.
-    """
-    # Fetch all fields (data hashes) and values (metadata) for the hotkey
-    all_data_hashes = database.hgetall(ss58_address)
-
-    # Return only the hashes themselves if specified
-    if return_hashes:
-        return all_data_hashes
-
-    # Deserialize the metadata for each data hash
-    return {
-        data_hash.decode("utf-8"): json.loads(metadata.decode("utf-8"))
-        for data_hash, metadata in all_data_hashes.items()
-    }
-
-
-def update_metadata_for_data_hash(ss58_address, data_hash, new_metadata, database):
-    """
-    Updates the metadata for a specific data hash associated with a hotkey.
-
-    Parameters:
-        ss58_address (str): The key representing the hotkey.
-        data_hash (str): The subkey representing the data hash to update.
-        new_metadata (dict): The new metadata to associate with the data hash.
-        database (redis.Redis): The Redis client instance.
-    """
-    # Serialize the new metadata as a JSON string
-    new_metadata_json = json.dumps(new_metadata)
-    # Update the field in the hash with the new metadata
-    database.hset(ss58_address, data_hash, new_metadata_json)
-    bt.logging.trace(
-        f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
+    # Use HSET to associate the new version with the data hash
+    database.hset(f"{ss58_address}:{data_hash}", str(new_version), metadata_json)
+    bt.logging.debug(
+        f"Associated data hash {data_hash} with version {new_version} under hotkey {ss58_address}."
     )
 
 
-def get_metadata_from_hash(ss58_address, data_hash, database):
+def get_latest_metadata(ss58_address, data_hash, database):
     """
-    Retrieves metadata from a hash in Redis for the given field_key.
+    Retrieves the latest version of metadata for a given data hash.
 
     Parameters:
-        hash_key (str): The hash key in Redis.
-        field_key (str): The field key within the hash.
-        databse (redis.Redis): The Redis client instance.
-
-    Returns:
-        The deserialized metadata as a dictionary, or None if not found.
-    """
-    # Get the JSON string from Redis
-    metadata_json = database.hget(ss58_address, data_hash)
-    if metadata_json:
-        # Deserialize the JSON string to a Python dictionary
-        metadata = json.loads(metadata_json)
-        return metadata
-    else:
-        bt.logging.debug(f"No metadata found for {data_hash} in hash {ss58_address}.")
-        return None
-
-
-def get_all_data_hashes(database):
-    """
-    Retrieves all data hashes and their corresponding hotkeys from the Redis instance.
-
-    Parameters:
-        database (redis.Redis): The Redis client instance.
-
-    Returns:
-        A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
-    """
-    # Initialize an empty dictionary to store the inverse map
-    data_hash_to_hotkeys = {}
-
-    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
-    for hotkey in database.scan_iter("*"):
-        if hotkey.decode().startswith("stats:"):
-            continue
-        # Fetch all fields (data hashes) for the current hotkey
-        data_hashes = database.hkeys(hotkey)
-        # Iterate over each data hash and append the hotkey to the corresponding list
-        for data_hash in data_hashes:
-            data_hash = data_hash.decode("utf-8")
-            if data_hash not in data_hash_to_hotkeys:
-                data_hash_to_hotkeys[data_hash] = []
-            data_hash_to_hotkeys[data_hash].append(hotkey)
-
-    return data_hash_to_hotkeys
-
-
-def get_all_hotkeys_for_data_hash(data_hash, database):
-    """
-    Retrieves all hotkeys associated with a specific data hash.
-
-    Parameters:
+        ss58_address (str): The key representing the hotkey.
         data_hash (str): The data hash to look up.
         database (redis.Redis): The Redis client instance.
 
     Returns:
-        A list of hotkeys associated with the data hash.
+        The deserialized metadata as a dictionary for the latest version, or None if not found.
     """
-    # Initialize an empty list to store the hotkeys
-    hotkeys = []
+    versioned_hash = f"{ss58_address}:{data_hash}"
+    latest_version = database.hgetall(versioned_hash)
+    if latest_version:
+        # Get the highest version key
+        highest_version_key = max(latest_version, key=int)
+        metadata_json = latest_version[highest_version_key]
+        return json.loads(metadata_json.decode("utf-8"))
+    else:
+        return None
 
-    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
-    for hotkey in database.scan_iter("*"):
-        # Check if the data hash exists within the hash of the hotkey
-        if database.hexists(hotkey, data_hash):
-            hotkey = hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
-            hotkeys.append(hotkey)
 
-    return hotkeys
+def get_all_data_for_hotkey(
+    ss58_address, database, return_only_hashes=False, return_all_versions=False
+):
+    data = {}
+    if return_all_versions:
+        for key in database.scan_iter(f"{ss58_address}:*"):
+            # Extract data_hash from the key
+            _, data_hash = key.decode().split(":", 1)
+            versions = database.hgetall(key)
+            if not versions:
+                continue
+            all_versions_data = {
+                v.decode("utf-8"): json.loads(metadata.decode("utf-8"))
+                for v, metadata in versions.items()
+            }
+            data[data_hash] = all_versions_data
+    else:
+        for key in database.scan_iter(f"{ss58_address}:*"):
+            # Extract data_hash from the key
+            _, data_hash = key.decode().split(":", 1)
+            latest_version = get_latest_metadata(ss58_address, data_hash, database)
+            if not latest_version:
+                continue
+            data[data_hash] = latest_version
+
+    if return_only_hashes:
+        return list(_data.keys())
+
+    return data
+
+
+def get_metadata_from_hash(ss58_address, data_hash, database, version=None):
+    versioned_hash = f"{ss58_address}:{data_hash}"
+    if version is None:
+        # If version not specified, get the latest
+        versions = database.hgetall(versioned_hash)
+        if not versions:
+            return None
+        latest_version = max(versions.keys(), key=lambda k: int(k.decode("utf-8")))
+        metadata = versions[latest_version]
+    else:
+        # Get specified version
+        metadata = database.hget(versioned_hash, str(version))
+
+    return json.loads(metadata.decode("utf-8")) if metadata else None
 
 
 def calculate_total_hotkey_storage(hotkey, database):
-    """
-    Calculates the total storage used by a hotkey in the database.
-
-    Parameters:
-        database (redis.Redis): The Redis client instance.
-        hotkey (str): The key representing the hotkey.
-
-    Returns:
-        The total storage used by the hotkey in bytes.
-    """
     total_storage = 0
-    for data_hash in database.hkeys(hotkey):
-        # Get the metadata for the current data hash
-        metadata = get_metadata_from_hash(hotkey, data_hash, database)
-        if metadata:
-            # Add the size of the data to the total storage
-            total_storage += metadata["size"]
+    for key in database.scan_iter(f"{hotkey}:*"):
+        versions = database.hgetall(key)
+        if not versions:
+            continue
+        latest_version = max(versions.keys(), key=lambda k: int(k.decode("utf-8")))
+        latest_metadata = json.loads(versions[latest_version].decode("utf-8"))
+        total_storage += latest_metadata.get("size", 0)
     return total_storage
 
 

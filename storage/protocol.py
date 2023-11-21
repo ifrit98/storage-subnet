@@ -164,7 +164,6 @@ class Update(bt.Synapse):
     # Data to update
     prev_seed: str  # hex string
     size: int  # size of data (bytes)
-    counter: int  # version of data (last-write-wins)
 
     encryption_payload: str  # encrypted json serialized bytestring of encryption params
     # These parameters are used to decrypt user data given the originating wallet coldkey

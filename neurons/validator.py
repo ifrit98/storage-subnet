@@ -258,7 +258,6 @@ class neuron:
         Parameters:
         - synapse (protocol.Update): The synapse object containing the update information.
         """
-        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
         entry = {
             k: v
             for k, v in synapse.dict()
@@ -266,39 +265,24 @@ class neuron:
             in [
                 "prev_seed",
                 "size",
-                "counter",
+                "version",
                 "encryption_payload",
             ]
         }
         if self.config.neuron.verbose:
-            bt.logging.debug(f"update data retreived: {data}")
             bt.logging.debug(f"update entry: {pformat(entry)}")
 
         # Update the index with the new data
-        # with self.db_semaphore:
-        bt.logging.trace(f"Acquired semaphore for database access.")
-        if not data:
-            bt.logging.trace(f"Updating index with new data...")
-            # Add it to the index directly
-            add_metadata_to_hotkey(
-                synapse.axon.hotkey, synapse.data_hash, entry, self.database
-            )
-            synapse.updated = True
-        else:
-            # Check for conflicts
-            bt.logging.trace(f"checking for conflicts...")
-            local_entry = json.loads(database.get(synapse.key))
-            if local_entry["counter"] > synapse.counter:
-                bt.logging.trace(f"Local entry has a higher counter, skipping...")
-                # Do nothing, we have a newer or current version
-                synapse.updated = False
-            else:
-                bt.logging.trace(f"Updating index with existing data...")
-                # Update the index to the latest data
-                update_metadata_for_data_hash(
-                    synapse.axon.hotkey, synapse.data_hash, entry, self.database
-                )
-                synapse.updated = True
+        bt.logging.trace(f"Updating index with new data...")
+        # Add it to the index directly
+        add_versioned_metadata_to_hotkey(
+            synapse.hotkey,
+            synapse.data_hash,
+            entry,
+            synapse.dendrite.hotkey,
+            self.database,
+        )
+        synapse.updated = True
 
         bt.logging.trace(f"Successfully updated index.")
         return synapse
