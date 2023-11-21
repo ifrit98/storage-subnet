@@ -102,7 +102,7 @@ def get_metadata_from_hash(ss58_address, data_hash, database):
         metadata = json.loads(metadata_json)
         return metadata
     else:
-        bt.logging.debug(f"No metadata found for {data_hash} in hash {ss58_address}.")
+        bt.logging.trace(f"No metadata found for {data_hash} in hash {ss58_address}.")
         return None
 
 
@@ -195,10 +195,13 @@ def hotkey_at_capacity(hotkey, database):
     total_storage = calculate_total_hotkey_storage(hotkey, database)
     # Check if the hotkey is at capacity
     byte_limit = database.hget(f"stats:{hotkey}", "storage_limit")
+    if byte_limit is None:
+        bt.logging.warning(f"Could not find storage limit for {hotkey}.")
+        return False
     try:
         limit = int(byte_limit)
     except Exception as e:
-        bt.logging.error(f"Could not parse storage limit for {hotkey} | {e}.")
+        bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
         return False
     if total_storage >= limit:
         bt.logging.debug(f"Hotkey {hotkey} is at max capacity {limit // 10**9} GB.")

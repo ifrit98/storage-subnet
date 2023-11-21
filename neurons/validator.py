@@ -258,7 +258,6 @@ class neuron:
         Parameters:
         - synapse (protocol.Update): The synapse object containing the update information.
         """
-        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
         entry = {
             k: v
             for k, v in synapse.dict().items()
@@ -270,6 +269,7 @@ class neuron:
                 "encryption_payload",
             ]
         }
+        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
         if self.config.neuron.verbose:
             bt.logging.debug(f"update data retreived: {data}")
             bt.logging.debug(f"update entry: {pformat(entry)}")
@@ -764,7 +764,7 @@ class neuron:
 
             # Apply reward for this challenge
             tier_factor = get_tier_factor(hotkey, self.database)
-            rewards[idx] = 1.0 * tier_factor if verified else -1.0 * tier_factor
+            rewards[idx] = 1.0 * tier_factor if verified else -0.25 * tier_factor
 
             # Log the event data for this specific challenge
             event.uids.append(uid)
@@ -832,6 +832,20 @@ class neuron:
         else:
             hotkeys = get_all_hotkeys_for_data_hash(data_hash, self.database)
 
+        bt.logging.debug(f"Hotkeys to query before: {hotkeys}".upper())
+        # Ensure we aren't calling any validtors
+        hotkeys = [
+            hotkey.decode("utf-8")
+            for hotkey in hotkeys
+            if check_uid_availability(
+                self.metagraph,
+                self.metagraph.hotkeys.index(
+                    hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
+                ),
+                self.config.neuron.vpermit_tao_limit,
+            )
+        ]
+        bt.logging.debug(f"Hotkeys to query after: {hotkeys}".upper())
         bt.logging.info(f"Retrieving data with hash: {data_hash}")
 
         # Initialize event schema
@@ -859,9 +873,6 @@ class neuron:
         uids = []
         axons_to_query = []
         for hotkey in hotkeys:
-            hotkey = (
-                hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
-            )  # ensure str
             if hotkey == self.wallet.hotkey.ss58_address:
                 continue  # skip querying yourself
             uid = self.metagraph.hotkeys.index(hotkey)
@@ -896,7 +907,7 @@ class neuron:
             except Exception as e:
                 bt.logging.error(
                     f"Failed to decode data from UID: {uids[idx]} with error {e}"
-                )  # TODO: WHY TRYING TO RETRIEVE FROM VALIDATOR UID 5?
+                )
                 rewards[idx] = -1.0
 
                 # Update the retrieve statistics
