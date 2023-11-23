@@ -1083,16 +1083,20 @@ class neuron:
 
         if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
             try:
-                # Compute tiers
+                # Update miner tiers
                 bt.logging.info("Computing tiers")
                 await compute_all_tiers(self.database)
 
                 # Fetch miner statistics and usage data.
                 stats = get_miner_statistics(self.database)
 
-                # Log the statistics event to wandb.
+                # Log all hash <> hotkey pairs
+                hash_map = get_all_data_hashes(self.database)
+
+                # Log the statistics and hashmap to wandb.
                 if not self.config.wandb.off:
                     self.wandb.log(stats)
+                    self.wandb.log(hash_map)
 
             except Exception as e:
                 bt.logging.error(f"Failed to compute tiers with exception: {e}")
