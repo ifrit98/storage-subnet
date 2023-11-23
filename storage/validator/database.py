@@ -22,7 +22,13 @@ import bittensor as bt
 from typing import Dict, List, Optional, Tuple, Union
 
 
-def add_metadata_to_hotkey(ss58_address, data_hash, updater_hotkey, metadata, database):
+def add_metadata_to_hotkey(
+    ss58_address: str,
+    data_hash: str,
+    updater_hotkey: str,
+    metadata: dict,
+    database: redis.Redis,
+):
     """
     Associates a data hash and its metadata with a hotkey in Redis, with versioning.
     Parameters:
@@ -49,7 +55,7 @@ def add_metadata_to_hotkey(ss58_address, data_hash, updater_hotkey, metadata, da
 
 
 def get_latest_metadata(
-    ss58_address, data_hash, database
+    ss58_address: str, data_hash: str, database: redis.Redis
 ) -> Union[Dict[str, str], None]:
     """
     Retrieves the latest version of metadata for a given data hash.
@@ -72,7 +78,10 @@ def get_latest_metadata(
 
 
 def get_all_data_for_hotkey(
-    ss58_address, database, return_only_hashes=False, return_all_versions=False
+    ss58_address: str,
+    database: redis.Redis,
+    return_only_hashes: bool = False,
+    return_all_versions: bool = False,
 ) -> Union[Dict[str, Dict[str, str]], List[str]]:
     """
     Retrieves all data associated with a specific hotkey, optionally including all versions of each data hash.
@@ -117,7 +126,7 @@ def get_all_data_for_hotkey(
 
 
 def get_metadata_from_hash(
-    ss58_address, data_hash, database, version=None
+    ss58_address: str, data_hash: str, database: redis.Redis, version: int = None
 ) -> Union[Dict[str, str], None]:
     """
     Retrieves the metadata associated with a specific version of a data hash for a given hotkey. If the version number is not specified, the function returns the metadata for the latest version.
@@ -148,7 +157,7 @@ def get_metadata_from_hash(
     return json.loads(metadata.decode("utf-8")) if metadata else None
 
 
-def calculate_total_hotkey_storage(hotkey, database) -> int:
+def calculate_total_hotkey_storage(hotkey: str, database: redis.Redis) -> int:
     """
     Calculates the total storage used by a hotkey in the database.
 
@@ -171,7 +180,7 @@ def calculate_total_hotkey_storage(hotkey, database) -> int:
     return total_storage
 
 
-def get_all_data_hashes(database) -> List[str]:
+def get_all_data_hashes(database: redis.Redis) -> List[str]:
     """
     Retrieves all unique data hashes and their corresponding hotkeys from the Redis instance.
 
@@ -200,7 +209,7 @@ def get_all_data_hashes(database) -> List[str]:
     return data_hash_to_hotkeys
 
 
-def get_all_hotkeys_for_data_hash(data_hash, database) -> set:
+def get_all_hotkeys_for_data_hash(data_hash: str, database: redis.Redis) -> set:
     """
     Retrieves a list of all hotkeys that are associated with a specific data hash within the database.
 
@@ -225,7 +234,7 @@ def get_all_hotkeys_for_data_hash(data_hash, database) -> set:
     return hotkeys
 
 
-def hotkey_at_capacity(hotkey, database) -> bool:
+def hotkey_at_capacity(hotkey: str, database: redis.Redis) -> bool:
     """
     Checks if the hotkey is at capacity.
 
@@ -260,7 +269,7 @@ def hotkey_at_capacity(hotkey, database) -> bool:
         return False
 
 
-def get_all_unique_hotkeys(database) -> set:
+def get_all_unique_hotkeys(database: redis.Redis) -> set:
     """
     Retrieves all unique hotkeys present in the Redis database.
 
@@ -287,7 +296,9 @@ def get_all_unique_hotkeys(database) -> set:
     return unique_hotkeys
 
 
-def calculate_total_network_storage(database, return_gb=False) -> int:
+def calculate_total_network_storage(
+    database: redis.Redis, return_gb: bool = False
+) -> int:
     """
     Calculates the total storage used by all hotkeys in the database.
 
@@ -308,7 +319,7 @@ def calculate_total_network_storage(database, return_gb=False) -> int:
     return total_storage / 1e9 if return_gb else total_storage
 
 
-def get_miner_statistics(database) -> Dict[str, Dict[str, str]]:
+def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
     """
     Retrieves statistics for all miners in the database.
 
@@ -325,3 +336,21 @@ def get_miner_statistics(database) -> Dict[str, Dict[str, str]]:
         }
         for key in database.scan_iter(f"stats:*")
     }
+
+
+def get_redis_db_size(database: redis.Redis) -> int:
+    """
+    Calculates the total approximate size of all keys in a Redis database.
+
+    Parameters:
+        database (int): Redis database
+
+    Returns:
+        int: Total size of all keys in bytes
+    """
+    total_size = 0
+    for key in database.scan_iter("*"):
+        size = database.execute_command("MEMORY USAGE", key)
+        if size:
+            total_size += size
+    return total_size
