@@ -90,6 +90,8 @@ from storage.validator.database import (
     get_all_data_hashes,
     get_all_hotkeys_for_data_hash,
     hotkey_at_capacity,
+    get_miner_statistics,
+    calculate_total_network_storage,
 )
 
 from storage.validator.bonding import (
@@ -1086,13 +1088,7 @@ class neuron:
                 await compute_all_tiers(self.database)
 
                 # Fetch miner statistics and usage data.
-                stats = {
-                    key.decode("utf-8").split(":")[-1]: {
-                        k.decode("utf-8"): v.decode("utf-8")
-                        for k, v in self.database.hgetall(key).items()
-                    }
-                    for key in self.database.scan_iter(f"stats:*")
-                }
+                stats = get_miner_statistics(self.database)
 
                 # Log the statistics event to wandb.
                 if not self.config.wandb.off:
@@ -1100,6 +1096,14 @@ class neuron:
 
             except Exception as e:
                 bt.logging.error(f"Failed to compute tiers with exception: {e}")
+
+        if self.step % 100:
+            # Update the total network storage
+            total_storage = calculate_total_network_storage(self.database)
+            bt.logging.info(f"Total network storage: {total_storage}")
+            # Log the total storage to wandb.
+            if not self.config.wandb.off:
+                self.wandb.log({"total_storage": total_storage})
 
     def run(self):
         bt.logging.info("run()")

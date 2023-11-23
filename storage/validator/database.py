@@ -19,6 +19,7 @@
 import json
 import asyncio
 import bittensor as bt
+from typing import Dict, List, Optional, Tuple, Union
 
 
 def add_metadata_to_hotkey(ss58_address, data_hash, updater_hotkey, metadata, database):
@@ -47,7 +48,9 @@ def add_metadata_to_hotkey(ss58_address, data_hash, updater_hotkey, metadata, da
     )
 
 
-def get_latest_metadata(ss58_address, data_hash, database):
+def get_latest_metadata(
+    ss58_address, data_hash, database
+) -> Union[Dict[str, str], None]:
     """
     Retrieves the latest version of metadata for a given data hash.
     Parameters:
@@ -70,7 +73,7 @@ def get_latest_metadata(ss58_address, data_hash, database):
 
 def get_all_data_for_hotkey(
     ss58_address, database, return_only_hashes=False, return_all_versions=False
-):
+) -> Union[Dict[str, Dict[str, str]], List[str]]:
     """
     Retrieves all data associated with a specific hotkey, optionally including all versions of each data hash.
 
@@ -113,7 +116,9 @@ def get_all_data_for_hotkey(
     return data
 
 
-def get_metadata_from_hash(ss58_address, data_hash, database, version=None):
+def get_metadata_from_hash(
+    ss58_address, data_hash, database, version=None
+) -> Union[Dict[str, str], None]:
     """
     Retrieves the metadata associated with a specific version of a data hash for a given hotkey. If the version number is not specified, the function returns the metadata for the latest version.
 
@@ -143,7 +148,7 @@ def get_metadata_from_hash(ss58_address, data_hash, database, version=None):
     return json.loads(metadata.decode("utf-8")) if metadata else None
 
 
-def calculate_total_hotkey_storage(hotkey, database):
+def calculate_total_hotkey_storage(hotkey, database) -> int:
     """
     Calculates the total storage used by a hotkey in the database.
 
@@ -166,7 +171,7 @@ def calculate_total_hotkey_storage(hotkey, database):
     return total_storage
 
 
-def get_all_data_hashes(database):
+def get_all_data_hashes(database) -> List[str]:
     """
     Retrieves all unique data hashes and their corresponding hotkeys from the Redis instance.
 
@@ -220,7 +225,7 @@ def get_all_hotkeys_for_data_hash(data_hash, database) -> set:
     return hotkeys
 
 
-def hotkey_at_capacity(hotkey, database):
+def hotkey_at_capacity(hotkey, database) -> bool:
     """
     Checks if the hotkey is at capacity.
 
@@ -255,7 +260,7 @@ def hotkey_at_capacity(hotkey, database):
         return False
 
 
-def get_all_unique_hotkeys(database):
+def get_all_unique_hotkeys(database) -> set:
     """
     Retrieves all unique hotkeys present in the Redis database.
 
@@ -282,7 +287,7 @@ def get_all_unique_hotkeys(database):
     return unique_hotkeys
 
 
-def calculate_total_network_storage(database, return_gb=False):
+def calculate_total_network_storage(database, return_gb=False) -> int:
     """
     Calculates the total storage used by all hotkeys in the database.
 
@@ -301,3 +306,22 @@ def calculate_total_network_storage(database, return_gb=False):
         # Grab storage for that hotkey
         total_storage += calculate_total_hotkey_storage(hotkey, database)
     return total_storage / 1e9 if return_gb else total_storage
+
+
+def get_miner_statistics(database) -> Dict[str, Dict[str, str]]:
+    """
+    Retrieves statistics for all miners in the database.
+
+    Parameters:
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
+    """
+    return {
+        key.decode("utf-8").split(":")[-1]: {
+            k.decode("utf-8"): v.decode("utf-8")
+            for k, v in database.hgetall(key).items()
+        }
+        for key in database.scan_iter(f"stats:*")
+    }

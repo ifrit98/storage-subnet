@@ -39,7 +39,8 @@ class EventSchema:
     # Reward data
     rewards: List[float]  # Reward vector for given step
 
-    # Weights data and moving averages
+    # Total storage, weights data and moving averages
+    total_network_storage: Optional[float] = None
     set_weights: Optional[List[List[float]]] = None
     moving_averaged_scores: Optional[List[float]] = None
 
@@ -59,6 +60,7 @@ class EventSchema:
             best_uid=event_dict["best_uid"],
             best_hotkey=event_dict["best_hotkey"],
             rewards=event_dict["rewards"],
+            total_network_storage=event_dict["total_network_storage"],
             set_weights=event_dict["set_weights"],
             moving_averaged_scores=event_dict["moving_averaged_scores"],
         )
