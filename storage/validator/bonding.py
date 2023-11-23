@@ -120,7 +120,10 @@ async def compute_tier(stats_key, database):
     """
     data = database.hgetall(stats_key)
 
-    registered = miner_is_registered(stats_key, database)
+    str_key = stats_key.decode("utf-8") if isinstance(stats_key, bytes) else stats_key
+    ss58_address = str_key.split(":")[1]
+
+    registered = miner_is_registered(ss58_address, database)
     if not data:
         bt.logging.warning(f"No statistics data found for {stats_key}! Skipping...")
         return

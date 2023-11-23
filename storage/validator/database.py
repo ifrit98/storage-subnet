@@ -255,21 +255,49 @@ def hotkey_at_capacity(hotkey, database):
         return False
 
 
-def calculate_total_network_storage(database):
+def get_all_unique_hotkeys(database):
     """
-    Calculates the total storage used by all hotkeys in the database.
+    Retrieves all unique hotkeys present in the Redis database.
+
+    This method scans the Redis database for keys and extracts the unique hotkeys from them.
+    It assumes that the keys are in the format 'hotkey:rest_of_the_key'.
 
     Parameters:
         database (redis.Redis): The Redis client instance.
+
+    Returns:
+        set: A set of unique hotkeys found in the database.
+    """
+    unique_hotkeys = set()
+
+    # Scan through all keys in the database
+    for key in database.scan_iter("*:*"):
+        # Split the key at the colon and take the first part as the hotkey
+        hotkey = key.decode().split(":")[0]
+        unique_hotkeys.add(hotkey)
+
+    if "stats" in unique_hotkeys:
+        unique_hotkeys.remove("stats")
+
+    return unique_hotkeys
+
+
+def calculate_total_network_storage(database, return_gb=False):
+    """
+    Calculates the total storage used by all hotkeys in the database.
+
+    If return_gb is set to True, the storage is returned in GB, otherwise in bytes.
+
+    Parameters:
+        database (redis.Redis): The Redis client instance.
+        return_gb (bool): Whether to return the storage in GB or bytes.
 
     Returns:
         The total storage used by all hotkeys in the database in bytes.
     """
     total_storage = 0
     # Iterate over all hotkeys
-    for hotkey in database.scan_iter("*"):
-        if hotkey.startswith(b"stats:"):
-            continue
+    for hotkey in get_all_unique_hotkeys(database):
         # Grab storage for that hotkey
         total_storage += calculate_total_hotkey_storage(hotkey, database)
-    return total_storage
+    return total_storage / 1e9 if return_gb else total_storage
