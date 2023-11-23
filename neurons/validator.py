@@ -747,7 +747,7 @@ class neuron:
         if self.config.neuron.verbose and self.config.neuron.log_responses:
             [
                 bt.logging.trace(
-                    f"Challenge response {uid} | {pformat(response.axon.dict())}"
+                    f"Challenge response {uid} | {pformat(response[0].axon.dict())}"
                 )
                 for uid, response in zip(uids, responses)
             ]
@@ -761,7 +761,7 @@ class neuron:
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
             if self.config.neuron.verbose:
                 bt.logging.trace(
-                    f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response.axon.dict())}"
+                    f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
                 )
 
             hotkey = self.hotkeys[uid]
@@ -776,7 +776,7 @@ class neuron:
 
             # Apply reward for this challenge
             tier_factor = get_tier_factor(hotkey, self.database)
-            rewards[idx] = 1.0 * tier_factor if verified else -0.25 * tier_factor
+            rewards[idx] = 1.0 * tier_factor if verified else -0.5 * tier_factor
 
             # Log the event data for this specific challenge
             event.uids.append(uid)
@@ -910,7 +910,9 @@ class neuron:
         )
         if self.config.neuron.verbose and self.config.neuron.log_responses:
             [
-                bt.logging.trace(f"Retrieve response: {uid} | {response.axon.dict()}")
+                bt.logging.trace(
+                    f"Retrieve response: {uid} | {response[0].axon.dict()}"
+                )
                 for uid, response in zip(uids, responses)
             ]
         rewards: torch.FloatTensor = torch.zeros(
@@ -953,7 +955,7 @@ class neuron:
             success = verify_retrieve_with_seed(response)
             if not success:
                 bt.logging.error(
-                    f"data verification failed! {pformat(response.axon.dict())}"
+                    f"data verification failed! {pformat(response[0].axon.dict())}"
                 )
                 rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
 
@@ -1032,72 +1034,72 @@ class neuron:
         bt.logging.info(f"forward step: {self.step}")
 
         if self.step % self.config.neuron.store_epoch_length == 0:
-            # try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            event = await self.store_random_data()
+            try:
+                # Store some data
+                bt.logging.info("initiating store data")
+                event = await self.store_random_data()
+
+                if self.config.neuron.verbose:
+                    bt.logging.debug(f"STORE EVENT LOG: {event}")
+
+                # Log event
+                log_event(self, event)
+
+            except Exception as e:
+                bt.logging.error(f"Failed to store data with exception: {e}")
+
+        try:
+            # Challenge some data
+            bt.logging.info("initiating challenge")
+            event = await self.challenge()
 
             if self.config.neuron.verbose:
-                bt.logging.debug(f"STORE EVENT LOG: {event}")
+                bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
 
             # Log event
             log_event(self, event)
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to store data with exception: {e}")
-
-        # try:
-        # Challenge some data
-        bt.logging.info("initiating challenge")
-        event = await self.challenge()
-
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
-
-        # Log event
-        log_event(self, event)
-
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to challenge data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to challenge data with exception: {e}")
 
         if self.step % self.config.neuron.retrieve_epoch_length == 0:
-            # try:
-            # Retrieve some data
-            bt.logging.info("initiating retrieve")
-            async for event in self.retrieve():
-                if isinstance(event, EventSchema):
-                    break
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                async for event in self.retrieve():
+                    if isinstance(event, EventSchema):
+                        break
 
-            if self.config.neuron.verbose:
-                bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+                if self.config.neuron.verbose:
+                    bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-            # Log event
-            log_event(self, event)
+                # Log event
+                log_event(self, event)
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to retrieve data with exception: {e}")
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
-        # if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
-        #     try:
-        #         # Compute tiers
-        #         bt.logging.info("Computing tiers")
-        #         await compute_all_tiers(self.database)
+        if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
+            try:
+                # Compute tiers
+                bt.logging.info("Computing tiers")
+                await compute_all_tiers(self.database)
 
-        #         # Fetch miner statistics and usage data.
-        #         stats = {
-        #             key.decode("utf-8").split(":")[-1]: {
-        #                 k.decode("utf-8"): v.decode("utf-8")
-        #                 for k, v in self.database.hgetall(key).items()
-        #             }
-        #             for key in self.database.scan_iter(f"stats:*")
-        #         }
+                # Fetch miner statistics and usage data.
+                stats = {
+                    key.decode("utf-8").split(":")[-1]: {
+                        k.decode("utf-8"): v.decode("utf-8")
+                        for k, v in self.database.hgetall(key).items()
+                    }
+                    for key in self.database.scan_iter(f"stats:*")
+                }
 
-        #         # Log the statistics event to wandb.
-        #         if not self.config.wandb.off:
-        #             self.wandb.log(stats)
+                # Log the statistics event to wandb.
+                if not self.config.wandb.off:
+                    self.wandb.log(stats)
 
-        # except Exception as e:
-        #     bt.logging.error(f"Failed to compute tiers with exception: {e}")
+            except Exception as e:
+                bt.logging.error(f"Failed to compute tiers with exception: {e}")
 
     def run(self):
         bt.logging.info("run()")
