@@ -397,7 +397,10 @@ class neuron:
         return synapse
 
     async def store_encrypted_data(
-        self, encrypted_data: typing.Union[bytes, str], encryption_payload: dict
+        self,
+        encrypted_data: typing.Union[bytes, str],
+        encryption_payload: dict,
+        ttl: int = 0,
     ) -> bool:
         event = EventSchema(
             task_name="Store",
@@ -513,6 +516,11 @@ class neuron:
                         response_storage,
                         self.database,
                     )
+                    if ttl > 0:
+                        self.database.expire(
+                            f"{hotkey}:{data_hash}",
+                            ttl,
+                        )
                     bt.logging.debug(
                         f"Stored data in database with key: {hotkey} | {data_hash}"
                     )
@@ -616,7 +624,9 @@ class neuron:
         # TODO: create and use a throwaway wallet (never decrypable)
         encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
 
-        return await self.store_encrypted_data(encrypted_data, encryption_payload)
+        return await self.store_encrypted_data(
+            encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl
+        )
 
     async def handle_challenge(
         self, uid: int

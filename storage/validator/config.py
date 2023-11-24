@@ -236,7 +236,7 @@ def add_args(cls, parser):
         "--neuron.data_ttl",
         type=int,
         help="The number of blocks before data expires.",
-        default=5000,
+        default=50000,  # 7 days
     )
 
     # Redis arguments
