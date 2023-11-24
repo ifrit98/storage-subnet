@@ -91,6 +91,8 @@ from storage.validator.database import (
     get_all_hotkeys_for_data_hash,
     update_metadata_for_data_hash,
     hotkey_at_capacity,
+    get_miner_statistics,
+    calculate_total_network_storage,
 )
 
 from storage.validator.bonding import (
@@ -258,6 +260,14 @@ class neuron:
         Parameters:
         - synapse (protocol.Update): The synapse object containing the update information.
         """
+        # Only allow updates from verified validators
+        validator_hotkeys = self.get_query_validators(return_hotkeys=True)
+        if synapse.dendrite.hotkey not in validator_hotkeys:
+            bt.logging.error(
+                f"Received update from non-validator hotkey: {synapse.hotkey}"
+            )
+            return
+
         entry = {
             k: v
             for k, v in synapse.dict().items()
@@ -269,14 +279,17 @@ class neuron:
                 "encryption_payload",
             ]
         }
-        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
+
         if self.config.neuron.verbose:
             bt.logging.debug(f"update data retreived: {data}")
             bt.logging.debug(f"update entry: {pformat(entry)}")
 
         # Update the index with the new data
-        # with self.db_semaphore:
+        bt.logging.trace(
+            f"Updating index for hotkey: {synapse.hotkey} and data_hash: {synapse.data_hash}"
+        )
 
+        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
         if not data:
             bt.logging.trace(f"Updating index with new data...")
             # Add it to the index directly
@@ -303,21 +316,11 @@ class neuron:
         bt.logging.trace(f"Successfully updated index.")
         return synapse
 
-    async def broadcast(self, hotkey, data_hash, data):
-        """
-        Broadcasts updates to all validators on the network for creating or updating an index value.
-
-        Parameters:
-        - hotkey: The key associated with the data to broadcast.
-        - data_hash: The hash of the data to broadcast.
-        - data: The metadata to be broadcast to other validators.
-        """
-        bt.logging.trace("broadcasting data.")
+    def get_query_validators(self, return_hotkeys=False):
         # Determine axons to query from metagraph
         vpermits = self.metagraph.validator_permit
         vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
         vpermit_uids = torch.where(vpermits)[0]
-
         # Exclude your own uid
         vpermit_uids = vpermit_uids[
             vpermit_uids
@@ -327,6 +330,24 @@ class neuron:
             self.metagraph.S[vpermit_uids] > self.config.neuron.broadcast_stake_limit
         )[0]
         query_uids = vpermit_uids[query_idxs]
+
+        return (
+            [self.metagraph.hotkeys[uid] for uid in query_uids]
+            if return_hotkeys
+            else query_uids
+        )
+
+    async def broadcast(self, hotkey, data_hash, data):
+        """
+        Broadcasts updates to all validators on the network for creating or updating an index value.
+        Parameters:
+        - hotkey: The key associated with the data to broadcast.
+        - data_hash: The hash of the data to broadcast.
+        - data: The metadata to be broadcast to other validators.
+        """
+        bt.logging.trace("broadcasting data.")
+        # Determine axons to query from metagraph
+        query_uids = self.get_query_validators()
         axons = [self.metagraph.axons[uid] for uid in query_uids]
 
         if self.config.neuron.verbose:
@@ -547,7 +568,12 @@ class neuron:
 
             bt.logging.trace(f"Applying store rewards for retry: {retries}")
             apply_reward_scores(
-                self, uids, responses, rewards, timeout=self.config.neuron.store_timeout
+                self,
+                uids,
+                responses,
+                rewards,
+                timeout=self.config.neuron.store_timeout,
+                mode="minmax",
             )
 
             # Get a new set of UIDs to query for those left behind
@@ -735,7 +761,7 @@ class neuron:
         if self.config.neuron.verbose and self.config.neuron.log_responses:
             [
                 bt.logging.trace(
-                    f"Challenge response {uid} | {pformat(response.axon.dict())}"
+                    f"Challenge response {uid} | {pformat(response[0].axon.dict())}"
                 )
                 for uid, response in zip(uids, responses)
             ]
@@ -749,7 +775,7 @@ class neuron:
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
             if self.config.neuron.verbose:
                 bt.logging.trace(
-                    f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response.axon.dict())}"
+                    f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
                 )
 
             hotkey = self.hotkeys[uid]
@@ -780,7 +806,12 @@ class neuron:
         responses = [response[0] for (verified, response) in responses]
         bt.logging.trace("Applying challenge rewards")
         apply_reward_scores(
-            self, uids, responses, rewards, timeout=self.config.neuron.challenge_timeout
+            self,
+            uids,
+            responses,
+            rewards,
+            timeout=self.config.neuron.challenge_timeout,
+            mode="minmax",
         )
 
         # Determine the best UID based on rewards
@@ -832,7 +863,7 @@ class neuron:
         else:
             hotkeys = get_all_hotkeys_for_data_hash(data_hash, self.database)
 
-        bt.logging.debug(f"Hotkeys to query before: {hotkeys}".upper())
+        bt.logging.trace(f"Hotkeys to query before: {hotkeys}")
         # Ensure we aren't calling any validtors
         hotkeys = [
             hotkey.decode("utf-8")
@@ -845,7 +876,7 @@ class neuron:
                 self.config.neuron.vpermit_tao_limit,
             )
         ]
-        bt.logging.debug(f"Hotkeys to query after: {hotkeys}".upper())
+        bt.logging.trace(f"Hotkeys to query after: {hotkeys}")
         bt.logging.info(f"Retrieving data with hash: {data_hash}")
 
         # Initialize event schema
@@ -988,7 +1019,12 @@ class neuron:
 
         bt.logging.trace("Applying retrieve rewards")
         apply_reward_scores(
-            self, uids, responses, rewards, timeout=self.config.neuron.retrieve_timeout
+            self,
+            uids,
+            responses,
+            rewards,
+            timeout=self.config.neuron.retrieve_timeout,
+            mode="minmax",
         )
 
         # Determine the best UID based on rewards
@@ -1053,25 +1089,31 @@ class neuron:
 
         if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
             try:
-                # Compute tiers
+                # Update miner tiers
                 bt.logging.info("Computing tiers")
                 await compute_all_tiers(self.database)
 
                 # Fetch miner statistics and usage data.
-                stats = {
-                    key.decode("utf-8").split(":")[-1]: {
-                        k.decode("utf-8"): v.decode("utf-8")
-                        for k, v in self.database.hgetall(key).items()
-                    }
-                    for key in self.database.scan_iter(f"stats:*")
-                }
+                stats = get_miner_statistics(self.database)
 
-                # Log the statistics event to wandb.
+                # Log all hash <> hotkey pairs
+                hash_map = get_all_data_hashes(self.database)
+
+                # Log the statistics and hashmap to wandb.
                 if not self.config.wandb.off:
                     self.wandb.log(stats)
+                    self.wandb.log(hash_map)
 
             except Exception as e:
                 bt.logging.error(f"Failed to compute tiers with exception: {e}")
+
+        if self.step % 100:  # TODO: make this a hparam
+            # Update the total network storage
+            total_storage = calculate_total_network_storage(self.database)
+            bt.logging.info(f"Total network storage: {total_storage}")
+            # Log the total storage to wandb.
+            if not self.config.wandb.off:
+                self.wandb.log({"total_storage": total_storage})
 
     def run(self):
         bt.logging.info("run()")
