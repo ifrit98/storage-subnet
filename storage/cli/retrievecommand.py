@@ -121,16 +121,19 @@ class RetrieveData:
 
         success = False
         for response in responses:
-            if response.dendrite.status_code != 200:
+            bittensor.logging.trace(f"response: {response}")
+            if response.dendrite.status_code != 200 or response.encrypted_data == None:
                 continue
 
             # Decrypt the response
+            bittensor.logging.trace(f"encrypted_data: {response.encrypted_data}")
             encrypted_data = base64.b64decode(response.encrypted_data)
             decrypted_data = decrypt_data_with_private_key(
                 encrypted_data,
                 response.encryption_payload,
                 bytes(wallet.coldkey.private_key.hex(), "utf-8"),
             )
+            bittensor.logging.trace(f"decrypted_data: {decrypted_data}")
             bittensor.logging.debug(decrypted_data)
             success = True
 
@@ -171,12 +174,6 @@ class RetrieveData:
                 "Enter wallet hotkey", default=defaults.wallet.hotkey
             )
             config.wallet.hotkey = str(wallet_hotkey)
-
-        if not config.is_set("storage_basepath") and not config.no_prompt:
-            config.storage_basepath = Prompt.ask(
-                "Enter path to store retrieved data",
-                default=defaults.storage_basepath,
-            )
 
         if not config.is_set("data_hash") and not config.no_prompt:
             config.data_hash = Prompt.ask("Enter hash of data to retrieve")

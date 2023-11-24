@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 from .default_values import defaults
 
+bittensor.trace()
 
 # Create a console instance for CLI display.
 console = bittensor.__console__

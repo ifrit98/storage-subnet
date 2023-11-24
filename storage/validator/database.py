@@ -132,7 +132,7 @@ def get_all_data_hashes(database):
             data_hash = data_hash.decode("utf-8")
             if data_hash not in data_hash_to_hotkeys:
                 data_hash_to_hotkeys[data_hash] = []
-            data_hash_to_hotkeys[data_hash].append(hotkey)
+            data_hash_to_hotkeys[data_hash].append(hotkey.decode("utf-8"))
 
     return data_hash_to_hotkeys
 

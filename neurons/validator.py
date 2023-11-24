@@ -873,20 +873,17 @@ class neuron:
         else:
             hotkeys = get_all_hotkeys_for_data_hash(data_hash, self.database)
 
-        bt.logging.trace(f"Hotkeys to query before: {hotkeys}")
         # Ensure we aren't calling any validtors
         hotkeys = [
-            hotkey.decode("utf-8")
+            hotkey
             for hotkey in hotkeys
             if check_uid_availability(
                 self.metagraph,
-                self.metagraph.hotkeys.index(
-                    hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
-                ),
+                self.metagraph.hotkeys.index(hotkey),
                 self.config.neuron.vpermit_tao_limit,
             )
         ]
-        bt.logging.trace(f"Hotkeys to query after: {hotkeys}")
+        bt.logging.trace(f"Hotkeys to query: {hotkeys}")
         bt.logging.info(f"Retrieving data with hash: {data_hash}")
 
         # Initialize event schema
@@ -906,9 +903,6 @@ class neuron:
         )
 
         start_time = time.time()
-
-        # Make sure we have the most up-to-date hotkey info
-        self.metagraph.sync(lite=True)
 
         # fetch which miners have the data
         uids = []
@@ -935,7 +929,9 @@ class neuron:
         )
         if self.config.neuron.verbose and self.config.neuron.log_responses:
             [
-                bt.logging.trace(f"Retrieve response: {uid} | {response.axon.dict()}")
+                bt.logging.trace(
+                    f"Retrieve response: {uid} | {pformat(response.dendrite.dict())}"
+                )
                 for uid, response in zip(uids, responses)
             ]
         rewards: torch.FloatTensor = torch.zeros(
