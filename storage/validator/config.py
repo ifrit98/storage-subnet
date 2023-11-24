@@ -84,7 +84,7 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--neuron.maxsize",
-        default=2**16,  # Use lognormal random gaussian if None (2**16, # 64KB)
+        default=None,  # Use lognormal random gaussian if None (2**16, # 64KB)
         type=int,
         help="Maximum size of random data to store.",
     )
