@@ -712,6 +712,10 @@ class neuron:
         bt.logging.trace(f"Broadcasting challenge update to all validators")
         await self.broadcast(hotkey, data_hash, data)
 
+        # Broadcast this update to the other validators.
+        bt.logging.trace(f"Broadcasting challenge update to all validators")
+        await self.broadcast(hotkey, data_hash, data)
+
         # Record the time taken for the challenge
         return verified, response
 
