@@ -44,6 +44,14 @@ def miner_is_registered(ss58_address, database):
 
 
 def register_miner(ss58_address, database):
+    """
+    Registers a new miner in the decentralized storage system, initializing their statistics.
+    This function creates a new entry in the database for a miner with default values,
+    setting them initially to the Bronze tier and assigning the corresponding storage limit.
+    Args:
+        ss58_address (str): The unique address (hotkey) of the miner to be registered.
+        database (redis.Redis): The Redis client instance for database operations.
+    """
     # Initialize statistics for a new miner in a separate hash
     database.hmset(
         f"stats:{ss58_address}",
@@ -61,6 +69,17 @@ def register_miner(ss58_address, database):
 
 
 def update_statistics(ss58_address, success, task_type, database):
+    """
+    Updates the statistics of a miner in the decentralized storage system.
+    If the miner is not already registered, they are registered first. This function updates
+    the miner's statistics based on the task performed (store, challenge, retrieve) and whether
+    it was successful.
+    Args:
+        ss58_address (str): The unique address (hotkey) of the miner.
+        success (bool): Indicates whether the task was successful or not.
+        task_type (str): The type of task performed ('store', 'challenge', 'retrieve').
+        database (redis.Redis): The Redis client instance for database operations.
+    """
     # Check and see if this miner is registered.
     if not miner_is_registered(ss58_address, database):
         register_miner(ss58_address, database)
@@ -86,6 +105,14 @@ def update_statistics(ss58_address, success, task_type, database):
 
 
 async def compute_tier(stats_key, database):
+    """
+    Asynchronously computes the tier of a miner based on their performance statistics.
+    The function calculates the success rate for each type of task and total successes,
+    then updates the miner's tier if necessary. This could potentially change their storage limit.
+    Args:
+        stats_key (str): The key in the database where the miner's statistics are stored.
+        database (redis.Redis): The Redis client instance for database operations.
+    """
     data = database.hgetall(stats_key)
 
     registered = miner_is_registered(stats_key, database)
@@ -166,9 +193,11 @@ async def compute_tier(stats_key, database):
 async def compute_all_tiers(database):
     # Iterate over all miners
     """
-    Computes the tier for all miners in the database.
-
-    This function should be called periodically to update the tier for all miners.
+    Asynchronously computes and updates the tiers for all miners in the decentralized storage system.
+    This function should be called periodically to ensure miners' tiers are up-to-date based on
+    their performance. It iterates over all miners and calls `compute_tier` for each one.
+    Args:
+        database (redis.Redis): The Redis client instance for database operations.
     """
     miners = [miner for miner in database.scan_iter("stats:*")]
     tasks = [compute_tier(miner, database) for miner in miners]
@@ -176,6 +205,16 @@ async def compute_all_tiers(database):
 
 
 def get_tier_factor(ss58_address, database):
+    """
+    Retrieves the reward factor based on the tier of a given miner.
+    This function returns a factor that represents the proportion of rewards a miner
+    is eligible to receive based on their tier.
+    Args:
+        ss58_address (str): The unique address (hotkey) of the miner.
+        database (redis.Redis): The Redis client instance for database operations.
+    Returns:
+        float: The reward factor corresponding to the miner's tier.
+    """
     tier = database.hget(f"stats:{ss58_address}", "tier")
     if tier == b"Diamond":
         return DIAMOND_TIER_REWARD_FACTOR
