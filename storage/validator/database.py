@@ -29,6 +29,50 @@ def add_metadata_to_hotkey(
     updater_hotkey: str,
     metadata: dict,
     database: redis.Redis,
+    N: int = 3,
+):
+    """
+    Associates a data hash and its metadata with a hotkey in Redis, with versioning.
+    Retains only the latest three versions of each key and deletes older versions.
+    
+    Parameters:
+        ss58_address (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        updater_hotkey (str): The hotkey of the miner that is updating the metadata.
+        metadata (dict): The metadata to associate with the data hash.
+        database (redis.Redis): The Redis client instance.
+        N (int, optional): The number of versions to retain. Defaults to 3.
+    """
+    hash_key = f"{ss58_address}:{data_hash}"
+    
+    # Get the current latest version number
+    current_versions = database.hkeys(hash_key)
+    current_versions = [int(v.decode("utf-8")) for v in current_versions]
+    current_versions.sort()
+
+    new_version = int(current_versions[-1]) + 1 if current_versions else 1
+
+    # Update the metadata with last updater hotkey and version number
+    metadata["updated_by"] = updater_hotkey
+
+    # Serialize the metadata as a JSON string
+    metadata_json = json.dumps(metadata)
+
+    # Use HSET to associate the new version with the data hash
+    database.hset(hash_key, str(new_version), metadata_json)
+
+    # Retain only the latest three versions, delete older ones
+    if len(current_versions) >= N:
+        for version in current_versions[:-N]:
+            database.hdel(hash_key, str(version))
+
+
+def _add_metadata_to_hotkey(
+    ss58_address: str,
+    data_hash: str,
+    updater_hotkey: str,
+    metadata: dict,
+    database: redis.Redis,
 ):
     """
     Associates a data hash and its metadata with a hotkey in Redis, with versioning.
