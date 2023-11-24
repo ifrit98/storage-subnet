@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import redis
 import asyncio
 import bittensor as bt
 from typing import Dict, List, Optional, Tuple, Union
