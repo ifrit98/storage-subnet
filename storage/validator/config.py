@@ -232,6 +232,12 @@ def add_args(cls, parser):
         help="If set, we will log responses. These can be LONG.",
         default=False,
     )
+    parser.add_argument(
+        "--neuron.data_ttl",
+        type=int,
+        help="The number of blocks before data expires.",
+        default=50000,  # 7 days
+    )
 
     # Redis arguments
     parser.add_argument(
