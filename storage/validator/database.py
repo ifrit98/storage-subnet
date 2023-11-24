@@ -17,8 +17,10 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import redis
 import asyncio
 import bittensor as bt
+from typing import Dict, List, Any, Union, Optional, Tuple
 
 
 # Function to add metadata to a hash in Redis
@@ -223,10 +225,10 @@ def calculate_total_network_storage(database):
     total_storage = 0
     # Iterate over all hotkeys
     for hotkey in database.scan_iter("*"):
-        if hotkey.startswith("stats:"):
+        if hotkey.startswith(b"stats:"):
             continue
         # Grab storage for that hotkey
-        total_storage += calculate_total_hotkey_storage(database, hotkey)
+        total_storage += calculate_total_hotkey_storage(hotkey, database)
     return total_storage
 
 
@@ -243,7 +245,7 @@ def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
             k.decode("utf-8"): v.decode("utf-8")
             for k, v in database.hgetall(key).items()
         }
-        for key in database.scan_iter(f"stats:*")
+        for key in database.scan_iter(b"stats:*")
     }
 
 

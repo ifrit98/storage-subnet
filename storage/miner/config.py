@@ -87,7 +87,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--database.index",
         type=int,
-        default=0,
+        default=2,
         help="The index of the redis database.",
     )
     parser.add_argument(

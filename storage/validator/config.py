@@ -247,7 +247,7 @@ def add_args(cls, parser):
         "--database.port", default=6379, help="The port of the redis database."
     )
     parser.add_argument(
-        "--database.index", default=1, help="The database number of the redis database."
+        "--database.index", default=3, help="The database number of the redis database."
     )
 
     # Wandb args

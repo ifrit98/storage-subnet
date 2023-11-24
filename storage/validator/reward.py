@@ -49,6 +49,18 @@ def calculate_sigmoid_params(timeout):
 
 
 def scale_rewards_with_adjusted_sigmoid(process_times, rewards, timeout):
+    """
+    Applies an adjusted sigmoid function to scale rewards based on the processing times of axons.
+    This function modifies the rewards based on an adjusted sigmoid function, where the steepness and
+    shift of the sigmoid curve are determined by the timeout value. This scaling method rewards faster
+    processing times with higher rewards, while slower times are penalized by reducing the rewards.
+    Args:
+        process_times (List[float]): A list of processing times for each axon.
+        rewards (List[float]): A list of initial reward values for each axon.
+        timeout (float): The timeout value used to determine the steepness and shift of the sigmoid function.
+    Returns:
+        List[float]: A list of rewards scaled according to the adjusted sigmoid function.
+    """
     # Center the completion times around 0 for effective sigmoid scaling
     centered_times = process_times - np.mean(process_times)
 
@@ -99,6 +111,19 @@ def get_sorted_response_times(uids, responses, timeout: float):
 
 
 def scale_rewards_by_response_time(uids, responses, rewards, timeout: float):
+    """
+    Scales the rewards for each axon based on their response times using an adjusted sigmoid function.
+    This function first sorts the axons based on their response times and then applies a sigmoid scaling
+    to the rewards. This scaling rewards faster response times while penalizing slower ones, based on the
+    timeout parameter.
+    Args:
+        uids (List[int]): A list of unique identifiers for each axon.
+        responses (List[Response]): A list of Response objects corresponding to each axon.
+        rewards (List[float]): A list of initial reward values for each axon.
+        timeout (float): The timeout value used to calculate sigmoid scaling parameters.
+    Returns:
+        List[float]: A list of scaled rewards for each axon.
+    """
     sorted_axon_times = get_sorted_response_times(uids, responses, timeout=timeout)
 
     # Extract only the process times

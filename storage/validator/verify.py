@@ -37,7 +37,18 @@ import bittensor as bt
 
 
 def verify_chained_commitment(proof, seed, commitment, verbose=True):
-    """Verify a commitment using the proof, seed, and commitment."""
+    """
+    Verifies the accuracy of a chained commitment using the provided proof, seed, and commitment.
+    The function hashes the concatenation of the proof and seed and compares this result with the provided commitment
+    to determine if the commitment is valid.
+    Args:
+        proof (str): The proof string involved in the commitment.
+        seed (str): The seed string used in generating the commitment.
+        commitment (str): The expected commitment hash to validate against.
+        verbose (bool, optional): Enables verbose logging for debugging. Defaults to True.
+    Returns:
+        bool: True if the commitment is verified successfully, False otherwise.
+    """
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
     if verbose:
         bt.logging.debug(
@@ -58,6 +69,16 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
 
 
 def verify_challenge_with_seed(synapse, verbose=False):
+    """
+    Verifies a challenge in a decentralized network using a seed and the details contained in a synapse.
+    The function validates the initial commitment hash against the expected result, checks the integrity of the commitment,
+    and verifies the merkle proof.
+    Args:
+        synapse (Synapse): The synapse object containing challenge details.
+        verbose (bool, optional): Enables verbose logging for debugging. Defaults to False.
+    Returns:
+        bool: True if the challenge is verified successfully, False otherwise.
+    """
     if synapse.commitment_hash == None or synapse.commitment_proof == None:
         bt.logging.error(
             f"Missing commitment hash or proof for synapse: {pformat(synapse.dendrite.dict())}."
@@ -108,6 +129,16 @@ def verify_challenge_with_seed(synapse, verbose=False):
 
 
 def verify_store_with_seed(synapse, verbose=False):
+    """
+    Verifies the storing process in a decentralized network using the provided synapse and seed.
+    This function decodes the data, reconstructs the hash using the seed, and verifies it against the commitment hash.
+    It also opens the commitment to validate the process.
+    Args:
+        synapse (Synapse): The synapse object containing store process details.
+        verbose (bool, optional): Enables verbose logging for debugging. Defaults to False.
+    Returns:
+        bool: True if the storing process is verified successfully, False otherwise.
+    """
     # TODO: Add checks and defensive programming here to handle all types
     # (bytes, str, hex, ecc point, etc)
     try:
@@ -147,6 +178,15 @@ def verify_store_with_seed(synapse, verbose=False):
 
 
 def verify_retrieve_with_seed(synapse, verbose=False):
+    """
+    Verifies the retrieval process in a decentralized network using the provided synapse and seed.
+    The function validates the initial commitment hash against the expected result using the provided seed and commitment proof.
+    Args:
+        synapse (Synapse): The synapse object containing retrieval process details.
+        verbose (bool, optional): Enables verbose logging for debugging. Defaults to False.
+    Returns:
+        bool: True if the retrieval process is verified successfully, False otherwise.
+    """
     if not verify_chained_commitment(
         synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
     ):
