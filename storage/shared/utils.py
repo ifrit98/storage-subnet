@@ -180,3 +180,40 @@ def get_query_validators(metagraph, validator_stake_limit, return_hotkeys=False)
     return (
         [metagraph.hotkeys[uid] for uid in query_uids] if return_hotkeys else query_uids
     )
+
+
+def get_current_validator_uid_pseudorandom(
+    metagraph, subtensor, validator_stake_limit=4096
+):
+    """
+    Get the current validator uid.
+
+    Args:
+        metagraph (bittensor.metagraph.Metagraph): The metagraph instance to use for getting the current validator uid.
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current validator uid.
+
+    Returns:
+        int: The current validator uid.
+    """
+    block_seed = get_block_seed(subtensor)
+    random.seed(block_seed)
+    vuids = get_query_validators(metagraph, validator_stake_limit)
+    return random.choice(vuids).item()
+
+
+def get_current_validtor_uid_round_robin(
+    metagraph, subtensor, validator_stake_limit=4096
+):
+    """
+    Get the current validator uid using a round-robin strategy.
+
+    Args:
+        metagraph (bittensor.metagraph.Metagraph): The metagraph instance to use for getting the current validator uid.
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current validator uid.
+
+    Returns:
+        int: The current validator uid.
+    """
+    vuids = get_query_validators(metagraph, validator_stake_limit)
+    vidx = subtensor.get_current_block() // 760 % len(vuids)
+    return vuids[vidx].item()
