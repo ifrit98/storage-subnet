@@ -28,27 +28,6 @@ def safe_key_search(database, pattern):
     """
     return [key for key in database.scan_iter(pattern)]
 
-    """
-    Encodes the given data into a base64 string. If the data is a list or dictionary of bytes, it converts
-    the bytes into hexadecimal strings before encoding.
-
-    Args:
-        data (list or dict): The data to be base64 encoded. Can be a list of bytes or a dictionary with bytes values.
-
-    Returns:
-        str: The base64 encoded string of the input data.
-
-    Raises:
-        TypeError: If the input is not a list, dict, or bytes.
-    """
-    if isinstance(data, bytes):
-        data = data.hex()
-    if isinstance(data, list) and isinstance(data[0], bytes):
-        data = [d.hex() for d in data]
-    if isinstance(data, dict) and isinstance(data[list(data.keys())[0]], bytes):
-        data = {k: v.hex() for k, v in data.items()}
-    return base64.b64encode(json.dumps(data).encode()).decode("utf-8")
-
 
 def b64_encode(data):
     """
@@ -145,3 +124,45 @@ def is_hex_str(s: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def current_block_hash(subtensor):
+    """
+    Get the current block hash.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current block hash.
+
+    Returns:
+        str: The current block hash.
+    """
+    return subtensor.get_block_hash(subtensor.get_current_block())
+
+
+def get_block_seed(subtensor):
+    """
+    Get the block seed for the current block.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the block seed.
+
+    Returns:
+        int: The block seed.
+    """
+    return int(current_block_hash(subtensor), 16)
+
+
+def get_pseudorandom_uids(subtensor, uids, k=3):
+    """
+    Get a list of pseudorandom uids from the given list of uids.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for generating the pseudorandom uids.
+        uids (list): The list of uids to generate pseudorandom uids from.
+
+    Returns:
+        list: A list of pseudorandom uids.
+    """
+    block_seed = get_block_seed(subtensor)
+    random.seed(block_seed)
+    return random.choices(uids, k=k)
