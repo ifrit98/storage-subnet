@@ -16,201 +16,149 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
 import json
 import redis
-import random
 import asyncio
-import hashlib
 import bittensor as bt
 from typing import Dict, List, Any, Union, Optional, Tuple
 
-MAXCHUNKSIZE = 64
 
-def chunk(data, chunksize=MAXCHUNKSIZE):
-    if sys.getsizeof(data) <= chunksize:
-        yield data
-        return
+# Function to add metadata to a hash in Redis
+def add_metadata_to_hotkey(ss58_address, data_hash, metadata, database):
+    """
+    Associates a data hash and its metadata with a hotkey in Redis.
 
-    for i in range(0, len(data), chunksize):
-        yield data[i : i + chunksize]
+    Parameters:
+        ss58_address (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        metadata (dict): The metadata to associate with the data hash.
+        database (redis.Redis): The Redis client instance.
+    """
+    # Serialize the metadata as a JSON string
+    metadata_json = json.dumps(metadata)
+    # Use HSET to associate the data hash with the hotkey
+    database.hset(ss58_address, data_hash, metadata_json)
+    bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
 
-def hash_data(data):
-    if not isinstance(data, (bytes, bytearray)):
-        data_str = str(data)
-        data = data_str.encode()
-    h = hashlib.sha3_256(data).hexdigest()
-    return int(h, 16)
 
-def generate_uid_combinations(UIDs, UID_redundancy_factor):
-    # Generate all unique combinations of UIDs
-    return list(itertools.combinations(UIDs, UID_redundancy_factor))
+def get_all_data_for_hotkey(ss58_address, database, return_hashes=False):
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
 
-def assign_combinations_to_hashes(hashes, combinations):
-    if len(hashes) > len(combinations):
-        raise ValueError("Not enough unique UID combinations for the given redundancy factor and number of hashes.")
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (redis.Redis): The Redis client instance.
 
-    # Shuffle once and then iterate in order for assignment
-    random.shuffle(combinations)
-    return {hash_val: combinations[i] for i, hash_val in enumerate(hashes)}
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    # Fetch all fields (data hashes) and values (metadata) for the hotkey
+    all_data_hashes = database.hgetall(ss58_address)
 
-def create_validator_distribution_optimized(hashes, UIDs, validator_hotkeys, UID_redundancy_factor, validator_redundancy_factor):
-    combinations = generate_uid_combinations(UIDs, UID_redundancy_factor)
-    hash_distribution = assign_combinations_to_hashes(hashes, combinations)
-    
-    # Select validators efficiently
-    selected_validators = random.sample(validator_hotkeys, validator_redundancy_factor)
-    # Direct reference assignment as hash distributions are immutable and not modified
-    return {validator: hash_distribution for validator in selected_validators}
+    # Return only the hashes themselves if specified
+    if return_hashes:
+        return all_data_hashes
 
-def split_and_store(data, db, metagraph = None, miner_redundancy: int = 3, validator_redundancy: int = 2):
-    full_hash = hash_data(data)
-    hashes = [hash_data(chunk) for chunk in chunk(data, MAXCHUNKSIZE)]
-    miner_hotkeys = get_miner_hotkeys(metagraph)
-    validator_hotkeys = get_validator_hotkeys(metagraph)
+    # Deserialize the metadata for each data hash
+    return {
+        data_hash.decode("utf-8"): json.loads(metadata.decode("utf-8"))
+        for data_hash, metadata in all_data_hashes.items()
+    }
 
-    try:
-        distribution = create_validator_distribution_optimized(
-            hashes, miner_hotkeys, validator_hotkeys, miner_redundancy, validator_redundancy)
-        for validator, dist in distribution.items():
-            print(f"Validator {validator}: {dist}")
-    except ValueError as e:
-        print(e)
 
-    store_validator_data(r10, final_distribution, full_hash, hashes)
-    store_global_index_direct_with_order(r10, final_distribution, full_hash, hashes)
-    store_global_index_indirect_with_order(r10, final_distribution, full_hash, hashes)
+def update_metadata_for_data_hash(ss58_address, data_hash, new_metadata, database):
+    """
+    Updates the metadata for a specific data hash associated with a hotkey.
 
-    return full_hash, hashes, distribution
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        data_hash (str): The subkey representing the data hash to update.
+        new_metadata (dict): The new metadata to associate with the data hash.
+        database (redis.Redis): The Redis client instance.
+    """
+    # Serialize the new metadata as a JSON string
+    new_metadata_json = json.dumps(new_metadata)
+    # Update the field in the hash with the new metadata
+    database.hset(ss58_address, data_hash, new_metadata_json)
+    bt.logging.trace(
+        f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
+    )
 
-def store_validator_data(r, validator_data, full_hash, chunk_hashes):
-    full_hash_key = f"fullhash:{full_hash}"
-    chunk_order = 0
-    for chunk_hash in chunk_hashes:
-        r.zadd(full_hash_key, {str(chunk_hash): chunk_order})
-        chunk_order += 1
 
-    for validator, chunks in validator_data.items():
-        validator_key = f"validator:{validator}"
-        for chunk_hash, uids in chunks.items():
-            r.hset(validator_key, str(chunk_hash), ','.join(uids))
+def get_metadata_from_hash(ss58_address, data_hash, database):
+    """
+    Retrieves metadata from a hash in Redis for the given field_key.
 
-def store_validator_data_with_size(r, validator_data, full_hash, chunk_hashes, size_in_bytes):
-    full_hash_key = f"fullhash:{full_hash}"
-    chunk_order = 0
-    for chunk_hash in chunk_hashes:
-        r.zadd(full_hash_key, {str(chunk_hash): chunk_order})
-        chunk_order += 1
+    Parameters:
+        hash_key (str): The hash key in Redis.
+        field_key (str): The field key within the hash.
+        databse (redis.Redis): The Redis client instance.
 
-    for validator, chunks in validator_data.items():
-        validator_key = f"validator:{validator}"
-        for chunk_hash, uids in chunks.items():
-            r.hset(validator_key, str(chunk_hash), ','.join(uids))
+    Returns:
+        The deserialized metadata as a dictionary, or None if not found.
+    """
+    # Get the JSON string from Redis
+    metadata_json = database.hget(ss58_address, data_hash)
+    if metadata_json:
+        # Deserialize the JSON string to a Python dictionary
+        metadata = json.loads(metadata_json)
+        return metadata
+    else:
+        bt.logging.trace(f"No metadata found for {data_hash} in hash {ss58_address}.")
+        return None
 
-    # Store the size of the data
-    full_hash_size_key = f"fullhash:size:{full_hash}"
-    r.set(full_hash_size_key, size_in_bytes)
 
-def store_global_index_indirect_with_order(r, distribution, full_hash, chunk_hashes):
-    global_index_key = f"global:indirect:{full_hash}"
+def get_all_data_hashes(database):
+    """
+    Retrieves all data hashes and their corresponding hotkeys from the Redis instance.
 
-    for order, chunk_hash in enumerate(chunk_hashes):
-        for validator in distribution:
-            # Add the validator to the set of validators for this chunk_hash
-            r.zadd(f"{global_index_key}:{chunk_hash}", {validator: order})
+    Parameters:
+        database (redis.Redis): The Redis client instance.
 
-def get_miner_hotkeys_from_full_hash(r, full_hash):
-    full_hash_key = f"fullhash:{full_hash}"
-    ordered_chunk_hashes = r.zrange(full_hash_key, 0, -1, withscores=False)
+    Returns:
+        A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
+    """
+    # Initialize an empty dictionary to store the inverse map
+    data_hash_to_hotkeys = {}
 
-    miner_hotkeys_by_chunk = {}
-    for chunk_hash_bytes in ordered_chunk_hashes:
-        chunk_hash = chunk_hash_bytes.decode('utf-8')
-        miner_hotkeys = set()
-        for validator_key in r.scan_iter("validator:*"):
-            uids = r.hget(validator_key, chunk_hash)
-            if uids:
-                miner_hotkeys.update(uids.decode('utf-8').split(','))
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    for hotkey in database.scan_iter("*"):
+        if hotkey.decode().startswith("stats:"):
+            continue
+        # Fetch all fields (data hashes) for the current hotkey
+        data_hashes = database.hkeys(hotkey)
+        # Iterate over each data hash and append the hotkey to the corresponding list
+        for data_hash in data_hashes:
+            data_hash = data_hash.decode("utf-8")
+            if data_hash not in data_hash_to_hotkeys:
+                data_hash_to_hotkeys[data_hash] = []
+            data_hash_to_hotkeys[data_hash].append(hotkey.decode("utf-8"))
 
-        miner_hotkeys_by_chunk[chunk_hash] = list(miner_hotkeys)
+    return data_hash_to_hotkeys
 
-    return miner_hotkeys_by_chunk
 
-def get_validator_hotkeys_from_full_hash(r, full_hash):
-    full_hash_key = f"fullhash:{full_hash}"
-    ordered_chunk_hashes = r.zrange(full_hash_key, 0, -1, withscores=False)
+def get_all_hotkeys_for_data_hash(data_hash, database):
+    """
+    Retrieves all hotkeys associated with a specific data hash.
 
-    validator_hotkeys_by_chunk = {}
-    for chunk_hash_bytes in ordered_chunk_hashes:
-        chunk_hash = chunk_hash_bytes.decode('utf-8')
-        chunk_key = f"global:indirect:{full_hash}:{chunk_hash}"
-        validator_hotkeys = r.zrange(chunk_key, 0, -1, withscores=False)
+    Parameters:
+        data_hash (str): The data hash to look up.
+        database (redis.Redis): The Redis client instance.
 
-        validator_hotkeys_by_chunk[chunk_hash] = [v.decode('utf-8') for v in validator_hotkeys]
+    Returns:
+        A list of hotkeys associated with the data hash.
+    """
+    # Initialize an empty list to store the hotkeys
+    hotkeys = []
 
-    return validator_hotkeys_by_chunk
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    for hotkey in database.scan_iter("*"):
+        # Check if the data hash exists within the hash of the hotkey
+        if database.hexists(hotkey, data_hash):
+            hotkey = hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
+            hotkeys.append(hotkey)
 
-def get_all_full_hashes(r):
-    return [k.decode('utf-8').split(':')[1] for k in r.scan_iter("fullhash:*")]
-
-def get_all_chunk_hashes(r, full_hash):
-    full_hash_key = f"fullhash:{full_hash}"
-    ordered_chunk_hashes = r.zrange(full_hash_key, 0, -1, withscores=False)
-    return [chunk_hash.decode('utf-8') for chunk_hash in ordered_chunk_hashes]
-
-    return [v.decode('utf-8') for v in r.zrange(chunk_key, 0, -1, withscores=False)]
-
-def get_all_validator_hotkeys_for_chunk_hash(r, full_hash, chunk_hash):
-    validator_hotkeys = set()
-    for validator_key in r.scan_iter("validator:*"):
-        uids = r.hget(validator_key, chunk_hash)
-        if uids:
-            validator_hotkeys.update(uids.decode('utf-8').split(','))
-
-    return list(validator_hotkeys)
-
-def get_all_miner_hotkeys_for_chunk_hash_only(r, chunk_hash):
-    miner_hotkeys = set()
-    for validator_key in r.scan_iter("validator:*"):
-        uids = r.hget(validator_key, chunk_hash)
-        if uids:
-            miner_hotkeys.update(uids.decode('utf-8').split(','))
-
-    return list(miner_hotkeys)
-
-def get_all_validator_hotkeys_for_chunk_hash_only(r, chunk_hash):
-    validator_hotkeys = set()
-    for validator_key in r.scan_iter("validator:*"):
-        uids = r.hget(validator_key, chunk_hash)
-        if uids:
-            validator_hotkeys.add(validator_key.decode('utf-8').split(':')[1])
-
-    return list(validator_hotkeys)
-
-def delete_full_hash(r, full_hash):
-    # Delete full hash key
-    full_hash_key = f"fullhash:{full_hash}"
-    r.delete(full_hash_key)
-
-    # Delete validator data
-    for validator_key in r.scan_iter(f"validator:*"):
-        r.hdel(validator_key, full_hash)
-
-    # Delete global index data
-    for chunk_key in r.scan_iter(f"global:indirect:{full_hash}:*"):
-        r.delete(chunk_key)
-
-def get_redis_db_size(r):
-    return r.info('memory')['used_memory']
-
-def calculate_total_network_storage(r):
-    total_storage = 0
-    for full_hash_key in r.scan_iter("fullhash:size:*"):
-        size = r.get(full_hash_key)
-        if size:
-            total_storage += int(size)
-    return total_storage
+    return hotkeys
 
 
 def calculate_total_hotkey_storage(hotkey, database):
@@ -224,8 +172,6 @@ def calculate_total_hotkey_storage(hotkey, database):
     Returns:
         The total storage used by the hotkey in bytes.
     """
-    # TODO: update this for redeisgn and miner-specific storage limits
-    # Should only be needed by sub-validators
     total_storage = 0
     for data_hash in database.hkeys(hotkey):
         # Get the metadata for the current data hash
@@ -247,7 +193,6 @@ def hotkey_at_capacity(hotkey, database):
     Returns:
         True if the hotkey is at capacity, False otherwise.
     """
-    # TODO: update this for redesign and miner-only
     # Get the total storage used by the hotkey
     total_storage = calculate_total_hotkey_storage(hotkey, database)
     # Check if the hotkey is at capacity
@@ -266,6 +211,27 @@ def hotkey_at_capacity(hotkey, database):
     else:
         return False
 
+
+def calculate_total_network_storage(database):
+    """
+    Calculates the total storage used by all hotkeys in the database.
+
+    Parameters:
+        database (redis.Redis): The Redis client instance.
+
+    Returns:
+        The total storage used by all hotkeys in the database in bytes.
+    """
+    total_storage = 0
+    # Iterate over all hotkeys
+    for hotkey in database.scan_iter("*"):
+        if hotkey.startswith(b"stats:"):
+            continue
+        # Grab storage for that hotkey
+        total_storage += calculate_total_hotkey_storage(hotkey, database)
+    return total_storage
+
+
 def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
     """
     Retrieves statistics for all miners in the database.
@@ -274,7 +240,6 @@ def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
     Returns:
         A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
     """
-    # TODO: update this to new redesign
     return {
         key.decode("utf-8").split(":")[-1]: {
             k.decode("utf-8"): v.decode("utf-8")
@@ -282,3 +247,19 @@ def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
         }
         for key in database.scan_iter(b"stats:*")
     }
+
+
+def get_redis_db_size(database: redis.Redis) -> int:
+    """
+    Calculates the total approximate size of all keys in a Redis database.
+    Parameters:
+        database (int): Redis database
+    Returns:
+        int: Total size of all keys in bytes
+    """
+    total_size = 0
+    for key in database.scan_iter("*"):
+        size = database.execute_command("MEMORY USAGE", key)
+        if size:
+            total_size += size
+    return total_size
