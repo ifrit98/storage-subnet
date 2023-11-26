@@ -74,6 +74,16 @@ from storage.miner.config import (
     add_args,
 )
 
+from storage.miner.database import (
+    store_or_update_chunk_metadata,
+    store_chunk_metadata,
+    update_seed_info,
+    get_chunk_metadata,
+    get_chunks_for_validator,
+    get_all_filepaths,
+    get_total_storage_used,
+)
+
 
 class miner:
     @classmethod
@@ -490,6 +500,30 @@ class miner:
             bt.logging.debug(f"store b64encrypted data: {synapse.encrypted_data[:200]}")
             bt.logging.debug(f"store b64decrypted data: {encrypted_byte_data[:200]}")
 
+        # Store the data with the hash as the key in the filesystem
+        data_hash = hash_data(encrypted_byte_data)
+
+        # If already storing this hash, simply update the validator seeds and return challenge
+        if self.database.exists(data_hash):
+            # update the validator seed challenge hash in storage
+            update_seed_info(database, data_hash, synapse.dendrite.hotkey, synapse.seed)
+            # TODO: should we pull the data from filesystem to prove we have it already instead of
+            # using the sent one? Kinda weird that we just throw it away, but will be challenged later
+        else:
+            # Store the data in the filesystem
+            filepath = save_data_to_filesystem(
+                encrypted_byte_data, self.config.database.directory, str(data_hash)
+            )
+            bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
+            # Add the initial chunk, size, and validator seed information
+            store_chunk_metadata(
+                database,
+                data_hash,
+                filepath,
+                sys.getsizeof(encrypted_byte_data),
+                {synapse.dendrite.hotkey: {"prev_seed": synapse.seed}}
+            )
+
         # Commit to the entire data block
         committer = ECCommitment(
             hex_to_ecc_point(synapse.g, synapse.curve),
@@ -503,28 +537,9 @@ class miner:
             bt.logging.debug(f"m_val: {m_val}")
             bt.logging.debug(f"r: {r}")
 
-        # Store the data with the hash as the key in the filesystem
-        data_hash = hash_data(encrypted_byte_data)
-        filepath = save_data_to_filesystem(
-            encrypted_byte_data, self.config.database.directory, str(data_hash)
-        )
-        bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
-        miner_store = {
-            "filepath": filepath,
-            "prev_seed": str(synapse.seed),
-            "size": sys.getsizeof(encrypted_byte_data),
-        }
-
-        # Dump the metadata to json and store in redis
-        dumped = json.dumps(miner_store).encode()
-        self.database.set(data_hash, dumped)
-
         # Send back some proof that we stored the data
         synapse.randomness = r
         synapse.commitment = ecc_point_to_hex(c)
-
-        # NOTE: Does this add anything of value?
-        synapse.signature = self.wallet.hotkey.sign(str(m_val)).hex()
 
         # Initialize the commitment hash with the initial commitment for chained proofs
         synapse.commitment_hash = str(m_val)
