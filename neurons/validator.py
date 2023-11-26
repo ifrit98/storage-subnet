@@ -196,19 +196,13 @@ class neuron:
         try:
             self.axon = bt.axon(wallet=self.wallet, config=self.config)
 
-            self.axon.attach(
-                forward_fn=self.retrieve_user_data,
-            ).attach(
-                forward_fn=self.store_user_data,
-            ).attach(
-                forward_fn=self.update_index,
-            )
-
             try:
                 self.subtensor.serve_axon(
                     netuid=self.config.netuid,
                     axon=self.axon,
                 )
+                del self.axon
+
             except Exception as e:
                 bt.logging.error(f"Failed to serve Axon with exception: {e}")
                 pass
@@ -216,14 +210,6 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to create Axon initialize with exception: {e}")
             pass
-
-        # Start  starts the validator's axon, making it active on the network.
-        bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
-        self.axon.start()
-
-        bt.logging.info(
-            f"Served axon {self.axon} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
-        )
 
         # Dendrite pool for querying the network.
         bt.logging.debug("loading", "dendrite_pool")
@@ -253,69 +239,6 @@ class neuron:
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
-    async def update_index(self, synapse: protocol.Update) -> protocol.Update:
-        """
-        Updates the validator's index with new data received from a synapse.
-
-        Parameters:
-        - synapse (protocol.Update): The synapse object containing the update information.
-        """
-        # Only allow updates from verified validators
-        validator_hotkeys = self.get_query_validators(return_hotkeys=True)
-        if synapse.dendrite.hotkey not in validator_hotkeys:
-            bt.logging.error(
-                f"Received update from non-validator hotkey: {synapse.hotkey}"
-            )
-            return
-
-        entry = {
-            k: v
-            for k, v in synapse.dict().items()
-            if k
-            in [
-                "prev_seed",
-                "size",
-                "counter",
-                "encryption_payload",
-            ]
-        }
-
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"update data retreived: {data}")
-            bt.logging.debug(f"update entry: {pformat(entry)}")
-
-        # Update the index with the new data
-        bt.logging.trace(
-            f"Updating index for hotkey: {synapse.hotkey} and data_hash: {synapse.data_hash}"
-        )
-
-        data = get_metadata_from_hash(synapse.data_hash, synapse.hotkey, self.database)
-        if not data:
-            bt.logging.trace(f"Updating index with new data...")
-            # Add it to the index directly
-            add_metadata_to_hotkey(
-                synapse.axon.hotkey, synapse.data_hash, entry, self.database
-            )
-            synapse.updated = True
-        else:
-            # Check for conflicts
-            bt.logging.trace(f"checking for conflicts...")
-            local_entry = json.loads(database.get(synapse.key))
-            if local_entry["counter"] > synapse.counter:
-                bt.logging.trace(f"Local entry has a higher counter, skipping...")
-                # Do nothing, we have a newer or current version
-                synapse.updated = False
-            else:
-                bt.logging.trace(f"Updating index with existing data...")
-                # Update the index to the latest data
-                update_metadata_for_data_hash(
-                    synapse.axon.hotkey, synapse.data_hash, entry, self.database
-                )
-                synapse.updated = True
-
-        bt.logging.trace(f"Successfully updated index.")
-        return synapse
-
     def get_query_validators(self, return_hotkeys=False):
         # Determine axons to query from metagraph
         vpermits = self.metagraph.validator_permit
@@ -336,78 +259,6 @@ class neuron:
             if return_hotkeys
             else query_uids
         )
-
-    async def broadcast(self, hotkey, data_hash, data):
-        """
-        Broadcasts updates to all validators on the network for creating or updating an index value.
-        Parameters:
-        - hotkey: The key associated with the data to broadcast.
-        - data_hash: The hash of the data to broadcast.
-        - data: The metadata to be broadcast to other validators.
-        """
-        bt.logging.trace("broadcasting data.")
-        # Determine axons to query from metagraph
-        query_uids = self.get_query_validators()
-        axons = [self.metagraph.axons[uid] for uid in query_uids]
-
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Broadcasting to uids : {query_uids}")
-            bt.logging.debug(f"Broadcasting to axons: {axons}")
-
-        # Create synapse store
-        synapse = protocol.Update(
-            hotkey=hotkey,
-            data_hash=data_hash,
-            prev_seed=data["prev_seed"],
-            size=data["size"],
-            counter=data["counter"],
-            encryption_payload=data["encryption_payload"],
-        )
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Update synapse sending: {pformat(synapse.dict())}")
-
-        # Send synapse to all validator axons
-        responses = await self.dendrite(
-            axons,
-            synapse,
-            deserialize=False,
-        )
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"Responses update: {responses}")
-
-        # TODO: Check the responses to ensure all validaors are updated
-
-    async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
-        """
-        Stores user encrypted data in the network.
-
-        Parameters:
-        - synapse (protocol.StoreUser): The synapse object containing the encrypted data.
-
-        Returns:
-        - The result of the store_data method.
-        """
-        bt.logging.trace(f"In store_user_data.")
-        # Store user data with the user's wallet as encryption key
-        event = await self.store_encrypted_data(
-            encrypted_data=base64.b64decode(synapse.encrypted_data),
-            encryption_payload=synapse.encryption_payload,
-        )
-        bt.logging.debug(f"Finished store_encrypted_data... event: {event}")
-        if any(event.successful):
-            synapse.data_hash = hash_data(base64.b64decode(synapse.encrypted_data))
-            if self.config.neuron.verbose:
-                bt.logging.debug(
-                    f"synapse.encrypted_data  : {synapse.encrypted_data[:200]}"
-                )
-                bt.logging.debug(
-                    f"synapse.b64 decoded data: {base64.b64decode(synapse.encrypted_data)[:200]}"
-                )
-                bt.logging.debug(f"stored user data w/ hash: {synapse.data_hash}")
-        else:
-            bt.logging.error(f"Failed to store user data")
-
-        return synapse
 
     async def store_encrypted_data(
         self,
@@ -831,26 +682,6 @@ class neuron:
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
         return event
-
-    async def retrieve_user_data(
-        self, synapse: protocol.RetrieveUser
-    ) -> protocol.RetrieveUser:
-        bt.logging.trace(f"inside retrieve_user_data")
-        bt.logging.debug(f"looking up user data with hash: {synapse.data_hash}")
-
-        # Return the data to the client so that they can decrypt with their bittensor wallet
-        async for (encrypted_data, encryption_payload) in self.retrieve(
-            synapse.data_hash, yield_event=False
-        ):
-            bt.logging.debug(f"recieved encrypted_Data {encrypted_data[:200]}")
-            if encrypted_data == None:
-                break
-
-            # Return the first element, whoever is fastest wins
-            synapse.encrypted_data = encrypted_data
-            synapse.encryption_payload = encryption_payload
-
-        return synapse
 
     async def retrieve(
         self, data_hash: str = None, yield_event: bool = True
