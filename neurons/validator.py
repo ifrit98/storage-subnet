@@ -239,27 +239,6 @@ class neuron:
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
-    def get_query_validators(self, return_hotkeys=False):
-        # Determine axons to query from metagraph
-        vpermits = self.metagraph.validator_permit
-        vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
-        vpermit_uids = torch.where(vpermits)[0]
-        # Exclude your own uid
-        vpermit_uids = vpermit_uids[
-            vpermit_uids
-            != self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
-        ]
-        query_idxs = torch.where(
-            self.metagraph.S[vpermit_uids] > self.config.neuron.broadcast_stake_limit
-        )[0]
-        query_uids = vpermit_uids[query_idxs]
-
-        return (
-            [self.metagraph.hotkeys[uid] for uid in query_uids]
-            if return_hotkeys
-            else query_uids
-        )
-
     async def store_encrypted_data(
         self,
         encrypted_data: typing.Union[bytes, str],
@@ -323,7 +302,6 @@ class neuron:
             if not hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
         ]
 
-        broadcast_params = []
         axons = [self.metagraph.axons[uid] for uid in avaialble_uids]
         failed_uids = [None]
 
@@ -388,9 +366,6 @@ class neuron:
                     bt.logging.debug(
                         f"Stored data in database with key: {hotkey} | {data_hash}"
                     )
-
-                    # Collect broadcast params to send the update to all other validators
-                    broadcast_params.append((hotkey, response_storage))
 
                 else:
                     bt.logging.error(
@@ -457,12 +432,6 @@ class neuron:
 
         # Update event log with moving averaged scores
         event.moving_averaged_scores = self.moving_averaged_scores.tolist()
-
-        bt.logging.trace(f"Broadcasting storage update to all validators")
-        tasks = [
-            self.broadcast(hotkey, data_hash, data) for hotkey, data in broadcast_params
-        ]
-        await asyncio.gather(*tasks)
 
         return event
 
@@ -581,10 +550,6 @@ class neuron:
             data["counter"] += 1
             update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
 
-        # Broadcast this update to the other validators.
-        bt.logging.trace(f"Broadcasting challenge update to all validators")
-        await self.broadcast(hotkey, data_hash, data)
-
         # Record the time taken for the challenge
         return verified, response
 
@@ -632,7 +597,6 @@ class neuron:
             len(responses), dtype=torch.float32
         ).to(self.device)
 
-        broadcast_params = []
         for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
             if self.config.neuron.verbose:
                 bt.logging.trace(

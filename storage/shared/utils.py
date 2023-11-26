@@ -18,6 +18,7 @@
 
 import json
 import base64
+import random
 from typing import List, Union
 
 
@@ -166,3 +167,16 @@ def get_pseudorandom_uids(subtensor, uids, k=3):
     block_seed = get_block_seed(subtensor)
     random.seed(block_seed)
     return random.choices(uids, k=k)
+
+
+def get_query_validators(metagraph, validator_stake_limit, return_hotkeys=False):
+    # Determine axons to query from metagraph
+    vpermits = metagraph.validator_permit
+    vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
+    vpermit_uids = torch.where(vpermits)[0]
+    query_idxs = torch.where(metagraph.S[vpermit_uids] > validator_stake_limit)[0]
+    query_uids = vpermit_uids[query_idxs]
+
+    return (
+        [metagraph.hotkeys[uid] for uid in query_uids] if return_hotkeys else query_uids
+    )
