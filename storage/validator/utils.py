@@ -22,6 +22,7 @@ import numpy as np
 from typing import Dict, List, Any, Union, Optional, Tuple
 
 from Crypto.Random import random
+import random as pyrandom
 
 from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from ..shared.merkle import MerkleTree
@@ -119,6 +120,70 @@ def check_uid_availability(
     return True
 
 
+def current_block_hash(subtensor):
+    """
+    Get the current block hash.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current block hash.
+
+    Returns:
+        str: The current block hash.
+    """
+    return subtensor.get_block_hash(subtensor.get_current_block())
+
+
+def get_block_seed(subtensor):
+    """
+    Get the block seed for the current block.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the block seed.
+
+    Returns:
+        int: The block seed.
+    """
+    return int(current_block_hash(subtensor), 16)
+
+
+def get_pseudorandom_uids(subtensor, uids, k=3):
+    """
+    Get a list of pseudorandom uids from the given list of uids.
+
+    Args:
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the block_seed.
+        uids (list): The list of uids to generate pseudorandom uids from.
+
+    Returns:
+        list: A list of pseudorandom uids.
+    """
+    block_seed = get_block_seed(subtensor)
+    pyrandom.seed(block_seed)
+
+    # Ensure k is not larger than the number of uids
+    k = min(k, len(uids))
+
+    return pyrandom.sample(uids, k=k)
+
+
+def get_avaialble_uids(self):
+    """Returns all available uids from the metagraph.
+    Returns:
+        uids (torch.LongTensor): All available uids.
+    """
+    avail_uids = []
+
+    for uid in range(self.metagraph.n.item()):
+        uid_is_available = check_uid_availability(
+            self.metagraph, uid, self.config.neuron.vpermit_tao_limit
+        )
+
+        if uid_is_available:
+            avail_uids.append(uid)
+
+    return avail_uids
+
+
 def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
     """Returns k available random uids from the metagraph.
     Args:
@@ -154,17 +219,49 @@ def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor
     return uids.tolist()
 
 
-def select_subset_uids(uids: List[int], N: int):
-    """Selects a random subset of uids from a list of uids.
-    Args:
-        uids (List[int]): List of uids to select from.
-        N (int): Number of uids to select.
-    Returns:
-        List[int]: List of selected uids.
-    """
-    # If N is greater than the number of uids, return all uids.
-    if N >= len(uids):
-        return uids
-    # Otherwise, randomly select N uids from the list.
-    else:
-        return random.sample(uids, N)
+def get_all_validators(self, return_hotkeys=False):
+    # Determine validator axons to query from metagraph
+    vpermits = self.metagraph.validator_permit
+    vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
+    vpermit_uids = torch.where(vpermits)[0]
+    query_idxs = torch.where(
+        self.metagraph.S[vpermit_uids] > self.config.neuron.vpermit_tao_limit
+    )[0]
+    query_uids = vpermit_uids[query_idxs]
+
+    return (
+        [self.metagraph.hotkeys[uid] for uid in query_uids]
+        if return_hotkeys
+        else query_uids
+    )
+
+
+def get_all_miners(self):
+    # Determine miner axons to query from metagraph
+    vuids = get_all_validators(self)
+    return [uid.item() for uid in metagraph.uids if uid not in vuids]
+
+
+def get_query_miners(self, k=3):
+    # Determine miner axons to query from metagraph with pseudorandom block_hash seed
+    muids = get_all_miners(self)
+    return get_pseudorandom_uids(self.subtensor, muids, k=k)
+
+
+def get_available_query_miners(self, k=3):
+    # Determine miner axons to query from metagraph with pseudorandom block_hash seed
+    muids = get_avaialble_uids(self)
+    return get_pseudorandom_uids(self.subtensor, muids, k=k)
+
+
+def get_current_validator_uid_pseudorandom(self):
+    block_seed = get_block_seed(self.subtensor)
+    pyrandom.seed(block_seed)
+    vuids = get_query_validators(self)
+    return pyrandom.choice(vuids).item()
+
+
+def get_current_validtor_uid_round_robin(self, epoch_length=760):
+    vuids = get_all_validators(self)
+    vidx = self.subtensor.get_current_block() // epoch_length % len(vuids)
+    return vuids[vidx].item()

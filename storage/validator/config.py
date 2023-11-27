@@ -110,7 +110,7 @@ def add_args(cls, parser):
         "--neuron.challenge_sample_size",
         type=int,
         default=3,
-        help="Number of miners to challenge at a time.",
+        help="Number of miners to challenge at a time. Target is ~90 miners per epoch.",
     )
     parser.add_argument(
         "--neuron.disable_log_rewards",

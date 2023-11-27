@@ -154,28 +154,3 @@ class RetrieveUser(bt.Synapse):
         description="A list of required fields for the hash.",
         allow_mutation=False,
     )
-
-
-class Update(bt.Synapse):
-    # Lookup key for where metadata is stored in validator index
-    hotkey: str
-    data_hash: str
-
-    # Data to update
-    prev_seed: str  # hex string
-    size: int  # size of data (bytes)
-    counter: int  # version of data (last-write-wins)
-
-    encryption_payload: str  # encrypted json serialized bytestring of encryption params
-    # These parameters are used to decrypt user data given the originating wallet coldkey
-    # This bytestring is itself encrypted by the originating wallet's coldkey and can only
-    # be decrypted by the originating wallet.
-
-    updated: typing.Optional[bool] = None  # Whether or not the update was successful
-
-    required_hash_fields: typing.List[str] = pydantic.Field(
-        ["hotkey", "data_hash", "encryption_payload", "prev_seed", "size", "counter"],
-        title="Required Hash Fields",
-        description="A list of required fields for the hash.",
-        allow_mutation=False,
-    )
