@@ -79,7 +79,6 @@ from storage.miner.database import (
     store_chunk_metadata,
     update_seed_info,
     get_chunk_metadata,
-    get_chunks_for_validator,
     get_all_filepaths,
     get_total_storage_used,
 )
@@ -251,10 +250,7 @@ class miner:
 
         # Get the size of each data object and sum them up
         total_size = sum(
-            [
-                json.loads(self.database.get(key).decode("utf-8")).get("size", 0)
-                for key in filtered_keys
-            ]
+            [get_chunk_metadata(database, key).get("size", 0) for key in filtered_keys]
         )
         return total_size
 
@@ -521,7 +517,7 @@ class miner:
                 data_hash,
                 filepath,
                 sys.getsizeof(encrypted_byte_data),
-                {synapse.dendrite.hotkey: {"prev_seed": synapse.seed}}
+                synapse.seed,
             )
 
         # Commit to the entire data block
@@ -587,7 +583,7 @@ class miner:
         """
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"recieved challenge hash: {synapse.challenge_hash}")
-        data = self.database.get(synapse.challenge_hash)
+        data = get_chunk_metadata(self.database, synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
             return synapse
@@ -618,9 +614,10 @@ class miner:
         synapse.commitment_proof = proof
 
         # update the commitment seed challenge hash in storage
-        decoded["prev_seed"] = new_seed.decode("utf-8")
-        self.database.set(synapse.challenge_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated miner storage: {pformat(decoded)}")
+        update_seed_info(
+            self.database, synapse.challenge_hash, new_seed.decode("utf-8")
+        )
+        bt.logging.debug(f"udpated miner storage seed: {new_seed}")
 
         # Chunk the data according to the provided chunk_size
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
@@ -686,7 +683,7 @@ class miner:
             >>> updated_synapse = self.retrieve(synapse)
         """
         # Fetch the data from the miner database
-        data = self.database.get(synapse.data_hash)
+        data = get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
         decoded = json.loads(data.decode("utf-8"))
@@ -707,8 +704,7 @@ class miner:
         synapse.commitment_proof = proof
 
         # store new seed
-        decoded["prev_seed"] = synapse.seed
-        self.database.set(synapse.data_hash, json.dumps(decoded).encode())
+        update_seed_info(self.database, synapse.data_hash, synapse.seed)
         bt.logging.debug(f"udpated retrieve miner storage: {pformat(decoded)}")
 
         # Return base64 data
