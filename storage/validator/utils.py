@@ -168,6 +168,7 @@ def get_pseudorandom_uids(subtensor, uids, k=3):
 
 def get_avaialble_uids(self):
     """Returns all available uids from the metagraph.
+
     Returns:
         uids (torch.LongTensor): All available uids.
     """
@@ -220,6 +221,15 @@ def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor
 
 
 def get_all_validators(self, return_hotkeys=False):
+    """
+    Retrieve all validator UIDs from the metagraph. Optionally, return their hotkeys instead.
+
+    Args:
+        return_hotkeys (bool): If True, returns the hotkeys of the validators; otherwise, returns the UIDs.
+
+    Returns:
+        list: A list of validator UIDs or hotkeys, depending on the value of return_hotkeys.
+    """
     # Determine validator axons to query from metagraph
     vpermits = self.metagraph.validator_permit
     vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
@@ -237,24 +247,54 @@ def get_all_validators(self, return_hotkeys=False):
 
 
 def get_all_miners(self):
+    """
+    Retrieve all miner UIDs from the metagraph, excluding those that are validators.
+
+    Returns:
+        list: A list of UIDs of miners.
+    """
     # Determine miner axons to query from metagraph
     vuids = get_all_validators(self)
     return [uid.item() for uid in metagraph.uids if uid not in vuids]
 
 
 def get_query_miners(self, k=3):
+    """
+    Obtain a list of miner UIDs selected pseudorandomly based on the current block hash.
+
+    Args:
+        k (int): The number of miner UIDs to retrieve.
+
+    Returns:
+        list: A list of pseudorandomly selected miner UIDs.
+    """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_all_miners(self)
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 
 
 def get_available_query_miners(self, k=3):
+    """
+    Obtain a list of available miner UIDs selected pseudorandomly based on the current block hash.
+
+    Args:
+        k (int): The number of available miner UIDs to retrieve.
+
+    Returns:
+        list: A list of pseudorandomly selected available miner UIDs.
+    """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_avaialble_uids(self)
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 
 
 def get_current_validator_uid_pseudorandom(self):
+    """
+    Retrieve a single validator UID selected pseudorandomly based on the current block hash.
+
+    Returns:
+        int: A pseudorandomly selected validator UID.
+    """
     block_seed = get_block_seed(self.subtensor)
     pyrandom.seed(block_seed)
     vuids = get_query_validators(self)
@@ -262,6 +302,15 @@ def get_current_validator_uid_pseudorandom(self):
 
 
 def get_current_validtor_uid_round_robin(self, epoch_length=760):
+    """
+    Retrieve a validator UID using a round-robin selection based on the current block and a specified epoch length.
+
+    Args:
+        epoch_length (int): The length of an epoch, used to determine the validator index in a round-robin manner.
+
+    Returns:
+        int: The UID of the validator selected via round-robin.
+    """
     vuids = get_all_validators(self)
     vidx = self.subtensor.get_current_block() // epoch_length % len(vuids)
     return vuids[vidx].item()
