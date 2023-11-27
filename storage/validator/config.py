@@ -107,18 +107,6 @@ def add_args(cls, parser):
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
-        "--neuron.store_epoch_length",
-        type=int,
-        default=3,
-        help="Number of steps to take before storing data.",
-    )
-    parser.add_argument(
-        "--neuron.retrieve_epoch_length",
-        type=int,
-        default=3,
-        help="Number of steps to take before retrieving data.",
-    )
-    parser.add_argument(
         "--neuron.challenge_sample_size",
         type=int,
         default=3,
@@ -173,22 +161,10 @@ def add_args(cls, parser):
         default=10,
     )
     parser.add_argument(
-        "--neuron.epoch_length_override",
-        type=int,
-        help="Override the default epoch length (how often we set weights).",
-        default=100,
-    )
-    parser.add_argument(
         "--neuron.checkpoint_block_length",
         type=int,
         help="Blocks before a checkpoint is saved.",
         default=50,
-    )
-    parser.add_argument(
-        "--neuron.compute_tiers_epoch_length",
-        type=int,
-        help="Epoch length for computing tiers.",
-        default=200,
     )
     parser.add_argument(
         "--neuron.blocks_per_step",
@@ -212,12 +188,6 @@ def add_args(cls, parser):
         "--neuron.vpermit_tao_limit",
         type=int,
         help="The maximum number of TAO allowed to query a validator with a vpermit.",
-        default=4096,
-    )
-    parser.add_argument(
-        "--neuron.broadcast_stake_limit",
-        type=int,
-        help="The minimum number of TAO allowed to broadcast index updates to validator with a vpermit.",
         default=4096,
     )
     parser.add_argument(

@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import torch
 import base64
 import random
 from typing import List, Union
@@ -158,7 +159,7 @@ def get_pseudorandom_uids(subtensor, uids, k=3):
     Get a list of pseudorandom uids from the given list of uids.
 
     Args:
-        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for generating the pseudorandom uids.
+        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the block_seed.
         uids (list): The list of uids to generate pseudorandom uids from.
 
     Returns:
@@ -169,8 +170,8 @@ def get_pseudorandom_uids(subtensor, uids, k=3):
     return random.choices(uids, k=k)
 
 
-def get_query_validators(metagraph, validator_stake_limit, return_hotkeys=False):
-    # Determine axons to query from metagraph
+def get_all_validators(metagraph, validator_stake_limit, return_hotkeys=False):
+    # Determine validator axons to query from metagraph
     vpermits = metagraph.validator_permit
     vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
     vpermit_uids = torch.where(vpermits)[0]
@@ -182,19 +183,21 @@ def get_query_validators(metagraph, validator_stake_limit, return_hotkeys=False)
     )
 
 
+def get_all_miners(metagraph, validator_stake_limit):
+    # Determine miner axons to query from metagraph
+    vuids = get_all_validators(metagraph, validator_stake_limit)
+    return [uid.item() for uid in metagraph.uids if uid not in vuids]
+
+
+def get_query_miners(metagraph, subtensor, validator_stake_limit, k=3):
+    # Determine miner axons to query from metagraph with pseudorandom block_hash seed
+    muids = get_all_miners(metagraph, validator_stake_limit)
+    return get_pseudorandom_uids(subtensor, muids, k=k)
+
+
 def get_current_validator_uid_pseudorandom(
     metagraph, subtensor, validator_stake_limit=4096
 ):
-    """
-    Get the current validator uid.
-
-    Args:
-        metagraph (bittensor.metagraph.Metagraph): The metagraph instance to use for getting the current validator uid.
-        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current validator uid.
-
-    Returns:
-        int: The current validator uid.
-    """
     block_seed = get_block_seed(subtensor)
     random.seed(block_seed)
     vuids = get_query_validators(metagraph, validator_stake_limit)
@@ -202,18 +205,11 @@ def get_current_validator_uid_pseudorandom(
 
 
 def get_current_validtor_uid_round_robin(
-    metagraph, subtensor, validator_stake_limit=4096
+    metagraph,
+    subtensor,
+    validator_stake_limit=4096,
+    epoch_length=2,
 ):
-    """
-    Get the current validator uid using a round-robin strategy.
-
-    Args:
-        metagraph (bittensor.metagraph.Metagraph): The metagraph instance to use for getting the current validator uid.
-        subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current validator uid.
-
-    Returns:
-        int: The current validator uid.
-    """
-    vuids = get_query_validators(metagraph, validator_stake_limit)
-    vidx = subtensor.get_current_block() // 760 % len(vuids)
+    vuids = get_all_validators(metagraph, validator_stake_limit)
+    vidx = subtensor.get_current_block() // epoch_length % len(vuids)
     return vuids[vidx].item()

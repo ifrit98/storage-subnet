@@ -41,6 +41,9 @@ from storage.shared.utils import (
     b64_decode,
     chunk_data,
     safe_key_search,
+    get_query_miners,
+    get_current_validtor_uid_round_robin,
+    get_current_validator_uid_pseudorandom,
 )
 
 from storage.validator.utils import (
@@ -578,10 +581,12 @@ class neuron:
 
         start_time = time.time()
         tasks = []
-        # uids = get_random_uids(
-        #     self, k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
-        # )
-        uids = [1, 3, 4]
+        uids = get_query_miners(
+            self.metagraph,
+            self.subtensor,
+            self.config.neuron.vpermit_tao_limit,
+            k=self.config.neuron.challenge_sample_size,
+        )
         responses = []
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
@@ -702,6 +707,7 @@ class neuron:
 
         start_time = time.time()
 
+        # TODO: rework this so that we select random hash from the selected miner UIDs from block_seed
         # fetch which miners have the data
         uids = []
         axons_to_query = []
@@ -845,20 +851,19 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        if self.step % self.config.neuron.store_epoch_length == 0:
-            try:
-                # Store some data
-                bt.logging.info("initiating store data")
-                event = await self.store_random_data()
+        try:
+            # Store some data
+            bt.logging.info("initiating store data")
+            event = await self.store_random_data()
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"STORE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to store data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to store data with exception: {e}")
 
         try:
             # Challenge some data
@@ -874,50 +879,47 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to challenge data with exception: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_length == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                async for event in self.retrieve():
-                    if isinstance(event, EventSchema):
-                        break
+        try:
+            # Retrieve some data
+            bt.logging.info("initiating retrieve")
+            async for event in self.retrieve():
+                if isinstance(event, EventSchema):
+                    break
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data with exception: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to retrieve data with exception: {e}")
 
-        if self.step % self.config.neuron.compute_tiers_epoch_length == 0:
-            try:
-                # Update miner tiers
-                bt.logging.info("Computing tiers")
-                await compute_all_tiers(self.database)
+        try:
+            # Update miner tiers
+            bt.logging.info("Computing tiers")
+            await compute_all_tiers(self.database)
 
-                # Fetch miner statistics and usage data.
-                stats = get_miner_statistics(self.database)
+            # Fetch miner statistics and usage data.
+            stats = get_miner_statistics(self.database)
 
-                # Log all hash <> hotkey pairs
-                hash_map = get_all_data_hashes(self.database)
+            # Log all hash <> hotkey pairs
+            hash_map = get_all_data_hashes(self.database)
 
-                # Log the statistics and hashmap to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log(stats)
-                    self.wandb.log(hash_map)
-
-            except Exception as e:
-                bt.logging.error(f"Failed to compute tiers with exception: {e}")
-
-        if self.step % 100:  # TODO: make this a hparam
-            # Update the total network storage
-            total_storage = calculate_total_network_storage(self.database)
-            bt.logging.info(f"Total network storage: {total_storage}")
-            # Log the total storage to wandb.
+            # Log the statistics and hashmap to wandb.
             if not self.config.wandb.off:
-                self.wandb.log({"total_storage": total_storage})
+                self.wandb.log(stats)
+                self.wandb.log(hash_map)
+
+        except Exception as e:
+            bt.logging.error(f"Failed to compute tiers with exception: {e}")
+
+        # Update the total network storage
+        total_storage = calculate_total_network_storage(self.database)
+        bt.logging.info(f"Total network storage: {total_storage}")
+        # Log the total storage to wandb.
+        if not self.config.wandb.off:
+            self.wandb.log({"total_storage": total_storage})
 
     def run(self):
         bt.logging.info("run()")
@@ -928,14 +930,11 @@ class neuron:
                 start_epoch = time.time()
 
                 # --- Wait until next step epoch.
-                current_block = self.subtensor.get_current_block()
-                while (
-                    current_block - self.prev_step_block
-                    < self.config.neuron.blocks_per_step
+                while self.my_subnet_uid != get_current_validtor_uid_round_robin(
+                    self.metagraph, self.subtensor, epoch_length=1
                 ):
                     # --- Wait for next block.
                     time.sleep(1)
-                    current_block = self.subtensor.get_current_block()
 
                 if not self.wallet.hotkey.ss58_address in self.metagraph.hotkeys:
                     raise Exception(

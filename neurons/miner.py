@@ -505,9 +505,7 @@ class miner:
         # If already storing this hash, simply update the validator seeds and return challenge
         if self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
-            update_seed_info(
-                self.database, data_hash, synapse.dendrite.hotkey, synapse.seed
-            )
+            update_seed_info(self.database, data_hash, synapse.seed)
             # TODO: should we pull the data from filesystem to prove we have it already instead of
             # using the sent one? Kinda weird that we just throw it away, but will be challenged later
         else:
