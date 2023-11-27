@@ -243,14 +243,17 @@ class miner:
             102400  # Example output indicating 102,400 bytes of data stored
         """
         # Fetch all keys from Redis
-        all_keys = safe_key_search(database, "*")
+        all_keys = safe_key_search(self.database, "*")
 
         # Filter out keys that contain a period (temporary, remove later)
         filtered_keys = [key for key in all_keys if b"." not in key]
 
         # Get the size of each data object and sum them up
         total_size = sum(
-            [get_chunk_metadata(database, key).get("size", 0) for key in filtered_keys]
+            [
+                get_chunk_metadata(self.database, key).get(b"size", 0)
+                for key in filtered_keys
+            ]
         )
         return total_size
 
@@ -502,7 +505,9 @@ class miner:
         # If already storing this hash, simply update the validator seeds and return challenge
         if self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
-            update_seed_info(database, data_hash, synapse.dendrite.hotkey, synapse.seed)
+            update_seed_info(
+                self.database, data_hash, synapse.dendrite.hotkey, synapse.seed
+            )
             # TODO: should we pull the data from filesystem to prove we have it already instead of
             # using the sent one? Kinda weird that we just throw it away, but will be challenged later
         else:
@@ -513,7 +518,7 @@ class miner:
             bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
             # Add the initial chunk, size, and validator seed information
             store_chunk_metadata(
-                database,
+                self.database,
                 data_hash,
                 filepath,
                 sys.getsizeof(encrypted_byte_data),
@@ -588,16 +593,15 @@ class miner:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
             return synapse
 
-        decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug(f"decoded data: {pformat(decoded)}")
+        bt.logging.debug(f"retrieved data: {pformat(data)}")
 
         # Chunk the data according to the specified (random) chunk size
-        filepath = decoded["filepath"]
+        filepath = data[b"filepath"]
         encrypted_data_bytes = load_from_filesystem(filepath)
 
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time
-        prev_seed = decoded["prev_seed"].encode()
+        prev_seed = data[b"seed"].encode()
         new_seed = synapse.seed.encode()
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
@@ -686,17 +690,16 @@ class miner:
         data = get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
-        decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug(f"retrieve decoded data: {pformat(decoded)}")
+        bt.logging.debug(f"retrieved data: {pformat(data)}")
 
         # load the data from the filesystem
-        filepath = decoded["filepath"]
+        filepath = data[b"filepath"]
         encrypted_data_bytes = load_from_filesystem(filepath)
 
         # incorporate a final seed challenge to verify they still have the data at retrieval time
         commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes,
-            decoded["prev_seed"].encode(),
+            data[b"seed"].encode(),
             synapse.seed.encode(),
             verbose=self.config.miner.verbose,
         )
@@ -705,7 +708,7 @@ class miner:
 
         # store new seed
         update_seed_info(self.database, synapse.data_hash, synapse.seed)
-        bt.logging.debug(f"udpated retrieve miner storage: {pformat(decoded)}")
+        bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
 
         # Return base64 data
         synapse.data = base64.b64encode(encrypted_data_bytes)

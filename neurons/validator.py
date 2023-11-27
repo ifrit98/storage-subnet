@@ -292,7 +292,8 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = get_random_uids(self, k=self.config.neuron.store_redundancy)
+        # uids = get_random_uids(self, k=self.config.neuron.store_redundancy)
+        uids = [1, 3, 4]
         # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
         # before sending another storage request (do not allow higher than tier allow)
         # TODO: keep selecting UIDs until we get N that are not at capacity
@@ -413,7 +414,8 @@ class neuron:
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
                 bt.logging.trace(f"Failed to store on uids: {failed_uids}")
-                uids = get_random_uids(self, k=len(failed_uids))
+                # uids = get_random_uids(self, k=len(failed_uids))
+                uids = [1, 3, 4]
 
                 bt.logging.trace(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
@@ -576,9 +578,10 @@ class neuron:
 
         start_time = time.time()
         tasks = []
-        uids = get_random_uids(
-            self, k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
-        )
+        # uids = get_random_uids(
+        #     self, k=min(self.metagraph.n, self.config.neuron.challenge_sample_size)
+        # )
+        uids = [1, 3, 4]
         responses = []
         for uid in uids:
             tasks.append(asyncio.create_task(self.handle_challenge(uid)))
