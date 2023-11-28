@@ -52,6 +52,7 @@ from storage.validator.utils import (
     get_available_query_miners,
     get_current_validtor_uid_round_robin,
     get_current_validator_uid_pseudorandom,
+    compute_chunk_distribution_mut_exclusive,
 )
 
 from storage.validator.encryption import (
@@ -834,6 +835,28 @@ class neuron:
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
         return event
+
+    async def store_broadband(self, data, R=3, k=10):
+        # TODO:
+        async def store_chunk(chunk):
+            # Store the chunk
+            pass
+
+        # Compute distributions based on block hash
+        # R = 3  # Redundancy factor
+        # k = 10  # Number of miners to query
+        tasks = []
+        for dist in compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
+            # TODO: return a linear/flat list to add tasks to the queue
+            bt.logging.debug(f"Chunk distribution: {dist['uids']}")
+            tasks.append(asyncio.create_task(self.store_chunk(dist["chunk"])))
+            # For each chunk:
+            # treat it as a single file in old protocol
+            # Queue a task to send that bitch out with these miners
+            # Await responses within timeout
+            # (this way they need to be mutually exclusive)
+
+        responses = await asyncio.gather(*tasks)
 
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")

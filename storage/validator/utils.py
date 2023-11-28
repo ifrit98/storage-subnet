@@ -20,6 +20,7 @@ import os
 import torch
 import numpy as np
 import multiprocessing
+from math import comb
 from itertools import combinations, cycle
 from typing import Dict, List, Any, Union, Optional, Tuple
 
@@ -409,19 +410,31 @@ def optimal_chunk_size(
     max_chunk_size=MAX_CHUNK_SIZE,
 ):
     """
-    Calculates the optimal chunk size for data distribution based on the total data size, available UIDs, and redundancy factor.
+    Determines the optimal chunk size for data distribution, taking into account the total data size,
+    the number of available UIDs, and the desired redundancy factor. The function aims to balance
+    the chunk size between specified minimum and maximum limits, considering the efficient utilization
+    of UIDs and the number of chunks that can be created.
 
     Args:
         data_size (int): The total size of the data to be distributed, in bytes.
-        min_chunk_size (int): The minimum size for each data chunk, in bytes.
-        max_chunk_size (int): The maximum size for each data chunk, in bytes.
-        num_available_uids (int): The number of available UIDs for data storage.
-        R (int): The redundancy factor for each data chunk.
+        num_available_uids (int): The number of available UIDs that can be assigned to data chunks.
+        R (int): The redundancy factor, defining how many UIDs each data chunk should be associated with.
+        min_chunk_size (int, optional): The minimum permissible size for each data chunk, in bytes.
+                                        Defaults to a predefined MIN_CHUNK_SIZE.
+        max_chunk_size (int, optional): The maximum permissible size for each data chunk, in bytes.
+                                        Defaults to a predefined MAX_CHUNK_SIZE.
 
     Returns:
-        int: The optimal size for each data chunk, in bytes.
-    """
+        int: The calculated optimal size for each data chunk, in bytes. The chunk size is optimized to
+             ensure efficient distribution across the available UIDs while respecting the minimum
+             and maximum chunk size constraints.
 
+    Note:
+        The optimal chunk size is crucial for balancing data distribution and storage efficiency in
+        distributed systems or parallel processing scenarios. This function ensures that each chunk
+        is large enough to be meaningful yet small enough to allow for diverse distribution across
+        different UIDs, adhering to the specified redundancy factor.
+    """
     # Estimate the number of chunks based on redundancy and available UIDs
     # Ensuring that we do not exceed the number of available UIDs
     max_chunks = num_available_uids // R
@@ -438,123 +451,372 @@ def optimal_chunk_size(
     return int(chunk_size)
 
 
+def optimal_chunk_size2(data_size, num_available_uids, R):
+    """
+    Calculates an optimal chunk size for data distribution based on the total data size,
+    the number of available UIDs, and the desired redundancy factor. This version of the
+    function aims to balance the number of data chunks against the total number of
+    unique combinations of UIDs that can be formed.
+
+    Args:
+        data_size (int): The total size of the data to be distributed, in bytes.
+        num_available_uids (int): The total number of unique UIDs available for distribution.
+        R (int): The desired redundancy factor, indicating how many UIDs are assigned to each chunk.
+
+    Returns:
+        int: The calculated optimal size for each data chunk, in bytes. If the calculated
+             number of chunks is zero (indicating a very small data size), the function returns
+             the entire data size.
+
+    Note:
+        This function is designed to ensure a balanced distribution of data across the available UIDs,
+        considering the total number of possible unique combinations that can be formed with the UIDs.
+    """
+    total_combinations = comb(num_available_uids, R)
+    max_chunks = min(data_size // MIN_CHUNK_SIZE, total_combinations)
+
+    if max_chunks == 0:
+        return data_size  # Return the entire data size if it's too small
+
+    return data_size // max_chunks
+
+
+def optimal_chunk_size3(
+    data_size, num_available_uids, R, max_chunk_size=MAX_CHUNK_SIZE
+):
+    """
+    Calculates an optimal chunk size for data distribution, aiming to maximize the chunk size
+    while respecting a maximum limit. This function considers the total data size, the number of
+    available UIDs, and the desired redundancy factor. The goal is to use the available UIDs
+    efficiently by forming the maximum number of unique UID groups.
+
+    Args:
+        data_size (int): The total size of the data to be distributed, in bytes.
+        num_available_uids (int): The total number of unique UIDs available for distribution.
+        R (int): The desired redundancy factor, indicating how many UIDs are assigned to each chunk.
+        max_chunk_size (int, optional): The maximum allowed size for each data chunk, in bytes.
+
+    Returns:
+        int: The calculated optimal size for each data chunk, in bytes. The chunk size is
+             constrained by the maximum chunk size and is calculated to efficiently use
+             the available UIDs for the specified redundancy factor.
+
+    Note:
+        This function is particularly useful for scenarios where the data size is large, and
+        the goal is to maximize the utilization of each data chunk while ensuring each UID
+        set is used efficiently and not more frequently than necessary.
+    """
+    # Calculate the maximum number of unique UID groups
+    num_uid_groups = num_available_uids // R
+
+    # Estimate the ideal chunk size based on the data size and the number of UID groups
+    ideal_chunk_size = data_size / num_uid_groups
+
+    # Ensure the chunk size is within the maximum limit
+    chunk_size = min(ideal_chunk_size, max_chunk_size)
+
+    return int(chunk_size)
+
+
 def compute_chunk_distribution(
     self, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
 ):
     """
-    Distributes data across the network by dividing it into chunks, hashing each chunk, and assigning UID combinations to each chunk for storage.
-    Processes data in chunks lazily using a generator.
+    Computes the distribution of data chunks to UIDs for data distribution.
 
     Args:
-        data (bytes): The data to be distributed across the network.
+        subtensor: The subtensor instance used to obtain the current block hash for pseudorandom seed generation.
+        data (bytes): The data to be distributed.
         R (int): The redundancy factor for each data chunk.
-        k (int): The number of UIDs to consider for combinations.
-        min_chunk_size (int, optional): The minimum size for each data chunk. Defaults to MIN_CHUNK_SIZE.
-        max_chunk_size (int, optional): The maximum size for each data chunk. Defaults to MAX_CHUNK_SIZE.
-
-    Yields:
-        dict: A mapping of each data chunk's hash to its assigned combination of UIDs for storage.
-    """
-
-    # Step 1: Get all available UIDs
-    available_uids = get_available_query_miners(self, k)
-
-    # Step 2: Select optimal chunk size
-    data_size = len(data)
-    chunk_size = optimal_chunk_size(
-        data_size, min_chunk_size, max_chunk_size, len(available_uids), R
-    )
-
-    # Step 3: Generate efficient combinations
-    uid_combinations = generate_efficient_combinations(available_uids, R)
-
-    # Step 4: Create a generator for chunking the data
-    data_chunks = chunk_data_generator(data, chunk_size)
-
-    # Process each chunk
-    for chunk in data_chunks:
-        # Hash the chunk
-        chunk_hash = hash_data(chunk)
-
-        # Assign combinations to the chunk hash
-        chunk_distribution = assign_combinations_to_hashes_by_block_hash(
-            self.subtensor, [chunk_hash], uid_combinations
-        )
-
-        # Yield a comprehensive mapping of chunk data, hash, and UID distribution
-        yield {
-            "chunk_data": chunk,
-            "chunk_hash": chunk_hash,
-            "uid_combination": chunk_distribution[chunk_hash],
-        }
-
-
-# Multiprocessing version of compute_chunk_distribution
-def process_chunk(chunk, uid_combinations):
-    """
-    Process a single chunk of data: hash the chunk and assign a combination of UIDs.
-
-    Args:
-        subtensor: The subtensor instance used for block hash generation.
-        chunk (bytes): The data chunk to be processed.
-        uid_combinations (list): List of UID combinations.
+        k (int): The number of UIDs to be used for each data chunk.
+        min_chunk_size (int): The minimum size for each data chunk, in bytes.
+        max_chunk_size (int): The maximum size for each data chunk, in bytes.
 
     Returns:
-        dict: A mapping of the chunk's hash to its assigned combination of UIDs.
+        dict: A dictionary mapping each chunk hash to a pseudorandomly selected combination of UIDs.
     """
-    chunk_hash = hash_data(chunk)
-    chunk_distribution = assign_combinations_to_hashes([chunk_hash], uid_combinations)
-    return {
-        "chunk_data": chunk[:10],
-        "chunk_hash": chunk_hash,
-        "uid_combination": chunk_distribution[chunk_hash],
-    }
+    available_uids = get_avaialble_uids(self)
 
-
-def compute_chunk_distribution_parallel(
-    self, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
-):
-    """
-    Distributes data across a network in parallel by dividing it into chunks, hashing each chunk,
-    and assigning UID combinations to each chunk for storage. This function utilizes multiprocessing
-    to parallelize the processing of data chunks, enhancing performance for large datasets.
-
-    Args:
-        data (bytes): The data to be distributed across the network.
-        R (int): The redundancy factor for each data chunk, determining how many UIDs each chunk will be assigned to.
-        k (int): The number of UIDs to consider for generating combinations. This affects the diversity of UID combinations.
-        min_chunk_size (int, optional): The minimum size for each data chunk in bytes. Defaults to a defined MIN_CHUNK_SIZE.
-        max_chunk_size (int, optional): The maximum size for each data chunk in bytes. Defaults to a defined MAX_CHUNK_SIZE.
-
-    Returns:
-        list: A list of dictionaries, each containing the mapping of a data chunk's hash to its assigned combination of UIDs for storage.
-              Each dictionary includes the chunk data, its hash, and the corresponding UID combination.
-
-    Note:
-        The function is designed to handle large data sizes efficiently by processing chunks in parallel using Python's multiprocessing module.
-        It is especially useful for CPU-intensive tasks like hashing and data processing.
-    """
-    available_uids = get_available_query_miners(self, k)
     data_size = len(data)
     chunk_size = optimal_chunk_size(
         data_size, len(available_uids), R, min_chunk_size, max_chunk_size
     )
+
+    # Ensure chunk size is not larger than data size
     if chunk_size > data_size:
         chunk_size = data_size
     uid_combinations = generate_efficient_combinations(available_uids, R)
 
+    # Create a generator for chunking the data
     data_chunks = chunk_data_generator(data, chunk_size)
 
     # Use multiprocessing to process chunks in parallel
-    pool = multiprocessing.Pool(multiprocessing.cpu_count())
-    results = [
-        pool.apply_async(process_chunk, args=(chunk, uid_combinations))
-        for chunk in data_chunks
-    ]
+    block_seed = get_block_seed(self.subtensor)
 
-    pool.close()
-    pool.join()
+    # Pre-shuffle the UID combinations
+    pyrandom.seed(block_seed)
+    pyrandom.shuffle(uid_combinations)
 
-    # Collect results
-    chunk_distributions = [res.get() for res in results]
-    return chunk_distributions
+    # Process each chunk and yield it's distribution of UIDs
+    for i, chunk in enumerate(data_chunks):
+        yield {hash_data(chunk): {"chunk": chunk, "uids": uid_combinations[i]}}
+
+
+def partition_uids(available_uids, R):
+    """
+    Partitions the available UIDs into non-overlapping groups of size R.
+
+    Args:
+        available_uids (list): List of available UIDs.
+        R (int): Size of each group (redundancy factor).
+
+    Returns:
+        list of tuples: A list where each tuple contains a unique group of UIDs.
+    """
+    return [tuple(available_uids[i : i + R]) for i in range(0, len(available_uids), R)]
+
+
+def compute_chunk_distribution_mut_exclusive(self, data, R, k):
+    """
+    Computes and yields the distribution of data chunks across unique sets of UIDs, ensuring mutual exclusivity of UIDs across all chunks.
+
+    Args:
+        data (bytes): The data to be distributed across the network.
+        R (int): The redundancy factor, indicating the number of unique UIDs per chunk.
+        k (int): The total number of UIDs available for distribution.
+
+    Yields:
+        dict: A dictionary mapping each chunk's hash to its data and an assigned unique set of UIDs.
+
+    Raises:
+        ValueError: If the redundancy factor R is greater than the number of available UIDs, or if the available UIDs are not a multiple of R.
+    """
+    available_uids = get_query_miners(self, k=k)
+
+    data_size = len(data)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+    if len(available_uids) % R != 0:
+        raise ValueError(
+            "Number of available UIDs must be a multiple of the redundancy factor R."
+        )
+
+    # Partition UIDs into exclusive groups
+    uid_groups = partition_uids(available_uids, R)
+
+    data_chunks = chunk_data_generator(data, chunk_size)
+
+    for chunk, uid_group in zip(data_chunks, uid_groups):
+        chunk_hash = hash_data(chunk)
+        yield {chunk_hash: {"chunk": chunk, "uids": uid_group}}
+
+
+def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
+    """
+    Similar to compute_chunk_distribution_mut_exclusive, but utilizes NumPy arrays for potentially more efficient handling of large lists of UIDs.
+
+    Args:
+        data (bytes): The data to be distributed across the network.
+        R (int): The redundancy factor, indicating the number of unique UIDs per chunk.
+        k (int): The total number of UIDs available for distribution.
+
+    Yields:
+        dict: A dictionary mapping each chunk's hash to its data and an assigned unique set of UIDs.
+
+    Raises:
+        ValueError: If the redundancy factor R is greater than the number of available UIDs, or if the available UIDs are not a multiple of R.
+    """
+    available_uids = get_query_miners(self, k=k)
+
+    data_size = len(data)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+    if len(available_uids) % R != 0:
+        raise ValueError(
+            "Number of available UIDs must be a multiple of the redundancy factor R."
+        )
+
+    # Partition UIDs into exclusive groups
+    uid_groups = partition_uids(available_uids, R)
+
+    # Convert uid_groups to a more efficient numpy array if beneficial
+    uid_groups = np.array(uid_groups)
+
+    data_chunks = chunk_data_generator(data, chunk_size)
+
+    for chunk, uid_group in zip(data_chunks, uid_groups):
+        chunk_hash = hash_data(chunk)
+        yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
+
+
+def compute_chunk_distribution_mut_exclusive_file(self, file_path, R, k):
+    """
+    Computes and yields the distribution of data chunks to UIDs directly from a file,
+    ensuring mutually exclusive UID sets for each chunk.
+
+    Args:
+        file_path (str): The path to the file from which data chunks are to be read.
+        R (int): The redundancy factor, defining the number of UIDs assigned to each chunk.
+        k (int): The number of unique UIDs available for assignment.
+
+    Yields:
+        dict: A dictionary for each chunk with its hash, the chunk data, and the associated UIDs.
+
+    Raises:
+        ValueError: If the redundancy factor exceeds the number of available UIDs or if the
+                    number of available UIDs is not a multiple of the redundancy factor.
+    """
+    available_uids = get_query_miners(self, k=k)
+
+    # Getting the size of the file
+    data_size = os.path.getsize(file_path)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+    if len(available_uids) % R != 0:
+        raise ValueError(
+            "Number of available UIDs must be a multiple of the redundancy factor R."
+        )
+
+    uid_groups = partition_uids(available_uids, R)
+
+    # Read and process chunks from the file
+    with open(file_path, "rb") as file:
+        for uid_group in uid_groups:
+            chunk = file.read(chunk_size)
+            if not chunk:
+                break  # End of file
+            chunk_hash = hash_data(chunk)
+            yield {chunk_hash: {"chunk": chunk, "uids": uid_group}}
+
+
+def pre_process_chunk_distribution_file(self, file_path, R, k):
+    """
+    Pre-processes and returns metadata for each chunk of a file, including file path,
+    start position, chunk size, and associated UIDs. This allows for efficient,
+    on-demand loading of data chunks.
+
+    Args:
+        file_path (str): The path to the file to be processed.
+        R (int): The redundancy factor, defining the number of UIDs assigned to each chunk.
+        k (int): The number of unique UIDs available for assignment.
+
+    Returns:
+        list: A list of dictionaries, each containing metadata for a chunk of the file.
+              Each dictionary includes the file path, start position, chunk size, and UIDs.
+
+    Raises:
+        ValueError: If the redundancy factor exceeds the number of available UIDs or if the
+                    number of available UIDs is not a multiple of the redundancy factor.
+    """
+    available_uids = get_query_miners(self, k=k)
+
+    data_size = os.path.getsize(file_path)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+    if len(available_uids) % R != 0:
+        raise ValueError(
+            "Number of available UIDs must be a multiple of the redundancy factor R."
+        )
+
+    uid_groups = partition_uids(available_uids, R)
+    chunk_meta_data = []
+
+    # Calculate the number of chunks and their metadata
+    num_chunks = data_size // chunk_size + (1 if data_size % chunk_size != 0 else 0)
+    for i in range(num_chunks):
+        start_pos = i * chunk_size
+        chunk_meta_data.append(
+            {
+                "start_pos": start_pos,
+                "chunk_size": chunk_size,
+                "uids": uid_groups[i % len(uid_groups)],
+            }
+        )
+
+    return chunk_meta_data
+
+
+def yield_chunk_distribution_file(self, file_path, R, k):
+    """
+    Yields metadata and UIDs for each chunk of a file, enabling efficient, on-demand data processing.
+    This function calculates the distribution of data chunks across a set of UIDs, ensuring mutually exclusive UID sets
+    for each chunk based on the file's size.
+
+    Args:
+        file_path (str): The path to the file from which data chunks will be processed.
+        R (int): The redundancy factor, defining the number of UIDs to be associated with each data chunk.
+        k (int): The total number of UIDs available for distribution across the chunks.
+
+    Yields:
+        tuple: A tuple for each chunk, containing a list of UIDs for the chunk and a dictionary
+               with the chunk's metadata (file path, start position, and chunk size).
+
+    Raises:
+        ValueError: If the redundancy factor R is greater than the number of available UIDs or
+                    if the available UIDs are not a multiple of R, ensuring exclusive distribution.
+
+    Note:
+        This function is designed for efficient handling of large files, as it computes and yields
+        the chunk distribution without loading the entire file into memory. It is particularly useful
+        for scenarios where data needs to be processed in segments and associated with unique sets
+        of UIDs for tasks like distributed storage or parallel processing.
+    """
+    available_uids = get_query_miners(self, k=k)
+
+    data_size = os.path.getsize(file_path)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+    if len(available_uids) % R != 0:
+        raise ValueError(
+            "Number of available UIDs must be a multiple of the redundancy factor R."
+        )
+
+    uid_groups = partition_uids(available_uids, R)
+
+    # Calculate the number of chunks and their metadata
+    num_chunks = data_size // chunk_size + (1 if data_size % chunk_size != 0 else 0)
+    for i in range(num_chunks):
+        start_pos = i * chunk_size
+        chunk_meta = {
+            "file_path": file_path,
+            "start_pos": start_pos,
+            "chunk_size": chunk_size,
+        }
+        yield uid_groups[i % len(uid_groups)], load_chunk(chunk_meta)
+
+
+def load_chunk(chunk_meta):
+    """
+    Loads a specific data chunk from a file based on provided metadata.
+
+    Args:
+        chunk_meta (dict): A dictionary containing metadata for the chunk,
+                           including the file path, start position, and chunk size.
+
+    Returns:
+        dict: A dictionary containing the loaded chunk data and its associated UIDs.
+    """
+    with open(chunk_meta["file_path"], "rb") as file:
+        file.seek(chunk_meta["start_pos"])
+        chunk_data = file.read(chunk_meta["chunk_size"])
+        return {"chunk_data": chunk_data, "uids": chunk_meta["uids"]}
