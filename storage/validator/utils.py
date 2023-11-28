@@ -19,6 +19,7 @@
 import os
 import torch
 import numpy as np
+import multiprocessing
 from itertools import combinations, cycle
 from typing import Dict, List, Any, Union, Optional, Tuple
 
@@ -438,11 +439,11 @@ def optimal_chunk_size(
 
 
 def compute_chunk_distribution(
-    subtensor, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
+    self, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
 ):
     """
     Distributes data across the network by dividing it into chunks, hashing each chunk, and assigning UID combinations to each chunk for storage.
-    Additionally, returns a comprehensive mapping of each data chunk, its hash, and the assigned UIDs.
+    Processes data in chunks lazily using a generator.
 
     Args:
         data (bytes): The data to be distributed across the network.
@@ -451,42 +452,109 @@ def compute_chunk_distribution(
         min_chunk_size (int, optional): The minimum size for each data chunk. Defaults to MIN_CHUNK_SIZE.
         max_chunk_size (int, optional): The maximum size for each data chunk. Defaults to MAX_CHUNK_SIZE.
 
-    Returns:
-        dict: A comprehensive mapping of each data chunk's hash to its data and assigned combination of UIDs for storage.
+    Yields:
+        dict: A mapping of each data chunk's hash to its assigned combination of UIDs for storage.
     """
 
     # Step 1: Get all available UIDs
-    available_uids = [
-        "uid" + str(i) for i in range(k)
-    ]  # get_available_query_miners(self, k)
+    available_uids = get_available_query_miners(self, k)
 
     # Step 2: Select optimal chunk size
     data_size = len(data)
     chunk_size = optimal_chunk_size(
-        data_size, len(available_uids), min_chunk_size, max_chunk_size, R
+        data_size, min_chunk_size, max_chunk_size, len(available_uids), R
     )
 
-    # Step 3: Chunk the data
-    chunks = [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
-
-    # Step 4: Hash each chunk
-    chunk_hashes = [hash_data(chunk) for chunk in chunks]
-
-    # Step 5: Generate efficient combinations
+    # Step 3: Generate efficient combinations
     uid_combinations = generate_efficient_combinations(available_uids, R)
 
-    # Step 6: Assign combinations to each chunk hash
-    chunk_distribution = assign_combinations_to_hashes_by_block_hash(
-        subtensor, chunk_hashes, uid_combinations
-    )
+    # Step 4: Create a generator for chunking the data
+    data_chunks = chunk_data_generator(data, chunk_size)
 
-    # Create a comprehensive mapping of chunk data, hash, and UID distribution
-    comprehensive_distribution = {
-        hash_val: {
-            "chunk_data": chunks[i],
-            "uid_combination": chunk_distribution[hash_val],
+    # Process each chunk
+    for chunk in data_chunks:
+        # Hash the chunk
+        chunk_hash = hash_data(chunk)
+
+        # Assign combinations to the chunk hash
+        chunk_distribution = assign_combinations_to_hashes_by_block_hash(
+            self.subtensor, [chunk_hash], uid_combinations
+        )
+
+        # Yield a comprehensive mapping of chunk data, hash, and UID distribution
+        yield {
+            "chunk_data": chunk,
+            "chunk_hash": chunk_hash,
+            "uid_combination": chunk_distribution[chunk_hash],
         }
-        for i, hash_val in enumerate(chunk_hashes)
+
+
+# Multiprocessing version of compute_chunk_distribution
+def process_chunk(chunk, uid_combinations):
+    """
+    Process a single chunk of data: hash the chunk and assign a combination of UIDs.
+
+    Args:
+        subtensor: The subtensor instance used for block hash generation.
+        chunk (bytes): The data chunk to be processed.
+        uid_combinations (list): List of UID combinations.
+
+    Returns:
+        dict: A mapping of the chunk's hash to its assigned combination of UIDs.
+    """
+    chunk_hash = hash_data(chunk)
+    chunk_distribution = assign_combinations_to_hashes([chunk_hash], uid_combinations)
+    return {
+        "chunk_data": chunk[:10],
+        "chunk_hash": chunk_hash,
+        "uid_combination": chunk_distribution[chunk_hash],
     }
 
-    return comprehensive_distribution
+
+def compute_chunk_distribution_parallel(
+    self, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
+):
+    """
+    Distributes data across a network in parallel by dividing it into chunks, hashing each chunk,
+    and assigning UID combinations to each chunk for storage. This function utilizes multiprocessing
+    to parallelize the processing of data chunks, enhancing performance for large datasets.
+
+    Args:
+        data (bytes): The data to be distributed across the network.
+        R (int): The redundancy factor for each data chunk, determining how many UIDs each chunk will be assigned to.
+        k (int): The number of UIDs to consider for generating combinations. This affects the diversity of UID combinations.
+        min_chunk_size (int, optional): The minimum size for each data chunk in bytes. Defaults to a defined MIN_CHUNK_SIZE.
+        max_chunk_size (int, optional): The maximum size for each data chunk in bytes. Defaults to a defined MAX_CHUNK_SIZE.
+
+    Returns:
+        list: A list of dictionaries, each containing the mapping of a data chunk's hash to its assigned combination of UIDs for storage.
+              Each dictionary includes the chunk data, its hash, and the corresponding UID combination.
+
+    Note:
+        The function is designed to handle large data sizes efficiently by processing chunks in parallel using Python's multiprocessing module.
+        It is especially useful for CPU-intensive tasks like hashing and data processing.
+    """
+    available_uids = get_available_query_miners(self, k)
+    data_size = len(data)
+    chunk_size = optimal_chunk_size(
+        data_size, len(available_uids), R, min_chunk_size, max_chunk_size
+    )
+    if chunk_size > data_size:
+        chunk_size = data_size
+    uid_combinations = generate_efficient_combinations(available_uids, R)
+
+    data_chunks = chunk_data_generator(data, chunk_size)
+
+    # Use multiprocessing to process chunks in parallel
+    pool = multiprocessing.Pool(multiprocessing.cpu_count())
+    results = [
+        pool.apply_async(process_chunk, args=(chunk, uid_combinations))
+        for chunk in data_chunks
+    ]
+
+    pool.close()
+    pool.join()
+
+    # Collect results
+    chunk_distributions = [res.get() for res in results]
+    return chunk_distributions
