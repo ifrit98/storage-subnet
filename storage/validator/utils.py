@@ -19,6 +19,7 @@
 import os
 import torch
 import numpy as np
+from itertools import combinations, cycle
 from typing import Dict, List, Any, Union, Optional, Tuple
 
 from Crypto.Random import random
@@ -28,6 +29,10 @@ from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommit
 from ..shared.merkle import MerkleTree
 
 import bittensor as bt
+
+
+MIN_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
+MAX_CHUNK_SIZE = 256 * 1024 * 1024  # 256 MB
 
 
 def generate_file_size_with_lognormal(
@@ -314,3 +319,174 @@ def get_current_validtor_uid_round_robin(self, epoch_length=760):
     vuids = get_all_validators(self)
     vidx = self.subtensor.get_current_block() // epoch_length % len(vuids)
     return vuids[vidx].item()
+
+
+def generate_efficient_combinations(available_uids, R):
+    """
+    Generates all possible combinations of UIDs for a given redundancy factor.
+
+    Args:
+        available_uids (list): A list of UIDs that are available for storing data.
+        R (int): The redundancy factor specifying the number of UIDs to be used for each chunk of data.
+
+    Returns:
+        list: A list of tuples, where each tuple contains a combination of UIDs.
+
+    Raises:
+        ValueError: If the redundancy factor is greater than the number of available UIDs.
+    """
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+
+    # Generate all combinations of available UIDs for the redundancy factor
+    uid_combinations = list(combinations(available_uids, R))
+
+    return uid_combinations
+
+
+def assign_combinations_to_hashes_by_block_hash(subtensor, hashes, combinations):
+    """
+    Assigns combinations of UIDs to each data chunk hash based on a pseudorandom seed derived from the blockchain's current block hash.
+
+    Args:
+        subtensor: The subtensor instance used to obtain the current block hash for pseudorandom seed generation.
+        hashes (list): A list of hashes, where each hash represents a unique data chunk.
+        combinations (list): A list of UID combinations, where each combination is a tuple of UIDs.
+
+    Returns:
+        dict: A dictionary mapping each chunk hash to a pseudorandomly selected combination of UIDs.
+
+    Raises:
+        ValueError: If there are not enough unique UID combinations for the number of data chunk hashes.
+    """
+
+    if len(hashes) > len(combinations):
+        raise ValueError(
+            "Not enough unique UID combinations for the given redundancy factor and number of hashes."
+        )
+    block_seed = get_block_seed(subtensor)
+    pyrandom.seed(block_seed)
+
+    # Shuffle once and then iterate in order for assignment
+    pyrandom.shuffle(combinations)
+    return {hash_val: combinations[i] for i, hash_val in enumerate(hashes)}
+
+
+def assign_combinations_to_hashes(hashes, combinations):
+    """
+    Assigns combinations of UIDs to each data chunk hash in a pseudorandom manner.
+
+    Args:
+        hashes (list): A list of hashes, where each hash represents a unique data chunk.
+        combinations (list): A list of UID combinations, where each combination is a tuple of UIDs.
+
+    Returns:
+        dict: A dictionary mapping each chunk hash to a pseudorandomly selected combination of UIDs.
+
+    Raises:
+        ValueError: If there are not enough unique UID combinations for the number of data chunk hashes.
+    """
+
+    if len(hashes) > len(combinations):
+        raise ValueError(
+            "Not enough unique UID combinations for the given redundancy factor and number of hashes."
+        )
+
+    # Shuffle once and then iterate in order for assignment
+    pyrandom.shuffle(combinations)
+    return {hash_val: combinations[i] for i, hash_val in enumerate(hashes)}
+
+
+def optimal_chunk_size(
+    data_size,
+    num_available_uids,
+    R,
+    min_chunk_size=MIN_CHUNK_SIZE,
+    max_chunk_size=MAX_CHUNK_SIZE,
+):
+    """
+    Calculates the optimal chunk size for data distribution based on the total data size, available UIDs, and redundancy factor.
+
+    Args:
+        data_size (int): The total size of the data to be distributed, in bytes.
+        min_chunk_size (int): The minimum size for each data chunk, in bytes.
+        max_chunk_size (int): The maximum size for each data chunk, in bytes.
+        num_available_uids (int): The number of available UIDs for data storage.
+        R (int): The redundancy factor for each data chunk.
+
+    Returns:
+        int: The optimal size for each data chunk, in bytes.
+    """
+
+    # Estimate the number of chunks based on redundancy and available UIDs
+    # Ensuring that we do not exceed the number of available UIDs
+    max_chunks = num_available_uids // R
+
+    # Calculate the ideal chunk size based on the estimated number of chunks
+    if max_chunks > 0:
+        ideal_chunk_size = data_size / max_chunks
+    else:
+        ideal_chunk_size = max_chunk_size
+
+    # Ensure the chunk size is within the specified bounds
+    chunk_size = max(min_chunk_size, min(ideal_chunk_size, max_chunk_size))
+
+    return int(chunk_size)
+
+
+def compute_chunk_distribution(
+    subtensor, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
+):
+    """
+    Distributes data across the network by dividing it into chunks, hashing each chunk, and assigning UID combinations to each chunk for storage.
+    Additionally, returns a comprehensive mapping of each data chunk, its hash, and the assigned UIDs.
+
+    Args:
+        data (bytes): The data to be distributed across the network.
+        R (int): The redundancy factor for each data chunk.
+        k (int): The number of UIDs to consider for combinations.
+        min_chunk_size (int, optional): The minimum size for each data chunk. Defaults to MIN_CHUNK_SIZE.
+        max_chunk_size (int, optional): The maximum size for each data chunk. Defaults to MAX_CHUNK_SIZE.
+
+    Returns:
+        dict: A comprehensive mapping of each data chunk's hash to its data and assigned combination of UIDs for storage.
+    """
+
+    # Step 1: Get all available UIDs
+    available_uids = [
+        "uid" + str(i) for i in range(k)
+    ]  # get_available_query_miners(self, k)
+
+    # Step 2: Select optimal chunk size
+    data_size = len(data)
+    chunk_size = optimal_chunk_size(
+        data_size, len(available_uids), min_chunk_size, max_chunk_size, R
+    )
+
+    # Step 3: Chunk the data
+    chunks = [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
+
+    # Step 4: Hash each chunk
+    chunk_hashes = [hash_data(chunk) for chunk in chunks]
+
+    # Step 5: Generate efficient combinations
+    uid_combinations = generate_efficient_combinations(available_uids, R)
+
+    # Step 6: Assign combinations to each chunk hash
+    chunk_distribution = assign_combinations_to_hashes_by_block_hash(
+        subtensor, chunk_hashes, uid_combinations
+    )
+
+    # Create a comprehensive mapping of chunk data, hash, and UID distribution
+    comprehensive_distribution = {
+        hash_val: {
+            "chunk_data": chunks[i],
+            "uid_combination": chunk_distribution[hash_val],
+        }
+        for i, hash_val in enumerate(chunk_hashes)
+    }
+
+    return comprehensive_distribution
