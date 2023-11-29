@@ -60,6 +60,21 @@ class Store(bt.Synapse):
         allow_mutation=False,
     )
 
+    def __str__(self):
+        return (
+            f"Store(encrypted_data={self.encrypted_data[:32]}, "
+            f"curve={self.curve}, "
+            f"g={self.g}, "
+            f"h={self.h}, "
+            f"seed={self.seed}, "
+            f"randomness={self.randomness}, "
+            f"commitment={self.commitment}, "
+            f"signature={self.signature}, "
+            f"commitment_hash={self.commitment_hash})"
+            f"axon={self.axon.dict()}, "
+            f"dendrite={self.dendrite.dict()}"
+        )
+
 
 class StoreUser(bt.Synapse):
     # Data to store

@@ -37,6 +37,21 @@ MIN_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
 MAX_CHUNK_SIZE = 256 * 1024 * 1024  # 256 MB
 
 
+def chunk_data_generator(data, chunk_size):
+    """
+    Generator that yields chunks of data.
+
+    Args:
+        data (bytes): The data to be chunked.
+        chunk_size (int): The size of each chunk in bytes.
+
+    Yields:
+        bytes: The next chunk of data.
+    """
+    for i in range(0, len(data), chunk_size):
+        yield data[i : i + chunk_size]
+
+
 def generate_file_size_with_lognormal(
     mu: float = np.log(1 * 1024**2), sigma: float = 1.5
 ) -> float:
@@ -192,7 +207,9 @@ def get_avaialble_uids(self):
     return avail_uids
 
 
-def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
+def get_random_uids_OG(
+    self, k: int, exclude: List[int] = [8, 9, 10, 11, 12, 13]
+) -> torch.LongTensor:
     """Returns k available random uids from the metagraph.
     Args:
         k (int): Number of uids to return.
@@ -224,6 +241,52 @@ def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor
             k - len(candidate_uids),
         )
     uids = torch.tensor(random.sample(available_uids, k))
+    bt.logging.debug(f"returning available uids: {uids}")
+    return uids.tolist()
+
+
+def get_random_uids(
+    self, k: int, exclude: List[int] = [8, 9, 10, 11, 12, 13]
+) -> torch.LongTensor:
+    """Returns k available random uids from the metagraph.
+    Args:
+        k (int): Number of uids to return.
+        exclude (List[int]): List of uids to exclude from the random sampling.
+    Returns:
+        uids (torch.LongTensor): Randomly sampled available uids.
+    Notes:
+        If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
+    """
+    candidate_uids = []
+    avail_uids = []
+
+    for uid in range(self.metagraph.n.item()):
+        uid_is_available = check_uid_availability(
+            self.metagraph, uid, self.config.neuron.vpermit_tao_limit
+        )
+        uid_is_not_excluded = exclude is None or uid not in exclude
+
+        if uid_is_available and uid_is_not_excluded:
+            candidate_uids.append(uid)
+        elif uid_is_available:
+            avail_uids.append(uid)
+
+    bt.logging.debug(f"k: {k}")
+    bt.logging.debug(f"1st available uids: {avail_uids}")
+    bt.logging.debug(f"1st candidate uids: {candidate_uids}")
+    # If not enough candidate_uids, supplement from avail_uids, ensuring they're not in exclude list
+    if len(candidate_uids) < k:
+        additional_uids_needed = k - len(candidate_uids)
+        filtered_avail_uids = [uid for uid in avail_uids if uid not in exclude]
+        additional_uids = random.sample(
+            filtered_avail_uids, min(additional_uids_needed, len(filtered_avail_uids))
+        )
+        candidate_uids.extend(additional_uids)
+
+    # Safeguard against trying to sample more than what is available
+    num_to_sample = min(k, len(candidate_uids))
+    uids = torch.tensor(random.sample(candidate_uids, num_to_sample))
+    bt.logging.debug(f"returning available uids: {uids}")
     return uids.tolist()
 
 
@@ -262,7 +325,7 @@ def get_all_miners(self):
     """
     # Determine miner axons to query from metagraph
     vuids = get_all_validators(self)
-    return [uid.item() for uid in metagraph.uids if uid not in vuids]
+    return [uid.item() for uid in self.metagraph.uids if uid not in vuids]
 
 
 def get_query_miners(self, k=3):
@@ -535,7 +598,7 @@ def compute_chunk_distribution(
     Returns:
         dict: A dictionary mapping each chunk hash to a pseudorandomly selected combination of UIDs.
     """
-    available_uids = get_avaialble_uids(self)
+    available_uids = get_random_uids(self, k=k)
 
     data_size = len(data)
     chunk_size = optimal_chunk_size(
@@ -576,6 +639,25 @@ def partition_uids(available_uids, R):
     return [tuple(available_uids[i : i + R]) for i in range(0, len(available_uids), R)]
 
 
+def adjust_uids_to_multiple(available_uids, R):
+    """
+    Adjusts the list of available UIDs to ensure its length is a multiple of R.
+
+    Args:
+        available_uids (list): The original list of available UIDs.
+        R (int): The redundancy factor.
+
+    Returns:
+        list: A modified list of UIDs with a length that is a multiple of R.
+    """
+    # Calculate the maximum number of complete groups of R that can be formed
+    max_complete_groups = len(available_uids) // R
+
+    # Adjust the list length to be a multiple of R
+    adjusted_length = max_complete_groups * R
+    return available_uids[:adjusted_length]
+
+
 def compute_chunk_distribution_mut_exclusive(self, data, R, k):
     """
     Computes and yields the distribution of data chunks across unique sets of UIDs, ensuring mutual exclusivity of UIDs across all chunks.
@@ -591,18 +673,16 @@ def compute_chunk_distribution_mut_exclusive(self, data, R, k):
     Raises:
         ValueError: If the redundancy factor R is greater than the number of available UIDs, or if the available UIDs are not a multiple of R.
     """
-    available_uids = get_query_miners(self, k=k)
+    available_uids = get_random_uids(self, k=k)
 
     data_size = len(data)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
 
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+
     if R > len(available_uids):
         raise ValueError(
             "Redundancy factor cannot be greater than the number of available UIDs."
-        )
-    if len(available_uids) % R != 0:
-        raise ValueError(
-            "Number of available UIDs must be a multiple of the redundancy factor R."
         )
 
     # Partition UIDs into exclusive groups
@@ -630,18 +710,16 @@ def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
     Raises:
         ValueError: If the redundancy factor R is greater than the number of available UIDs, or if the available UIDs are not a multiple of R.
     """
-    available_uids = get_query_miners(self, k=k)
+    available_uids = get_random_uids(self, k=k)
 
     data_size = len(data)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
 
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+
     if R > len(available_uids):
         raise ValueError(
             "Redundancy factor cannot be greater than the number of available UIDs."
-        )
-    if len(available_uids) % R != 0:
-        raise ValueError(
-            "Number of available UIDs must be a multiple of the redundancy factor R."
         )
 
     # Partition UIDs into exclusive groups
@@ -652,6 +730,38 @@ def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
 
     data_chunks = chunk_data_generator(data, chunk_size)
 
+    for chunk, uid_group in zip(data_chunks, uid_groups):
+        chunk_hash = hash_data(chunk)
+        yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
+
+
+def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
+    available_uids = get_random_uids(self, k=k)
+    data_size = len(data)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+
+    # Create initial UID groups
+    initial_uid_groups = partition_uids(available_uids, R)
+    uid_groups = list(initial_uid_groups)
+
+    # If more groups are needed, start reusing UIDs
+    total_chunks_needed = data_size // chunk_size
+    while len(uid_groups) < total_chunks_needed:
+        for group in cycle(initial_uid_groups):
+            if len(uid_groups) >= total_chunks_needed:
+                break
+            uid_groups.append(group)
+
+    # Convert uid_groups to a numpy array
+    uid_groups = np.array(uid_groups)
+
+    data_chunks = chunk_data_generator(data, chunk_size)
     for chunk, uid_group in zip(data_chunks, uid_groups):
         chunk_hash = hash_data(chunk)
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
@@ -680,13 +790,11 @@ def compute_chunk_distribution_mut_exclusive_file(self, file_path, R, k):
     data_size = os.path.getsize(file_path)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
 
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+
     if R > len(available_uids):
         raise ValueError(
             "Redundancy factor cannot be greater than the number of available UIDs."
-        )
-    if len(available_uids) % R != 0:
-        raise ValueError(
-            "Number of available UIDs must be a multiple of the redundancy factor R."
         )
 
     uid_groups = partition_uids(available_uids, R)
@@ -725,13 +833,11 @@ def pre_process_chunk_distribution_file(self, file_path, R, k):
     data_size = os.path.getsize(file_path)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
 
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+
     if R > len(available_uids):
         raise ValueError(
             "Redundancy factor cannot be greater than the number of available UIDs."
-        )
-    if len(available_uids) % R != 0:
-        raise ValueError(
-            "Number of available UIDs must be a multiple of the redundancy factor R."
         )
 
     uid_groups = partition_uids(available_uids, R)

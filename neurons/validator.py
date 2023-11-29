@@ -53,6 +53,8 @@ from storage.validator.utils import (
     get_current_validtor_uid_round_robin,
     get_current_validator_uid_pseudorandom,
     compute_chunk_distribution_mut_exclusive,
+    compute_chunk_distribution_mut_exclusive_numpy,
+    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 
 from storage.validator.encryption import (
@@ -837,34 +839,129 @@ class neuron:
         return event
 
     async def store_broadband(self, data, R=3, k=10):
-        # TODO:
-        async def store_chunk(chunk):
-            # Store the chunk
-            pass
+        """
+        Stores data on the network and ensures it is correctly committed by the miners.
 
-        # Compute distributions based on block hash
+        Uses a semaphore to restrict the number of concurrent requests to the network.
+
+        Stores chunks in groups of R, and queries k miners for each chunk.
+
+        Basic algorthim:
+            - Split data into chunks
+            - Compute chunk distribution
+            - For each chunk:
+                - Select R miners to store the chunk
+            - Verify the response from each miner
+            - Store the data for each verified response
+
+        Parameters:
+            data: bytes
+                The data to be stored.
+            R: int
+                The redundancy factor for the data storage.
+            k: int
+                The target number of miners to query for each chunk.
+        """
+        semaphore = asyncio.Semaphore(3)
+
+        async def store_chunk_group_with_retry(chunk_hash, chunk, uids, max_retries=3):
+            # TODO: This needs work. It's a dummy placeholder for now.
+            attempt = 0
+            while attempt < max_retries:
+                try:
+                    responses = await store_chunk_group(chunk_hash, chunk, uids)
+                    for response in responses:
+                        if response.status_code == 408:
+                            raise TimeoutError
+                except (
+                    TimeoutError
+                ):  # Replace with the specific exception you're catching
+                    attempt += 1
+                    await asyncio.sleep(2**attempt)  # Exponential backoff
+            raise TimeoutError("Maximum retries reached for storing chunk")
+
+        async def store_chunk_group(chunk_hash, chunk, uids):
+            g, h = setup_CRS(curve=self.config.neuron.curve)
+
+            b64_encoded_chunk = base64.b64encode(chunk).decode("utf-8")
+
+            synapse = protocol.Store(
+                encrypted_data=b64_encoded_chunk,
+                curve=self.config.neuron.curve,
+                g=ecc_point_to_hex(g),
+                h=ecc_point_to_hex(h),
+                seed=get_random_bytes(32).hex(),
+            )
+
+            axons = [self.metagraph.axons[uid] for uid in uids]
+            responses = await self.dendrite(
+                axons,
+                synapse,
+                deserialize=False,
+                timeout=60,
+            )
+
+            return responses
+
         # R = 3  # Redundancy factor
-        # k = 10  # Number of miners to query
+        # k = 10  # Target number of miners to query
         tasks = []
-        for dist in compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
-            # TODO: return a linear/flat list to add tasks to the queue
-            bt.logging.debug(f"Chunk distribution: {dist['uids']}")
-            tasks.append(asyncio.create_task(self.store_chunk(dist["chunk"])))
-            # For each chunk:
-            # treat it as a single file in old protocol
-            # Queue a task to send that bitch out with these miners
-            # Await responses within timeout
-            # (this way they need to be mutually exclusive)
+        chunks = []
+        uids_nested = []
+        async with semaphore:
+            for i, dist in enumerate(
+                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+                    self, data, R, k
+                )
+            ):
+                bt.logging.debug(f"Chunk {i} | uid distribution: {dist['uids']}")
+                chunks.append(dist["chunk"])
+                uids_nested.append(dist["uids"])
+                tasks.append(
+                    asyncio.create_task(
+                        store_chunk_group(
+                            dist["chunk_hash"], dist["chunk"], dist["uids"]
+                        )
+                    )
+                )
+            responses_nested = await asyncio.gather(*tasks)
 
-        responses = await asyncio.gather(*tasks)
+        for uids, responses, chunk in zip(uids_nested, responses_nested, chunks):
+            # TODO: don't duplicate hashing, find a better way of storing/retrieving this data
+            chunk_hash = hash_data(chunk)
+            chunk_size = sys.getsizeof(chunk)
+            for uid, response in zip(uids, responses):
+                verified = verify_store_with_seed(response)
+                if verified:
+                    # Prepare storage for the data for particular miner
+                    response_storage = {
+                        "prev_seed": response.seed,
+                        "size": chunk_size,
+                    }
+                    # Store in the database according to the data hash and the miner hotkey
+                    # TODO: Refactor database to store full hashes and chunk subhashes so we can reconstruct!
+                    add_metadata_to_hotkey(
+                        self.metagraph.hotkeys[uid],
+                        chunk_hash,
+                        response_storage,
+                        self.database,
+                    )
+                    bt.logging.debug(
+                        f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
+                    )
+                else:
+                    bt.logging.error(
+                        f"Failed to verify store commitment from UID: {uid}"
+                    )
 
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
         try:
-            # Store some data
-            bt.logging.info("initiating store data")
-            event = await self.store_random_data()
+            # Store some data with broadband protocol
+            data = os.urandom(1024 * 1024 * 1024)  # 1GB
+            bt.logging.info("initiating store broadband data")
+            event = await self.store_broadband(data)
 
             if self.config.neuron.verbose:
                 bt.logging.debug(f"STORE EVENT LOG: {event}")
