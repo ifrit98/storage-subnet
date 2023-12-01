@@ -99,6 +99,9 @@ def get_metadata_from_hash(ss58_address, data_hash, database):
     """
     # Get the JSON string from Redis
     metadata_json = database.hget(ss58_address, data_hash)
+    bt.logging.debug(
+        f"hotkey {ss58_address} | data_hash {data_hash} | metadata_json {metadata_json}"
+    )
     if metadata_json:
         # Deserialize the JSON string to a Python dictionary
         metadata = json.loads(metadata_json)
@@ -174,6 +177,9 @@ def calculate_total_hotkey_storage(hotkey, database):
     """
     total_storage = 0
     for data_hash in database.hkeys(hotkey):
+        bt.logging.debug(
+            f"total_hotkey_storage: hotkey {hotkey} | data_hash {data_hash}"
+        )
         # Get the metadata for the current data hash
         metadata = get_metadata_from_hash(hotkey, data_hash, database)
         if metadata:
@@ -225,7 +231,7 @@ def calculate_total_network_storage(database):
     total_storage = 0
     # Iterate over all hotkeys
     for hotkey in database.scan_iter("*"):
-        if hotkey.startswith(b"stats:"):
+        if hotkey.startswith(b"stats:") or hotkey.startswith("chunk:"):
             continue
         # Grab storage for that hotkey
         total_storage += calculate_total_hotkey_storage(hotkey, database)
@@ -263,3 +269,92 @@ def get_redis_db_size(database: redis.Redis) -> int:
         if size:
             total_size += size
     return total_size
+
+
+def store_file_chunk_mapping_ordered(full_hash, chunk_hashes, chunk_indices, database):
+    key = f"file:{full_hash}"
+    for chunk_index, chunk_hash in zip(chunk_indices, chunk_hashes):
+        database.zadd(key, {chunk_hash: chunk_index})
+
+
+def get_all_chunks_for_file(file_hash, database):
+    file_chunks_key = f"file:{file_hash}"
+    chunk_hashes_with_index = database.zrange(file_chunks_key, 0, -1, withscores=True)
+    if not chunk_hashes_with_index:
+        return None
+
+    chunks_info = {}
+    for chunk_hash_bytes, index in chunk_hashes_with_index:
+        chunk_hash = chunk_hash_bytes.decode()  # Decode bytes to string
+        chunk_metadata = database.hgetall(f"chunk:{chunk_hash}")
+        if chunk_metadata:
+            chunks_info[int(index)] = {
+                "chunk_hash": chunk_hash,
+                # "file_hash": chunk_metadata[b'file_hash'].decode(),
+                "uids": chunk_metadata[b"uids"].decode().split(","),
+                "size": int(chunk_metadata[b"size"]),
+                # "seed": chunk_metadata[b'seed'].decode()
+            }
+    return chunks_info
+
+
+def get_uids_for_hash(hash_value, database, is_full_hash=False):
+    all_uids = set()
+
+    if is_full_hash:
+        # Get UIDs for all chunks under the full hash
+        chunks_info = get_all_chunks_for_file(hash_value, database)
+        if chunks_info is None:
+            return None
+        for chunk_info in chunks_info.values():
+            all_uids.update(chunk_info["uids"])
+    else:
+        # Get UIDs for a single chunk hash
+        chunk_metadata = database.hgetall(f"chunk:{hash_value}")
+        if chunk_metadata:
+            uids = chunk_metadata.get(b"uids")
+            if uids:
+                all_uids.update(uids.decode().split(","))
+
+    return list(all_uids)
+
+
+def add_uid_to_chunk(chunk_hash, uid, database):
+    chunk_metadata_key = f"chunk:{chunk_hash}"
+
+    # Fetch existing UIDs for the chunk
+    existing_metadata = database.hget(chunk_metadata_key, "uids")
+    if existing_metadata:
+        existing_uids = existing_metadata.decode().split(",")
+
+        # Add new UID if it's not already in the list
+        if uid not in existing_uids:
+            updated_uids = existing_uids + [uid]
+            database.hset(chunk_metadata_key, "uids", ",".join(updated_uids))
+            print(f"UID {uid} added to chunk {chunk_hash}.")
+        else:
+            print(f"UID {uid} already exists for chunk {chunk_hash}.")
+    else:
+        # If no UIDs are associated with this chunk, create a new entry
+        database.hmset(chunk_metadata_key, {"uids": uid})
+        print(f"UID {uid} set for new chunk {chunk_hash}.")
+
+
+def store_chunk_metadata(full_hash, chunk_hash, uids, chunk_size, database):
+    chunk_metadata_key = f"chunk:{chunk_hash}"
+    existing_metadata = database.hget(chunk_metadata_key, "uids")
+    if existing_metadata:
+        existing_uids = existing_metadata.decode().split(",")
+        uids = set(existing_uids + uids)
+    metadata = {"uids": ",".join(uids), "size": chunk_size}
+
+    database.hmset(chunk_metadata_key, metadata)
+
+
+def get_ordered_metadata(file_hash, database):
+    chunks_info = get_all_chunks_for_file(file_hash, database)
+    if chunks_info is None:
+        return None
+
+    ordered_chunks = sorted(chunks_info.items(), key=lambda x: x[0])
+    return [chunk_info for _, chunk_info in ordered_chunks]

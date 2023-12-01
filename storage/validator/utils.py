@@ -767,6 +767,39 @@ def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
+def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(self, data_size, R, k):
+    available_uids = get_random_uids(self, k=k)
+    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+    available_uids = adjust_uids_to_multiple(available_uids, R)
+    chunk_sizes = [chunk_size] * (data_size - 1) + [data_size % chunk_size]
+
+    if R > len(available_uids):
+        raise ValueError(
+            "Redundancy factor cannot be greater than the number of available UIDs."
+        )
+
+    # Create initial UID groups
+    initial_uid_groups = partition_uids(available_uids, R)
+    uid_groups = list(initial_uid_groups)
+
+    # If more groups are needed, start reusing UIDs
+    total_chunks_needed = data_size // chunk_size
+    while len(uid_groups) < total_chunks_needed:
+        for group in cycle(initial_uid_groups):
+            if len(uid_groups) >= total_chunks_needed:
+                break
+            uid_groups.append(group)
+
+    data_chunks = chunk_data_generator(data, chunk_size)
+    for i, (chunk_size, uid_group) in enumerate(zip(chunk_sizes, uid_groups)):
+        yield {
+            "chunk_size": chunk_size,
+            "start_idx": i * chunk_size,
+            "end_idx": (i + 1) * chunk_size,
+            "uids": uid_group,
+        }
+
+
 def compute_chunk_distribution_mut_exclusive_file(self, file_path, R, k):
     """
     Computes and yields the distribution of data chunks to UIDs directly from a file,
