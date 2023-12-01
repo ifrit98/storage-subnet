@@ -101,6 +101,8 @@ from storage.validator.database import (
     get_all_chunk_hashes,
     get_ordered_metadata,
     hotkey_at_capacity,
+    get_miner_statistics,
+    calculate_total_network_storage,
 )
 
 from storage.validator.bonding import (
@@ -1134,6 +1136,14 @@ class neuron:
         # Log the total storage to wandb.
         if not self.config.wandb.off:
             self.wandb.log({"total_storage": total_storage})
+
+        if self.step % 100:  # TODO: make this a hparam
+            # Update the total network storage
+            total_storage = calculate_total_network_storage(self.database)
+            bt.logging.info(f"Total network storage: {total_storage}")
+            # Log the total storage to wandb.
+            if not self.config.wandb.off:
+                self.wandb.log({"total_storage": total_storage})
 
     def run(self):
         bt.logging.info("run()")
