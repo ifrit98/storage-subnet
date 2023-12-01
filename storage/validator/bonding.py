@@ -86,7 +86,6 @@ def update_statistics(ss58_address, success, task_type, database):
 
     # Update statistics in the stats hash
     stats_key = f"stats:{ss58_address}"
-    database.hincrby(stats_key, "store_attempts", 1)
 
     if task_type == "store":
         database.hincrby(stats_key, "store_attempts", 1)
@@ -140,7 +139,7 @@ async def compute_tier(stats_key, database):
     retrieval_success_rate = (
         retrieval_successes / retrieval_attempts if retrieval_attempts > 0 else 0
     )
-    store_success_rate = store_successes / store_attempts
+    store_success_rate = store_successes / store_attempts if store_attempts > 0 else 0
     total_successes = challenge_successes + retrieval_successes + store_successes
 
     if (

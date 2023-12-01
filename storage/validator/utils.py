@@ -271,9 +271,6 @@ def get_random_uids(
         elif uid_is_available:
             avail_uids.append(uid)
 
-    bt.logging.debug(f"k: {k}")
-    bt.logging.debug(f"1st available uids: {avail_uids}")
-    bt.logging.debug(f"1st candidate uids: {candidate_uids}")
     # If not enough candidate_uids, supplement from avail_uids, ensuring they're not in exclude list
     if len(candidate_uids) < k:
         additional_uids_needed = k - len(candidate_uids)

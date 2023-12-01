@@ -148,6 +148,8 @@ def min_max_normalize(times):
     Returns:
         List[float]: Normalized response times scaled between 0 and 1.
     """
+    if times == []:
+        return []
     min_time = min(times)
     max_time = max(times)
     range_time = max_time - min_time
