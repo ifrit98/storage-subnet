@@ -102,7 +102,6 @@ from storage.validator.database import (
     get_ordered_metadata,
     hotkey_at_capacity,
     get_miner_statistics,
-    calculate_total_network_storage,
 )
 
 from storage.validator.bonding import (
