@@ -283,9 +283,6 @@ class neuron:
         # Hash the data
         data_hash = hash_data(encrypted_data)
 
-        # Hash the data
-        data_hash = hash_data(encrypted_data)
-
         # Convert to base64 for compactness
         # TODO: Don't do this if it's already b64 encoded. (Check first)
         b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
