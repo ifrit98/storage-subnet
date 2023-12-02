@@ -74,6 +74,7 @@ setup(
     author_email="ifrit98@gmail.com",  # TODO(developer): Change this value to your module subnet author email.
     license="MIT",
     python_requires=">=3.8",
+    scripts=["bin/stcli"],
     install_requires=requirements,
     classifiers=[
         "Development Status :: 3 - Alpha",

@@ -22,7 +22,7 @@ import wandb
 import torch
 import bittensor as bt
 from storage.validator.state import ttl_get_block
-import storage.validator as validator
+from storage import __spec_version__ as spec_version
 
 
 def should_set_weights(self) -> bool:
@@ -30,17 +30,6 @@ def should_set_weights(self) -> bool:
     if self.config.neuron.disable_set_weights:
         return False
 
-    if self.config.neuron.verbose:
-        bt.logging.debug(f"prev_step_block: {self.prev_step_block}")
-        bt.logging.debug(
-            f"a) ttl % epoch_length: {ttl_get_block(self) % self.config.neuron.epoch_length}"
-        )
-        bt.logging.debug(
-            f"b) prev_step_block % epoch_length: {self.prev_step_block % self.config.neuron.epoch_length}"
-        )
-        bt.logging.debug(
-            f"should set weights (a < b): {ttl_get_block(self) % self.config.neuron.epoch_length < self.prev_step_block % self.config.neuron.epoch_length}"
-        )
     return (
         ttl_get_block(self) % self.config.neuron.epoch_length
         < self.prev_step_block % self.config.neuron.epoch_length
@@ -76,7 +65,7 @@ def set_weights(self):
         uids=processed_weight_uids,
         weights=processed_weights,
         wait_for_finalization=False,
-        version_key=validator.__spec_version__,
+        version_key=spec_version,
     )
     if result is True:
         bt.logging.info("set_weights on chain successfully!")

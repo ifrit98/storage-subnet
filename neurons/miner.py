@@ -35,8 +35,6 @@ from Crypto.Random import get_random_bytes
 
 from pprint import pprint, pformat
 
-from test_miner import test
-
 # import this repo
 import storage
 from storage.shared.ecc import (
@@ -67,12 +65,22 @@ from storage.miner.utils import (
     save_data_to_filesystem,
     load_from_filesystem,
     commit_data_with_seed,
+    init_wandb,
 )
 
 from storage.miner.config import (
     config,
     check_config,
     add_args,
+)
+
+from storage.miner.database import (
+    store_or_update_chunk_metadata,
+    store_chunk_metadata,
+    update_seed_info,
+    get_chunk_metadata,
+    get_all_filepaths,
+    get_total_storage_used,
 )
 
 
@@ -127,17 +135,17 @@ class miner:
         bt.logging.info("miner.__init__()")
 
         # Init device.
-        bt.logging.debug("loading", "device")
+        bt.logging.debug("loading device")
         self.device = torch.device(self.config.miner.device)
         bt.logging.debug(str(self.device))
 
         # Init subtensor
-        bt.logging.debug("loading", "subtensor")
+        bt.logging.debug("loading subtensor")
         self.subtensor = bt.subtensor(config=self.config)
         bt.logging.debug(str(self.subtensor))
 
         # Init wallet.
-        bt.logging.debug("loading", "wallet")
+        bt.logging.debug("loading wallet")
         self.wallet = bt.wallet(config=self.config)
         self.wallet.create_if_non_existent()
         if not self.config.wallet._mock:
@@ -151,7 +159,7 @@ class miner:
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
         # Init metagraph.
-        bt.logging.debug("loading", "metagraph")
+        bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
             netuid=self.config.netuid, network=self.subtensor.network, sync=False
         )  # Make sure not to sync without passing subtensor
@@ -173,7 +181,7 @@ class miner:
 
         # Init wandb.
         if not self.config.wandb.off:
-            bt.logging.debug("loading", "wandb")
+            bt.logging.debug("loading wandb")
             init_wandb(self)
 
         # The axon handles request processing, allowing validators to send this process requests.
@@ -219,10 +227,6 @@ class miner:
 
         self.step = 0
 
-        if self.config.test:  # (debugging)
-            test(self)
-            exit(0)
-
     @property
     def total_storage(self):
         """
@@ -239,16 +243,15 @@ class miner:
             102400  # Example output indicating 102,400 bytes of data stored
         """
         # Fetch all keys from Redis
-        all_keys = safe_key_search(database, "*")
+        all_keys = safe_key_search(self.database, "*")
 
         # Filter out keys that contain a period (temporary, remove later)
         filtered_keys = [key for key in all_keys if b"." not in key]
-        bt.logging.debug("filtered_keys:", filtered_keys)
 
         # Get the size of each data object and sum them up
         total_size = sum(
             [
-                json.loads(self.database.get(key).decode("utf-8")).get("size", 0)
+                get_chunk_metadata(self.database, key).get(b"size", 0)
                 for key in filtered_keys
             ]
         )
@@ -492,50 +495,59 @@ class miner:
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
 
+        if self.config.miner.verbose:
+            bt.logging.debug(f"store b64encrypted data: {synapse.encrypted_data[:200]}")
+            bt.logging.debug(f"store b64decrypted data: {encrypted_byte_data[:200]}")
+
+        # Store the data with the hash as the key in the filesystem
+        data_hash = hash_data(encrypted_byte_data)
+
+        # If already storing this hash, simply update the validator seeds and return challenge
+        if self.database.exists(data_hash):
+            # update the validator seed challenge hash in storage
+            update_seed_info(self.database, data_hash, synapse.seed)
+            # TODO: should we pull the data from filesystem to prove we have it already instead of
+            # using the sent one? Kinda weird that we just throw it away, but will be challenged later
+        else:
+            # Store the data in the filesystem
+            filepath = save_data_to_filesystem(
+                encrypted_byte_data, self.config.database.directory, str(data_hash)
+            )
+            bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
+            # Add the initial chunk, size, and validator seed information
+            store_chunk_metadata(
+                self.database,
+                data_hash,
+                filepath,
+                sys.getsizeof(encrypted_byte_data),
+                synapse.seed,
+            )
+
         # Commit to the entire data block
         committer = ECCommitment(
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
-        bt.logging.debug(f"committer: {committer}")
-        bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
-        bt.logging.debug(f"c: {c}")
-        bt.logging.debug(f"m_val: {m_val}")
-        bt.logging.debug(f"r: {r}")
-
-        # Store the data with the hash as the key in the filesystem
-        data_hash = hash_data(encrypted_byte_data)
-        filepath = save_data_to_filesystem(
-            encrypted_byte_data, self.config.database.directory, str(data_hash)
-        )
-        bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
-        miner_store = {
-            "filepath": filepath,
-            "prev_seed": str(synapse.seed),
-            "size": sys.getsizeof(encrypted_byte_data),
-        }
-
-        # Dump the metadata to json and store in redis
-        dumped = json.dumps(miner_store).encode()
-        bt.logging.debug(f"dumped: {dumped}")
-        self.database.set(data_hash, dumped)
-        bt.logging.trace(f"set {data_hash} in database!")
+        if self.config.miner.verbose:
+            bt.logging.debug(f"committer: {committer}")
+            bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
+            bt.logging.debug(f"c: {c}")
+            bt.logging.debug(f"m_val: {m_val}")
+            bt.logging.debug(f"r: {r}")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
         synapse.commitment = ecc_point_to_hex(c)
 
-        # NOTE: Does this add anything of value?
-        synapse.signature = self.wallet.hotkey.sign(str(m_val)).hex()
-        bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
-
         # Initialize the commitment hash with the initial commitment for chained proofs
-        bt.logging.trace(f"type(seed): {type(synapse.seed)}")
         synapse.commitment_hash = str(m_val)
-        bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
+        if self.config.miner.verbose:
+            bt.logging.trace(f"metadata: {pformat(dumped)}")
+            bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
+            bt.logging.trace(f"type(seed): {type(synapse.seed)}")
+            bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
 
-        bt.logging.debug(f"returning synapse: {synapse}")
         return synapse
 
     def challenge(
@@ -574,23 +586,20 @@ class miner:
         """
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"recieved challenge hash: {synapse.challenge_hash}")
-        data = self.database.get(synapse.challenge_hash)
+        data = get_chunk_metadata(self.database, synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
-            bt.logging.error(f"keys found: {self.database.keys('*')}")
             return synapse
 
-        decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug(f"decoded data: {decoded}")
+        bt.logging.debug(f"retrieved data: {pformat(data)}")
 
         # Chunk the data according to the specified (random) chunk size
-        filepath = decoded["filepath"]
+        filepath = data[b"filepath"]
         encrypted_data_bytes = load_from_filesystem(filepath)
-        bt.logging.debug(f"encrypted_data_bytes: {encrypted_data_bytes}")
 
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time
-        prev_seed = decoded["prev_seed"].encode()
+        prev_seed = data[b"seed"].encode()
         new_seed = synapse.seed.encode()
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
@@ -607,13 +616,13 @@ class miner:
         synapse.commitment_proof = proof
 
         # update the commitment seed challenge hash in storage
-        decoded["prev_seed"] = new_seed.decode("utf-8")
-        self.database.set(synapse.challenge_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated miner storage: {decoded}")
+        update_seed_info(
+            self.database, synapse.challenge_hash, new_seed.decode("utf-8")
+        )
+        bt.logging.debug(f"udpated miner storage seed: {new_seed}")
 
         # Chunk the data according to the provided chunk_size
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
-        bt.logging.debug(f"data_chunks: {pformat(data_chunks)}")
 
         # Extract setup params
         g = hex_to_ecc_point(synapse.g, synapse.curve)
@@ -627,7 +636,6 @@ class miner:
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        bt.logging.debug(f"merkle_tree: {merkle_tree}")
 
         # Prepare return values to validator
         synapse.commitment = commitments[synapse.challenge_index]
@@ -677,21 +685,19 @@ class miner:
             >>> updated_synapse = self.retrieve(synapse)
         """
         # Fetch the data from the miner database
-        data = self.database.get(synapse.data_hash)
-        bt.logging.debug("retireved data:", data)
+        data = get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
-        decoded = json.loads(data.decode("utf-8"))
-        bt.logging.debug("retrieve decoded data:", decoded)
+        bt.logging.debug(f"retrieved data: {pformat(data)}")
 
         # load the data from the filesystem
-        filepath = decoded["filepath"]
+        filepath = data[b"filepath"]
         encrypted_data_bytes = load_from_filesystem(filepath)
 
         # incorporate a final seed challenge to verify they still have the data at retrieval time
         commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes,
-            decoded["prev_seed"].encode(),
+            data[b"seed"].encode(),
             synapse.seed.encode(),
             verbose=self.config.miner.verbose,
         )
@@ -699,9 +705,8 @@ class miner:
         synapse.commitment_proof = proof
 
         # store new seed
-        decoded["prev_seed"] = synapse.seed
-        self.database.set(synapse.data_hash, json.dumps(decoded).encode())
-        bt.logging.debug(f"udpated retrieve miner storage: {decoded}")
+        update_seed_info(self.database, synapse.data_hash, synapse.seed)
+        bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
 
         # Return base64 data
         synapse.data = base64.b64encode(encrypted_data_bytes)

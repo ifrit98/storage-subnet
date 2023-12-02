@@ -60,14 +60,14 @@ def run(self):
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
-    bt.logging.info(
-        f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
-    )
-    self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
+    # bt.logging.info(
+    #     f"Serving axon {self.axon} on network: {self.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+    # )
+    # self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
     # Start  starts the miner's axon, making it active on the network.
-    bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
-    self.axon.start()
+    # bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
+    # self.axon.start()
 
     # --- Run until should_exit = True.
     self.last_epoch_block = self.subtensor.get_current_block()

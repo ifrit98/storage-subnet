@@ -6,7 +6,43 @@ Subnet 21 implements a novel, multi-layered zero-knowledge interactive proof-of-
 
 We consider this system to be an important stepping stone so that bittensor can fulfill it's mission of democratizing intelligence, and a decentralized AWS platform is a key brick in this wall. 
 
+**NOTICE** Using this software, you must implicitly agree to the Terms and Agreements provided in [this](TERMS.md) document.
+
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
+
+# Table of Contents for Subnet 21 Documentation
+
+1. [Overview](#overview)
+2. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
+   - [Role of a Miner (Prover)](#role-of-a-miner-prover)
+   - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
+3. [Main Features of Subnet 21](#main-features-of-subnet-21)
+   - [Zero-Knowledge Proof of Space-Time System](#zero-knowledge-proof-of-space-time-system)
+   - [Chained Proof Challenges](#chained-proof-challenges)
+   - [Data Encryption and Zero-Knowledge Proofs for Privacy Preservation](#data-encryption-and-zero-knowledge-proofs-for-privacy-preservation)
+   - [Scalability and Reliability](#scalability-and-reliability)
+   - [Advanced Cryptographic Techniques](#advanced-cryptographic-techniques)
+   - [User-Centric Approach](#user-centric-approach)
+4. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
+   - [Storage Phase](#storage-phase)
+   - [Challenge Phase](#challenge-phase)
+   - [Retrieval Phase](#retrieval-phase)
+5. [Installation](#installation)
+   - [Running a Miner](#running-a-miner)
+   - [Running a Validator](#running-a-validator)
+6. [Documentation for Storage CLI Interface](#documentation-for-storage-cli-interface)
+   - [Prerequisites](#prerequisites)
+   - [Installation](#installation-1)
+   - [Commands](#commands)
+     - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
+     - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
+     - [Listing Stored Data](#listing-stored-data)
+   - [Examples](#examples)
+   - [General Options](#general-options)
+   - [Notes](#notes)
+
+
+
 
 ## What is a Decentralized Storage Network (DSN)?
 A DSN is a network architecture where data storage and management are distributed across various locations, controlled by multiple participants rather than a single entity. This approach enhances data security, availability, and resistance to censorship.
@@ -146,6 +182,47 @@ cd storage-subnet
 python -m pip install -e .
 ```
 
+### Install Redis
+Install Redis on your host system.
+
+Linux [instructions](https://redis.io/docs/install/install-redis/install-redis-on-linux/)
+
+```bash
+sudo apt install lsb-release curl gpg
+
+curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+
+sudo apt-get update
+sudo apt-get install redis
+```
+
+Ensure the local Redis server is started.
+
+```bash
+sudo systemctl status redis-server.service
+```
+
+You should see output like:
+```
+● redis-server.service - Advanced key-value store
+     Loaded: loaded (/lib/systemd/system/redis-server.service; disabled; vendor preset: enabled)
+     Active: active (running) since Thu 2023-11-16 22:35:42 EST; 3min 25s ago
+       Docs: http://redis.io/documentation,
+             man:redis-server(1)
+   Main PID: 31881 (redis-server)
+     Status: "Ready to accept connections"
+      Tasks: 5 (limit: 38370)
+     Memory: 2.9M
+        CPU: 387ms
+     CGroup: /system.slice/redis-server.service
+             └─31881 "/usr/bin/redis-server 127.0.0.1:6379" "" "" "" "" "" "" ""
+
+Nov 16 22:35:42 user systemd[1]: Starting Advanced key-value store...
+Nov 16 22:35:42 user systemd[1]: Started Advanced key-value store.
+```
+
 ### Running a miner
 ```bash
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
@@ -156,3 +233,100 @@ python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
 
+Ensure that your wallet password is set as an environment variable with prefix `BT_COLD_PW_` so bittensor can autmatically inject this to unlock the coldkey for proper operation.
+
+```bash
+export BT_COLD_PW_<MYWALLETNAME>=xxxyyy
+
+# e.g.
+export BT_COLD_PW_DEFAULT=xxxyyy
+```
+
+This allows for restarting your process without having to input the wallet password each time.
+
+# Documentation for Storage CLI Interface
+
+## Overview
+The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+
+## Prerequisites
+Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+
+## Commands
+
+### 1. Store: Storing Data on the Network
+This command encrypts and stores data on the Bittensor network.
+
+#### Subcommands
+- `put`: Encrypt and store data.
+
+#### Usage
+```bash
+stcli store put --filepath <path-to-data> [options]
+```
+
+#### Options
+- `--filepath <path-to-data>`: Path to the data file to be stored.
+- `--hash_basepath <path>`: (Optional) Path to store the data hashes.
+- `--stake_limit <float>`: (Optional) Stake limit to filter validator axons.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+
+### 2. Retrieve: Retrieving Data from the Network
+This command retrieves previously stored data from the Bittensor network.
+
+#### Subcommands
+- `list`: Lists all data associated with a specific coldkey.
+- `get`: Retrieve and decrypt data.
+
+#### Usage
+```bash
+stcli retrieve get --data_hash <hash> [options]
+```
+
+#### Options
+- `--data_hash <hash>`: Hash of the data to retrieve.
+- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
+- `--stake_limit <float>`: (Optional) Stake limit for validator axons.
+- `--storage_basepath <path>`: (Optional) Path to store retrieved data.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+
+### Listing Stored Data
+Lists all data hashes stored on the network associated with the specified coldkey.
+
+#### Usage
+```bash
+stcli retrieve list [options]
+```
+
+#### Options
+- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+
+## Examples
+
+### Storing Data
+```bash
+stcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
+```
+
+### Retrieving Data
+```bash
+stcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
+```
+
+### Listing Data
+```bash
+stcli retrieve list --wallet.name mywallet
+```
+
+## General Options
+- `--help`: Displays help information about CLI commands and options.
+
+## Notes
+- Ensure your wallet is configured and accessible.
+- File paths should be absolute or relative to your current directory.
+- Data hashes are unique identifiers for your stored data on the Bittensor network.
+
+For detailed instructions and more information, visit the [Bittensor Documentation](https://bittensor.com/docs).

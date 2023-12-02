@@ -1,5 +1,5 @@
-bittensor
-torch
-redis
-pycryptodome
-wandb
+bittensor>=6.3.0
+torch==2.0.1
+redis==5.0.1
+pycryptodome==3.18.0
+wandb==0.16.0

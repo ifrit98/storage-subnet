@@ -84,7 +84,7 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--neuron.maxsize",
-        default=2**16,
+        default=None,  # Use lognormal random gaussian if None (2**16, # 64KB)
         type=int,
         help="Maximum size of random data to store.",
     )
@@ -109,8 +109,8 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.challenge_sample_size",
         type=int,
-        default=5,
-        help="Number of miners to challenge at a time.",
+        default=3,
+        help="Number of miners to challenge at a time. Target is ~90 miners per epoch.",
     )
     parser.add_argument(
         "--neuron.disable_log_rewards",
@@ -152,25 +152,19 @@ def add_args(cls, parser):
         "--neuron.challenge_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=20,
+        default=10,
     )
     parser.add_argument(
         "--neuron.retrieve_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=50,
-    )
-    parser.add_argument(
-        "--neuron.epoch_length_override",
-        type=int,
-        help="Override the default epoch length (how often we set weights).",
-        default=5,
+        default=10,
     )
     parser.add_argument(
         "--neuron.checkpoint_block_length",
         type=int,
         help="Blocks before a checkpoint is saved.",
-        default=100,
+        default=50,
     )
     parser.add_argument(
         "--neuron.blocks_per_step",
@@ -197,16 +191,22 @@ def add_args(cls, parser):
         default=4096,
     )
     parser.add_argument(
-        "--neuron.broadcast_stake_limit",
-        type=int,
-        help="The minimum number of TAO allowed to broadcast index updates to validator with a vpermit.",
-        default=1000,
-    )
-    parser.add_argument(
         "--neuron.verbose",
         action="store_true",
         help="If set, we will print verbose detailed logs.",
         default=False,
+    )
+    parser.add_argument(
+        "--neuron.log_responses",
+        action="store_true",
+        help="If set, we will log responses. These can be LONG.",
+        default=False,
+    )
+    parser.add_argument(
+        "--neuron.data_ttl",
+        type=int,
+        help="The number of blocks before data expires.",
+        default=50000,  # 7 days
     )
 
     # Redis arguments
@@ -217,7 +217,9 @@ def add_args(cls, parser):
         "--database.port", default=6379, help="The port of the redis database."
     )
     parser.add_argument(
-        "--database.index", default=1, help="The database number of the redis database."
+        "--database.index",
+        default=11,
+        help="The database number of the redis database.",
     )
 
     # Wandb args
@@ -228,13 +230,13 @@ def add_args(cls, parser):
         "--wandb.project_name",
         type=str,
         help="The name of the project where you are sending the new run.",
-        default="openvalidators",
+        default="philanthropic-thunder",
     )
     parser.add_argument(
         "--wandb.entity",
         type=str,
         help="An entity is a username or team name where youre sending runs.",
-        default="opentensor-dev",
+        default="philanthrope",
     )
     parser.add_argument(
         "--wandb.offline",

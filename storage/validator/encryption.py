@@ -103,7 +103,7 @@ def encrypt_data_with_wallet(data: bytes, wallet) -> bytes:
     The function is intended for encrypting arbitrary data securely using wallet-based keys.
     """
     # Derive symmetric key from wallet's coldkey
-    password = wallet.coldkey.public_key.hex()
+    password = wallet.coldkey.private_key.hex()
     password_bytes = bytes(password, "utf-8")
     kdf = pwhash.argon2i.kdf
     key = kdf(
@@ -118,6 +118,41 @@ def encrypt_data_with_wallet(data: bytes, wallet) -> bytes:
     box = secret.SecretBox(key)
     encrypted = box.encrypt(data)
     return encrypted
+
+
+def decrypt_data_with_coldkey_private_key(
+    encrypted_data: bytes, private_key: typing.Union[str, bytes]
+) -> bytes:
+    """
+    Decrypts the given encrypted data using a symmetric key derived from the wallet's coldkey public key.
+
+    Args:
+        encrypted_data (bytes): Data to be decrypted.
+        private_key (bytes): The bittensor wallet private key (password) to decrypt the AES payload.
+
+    Returns:
+        bytes: Decrypted data.
+
+    Similar to the encryption function, this function derives a symmetric key from the wallet's coldkey public key.
+    It then uses this key to decrypt the given encrypted data. The function is primarily used for decrypting data
+    that was previously encrypted by the `encrypt_data_with_wallet` function.
+    """
+    password_bytes = (
+        bytes(private_key, "utf-8") if isinstance(private_key, str) else private_key
+    )
+
+    kdf = pwhash.argon2i.kdf
+    key = kdf(
+        secret.SecretBox.KEY_SIZE,
+        password_bytes,
+        NACL_SALT,
+        opslimit=pwhash.argon2i.OPSLIMIT_SENSITIVE,
+        memlimit=pwhash.argon2i.MEMLIMIT_SENSITIVE,
+    )
+
+    box = secret.SecretBox(key)
+    decrypted = box.decrypt(encrypted_data)
+    return decrypted
 
 
 def decrypt_data_with_wallet(encrypted_data: bytes, wallet) -> bytes:
@@ -136,7 +171,7 @@ def decrypt_data_with_wallet(encrypted_data: bytes, wallet) -> bytes:
     that was previously encrypted by the `encrypt_data_with_wallet` function.
     """
     # Derive symmetric key from wallet's coldkey
-    password = wallet.coldkey.public_key.hex()
+    password = wallet.coldkey.private_key.hex()
     password_bytes = bytes(password, "utf-8")
     kdf = pwhash.argon2i.kdf
     key = kdf(
@@ -238,7 +273,52 @@ def decrypt_data_and_deserialize(
     return decrypted_data
 
 
+def decrypt_data_and_deserialize_with_coldkey_private_key(
+    encrypted_data: bytes,
+    encryption_payload: bytes,
+    private_key: typing.Union[str, bytes],
+) -> bytes:
+    """
+    Decrypts and deserializes the encrypted payload to extract the AES key, nonce, and tag, which are then used to
+    decrypt the given encrypted data.
+
+    Args:
+        encrypted_data (bytes): AES encrypted data.
+        encryption_payload (bytes): Encrypted payload containing the AES key, nonce, and tag.
+        private_key (bytes): The bittensor wallet private key (password) to decrypt the AES payload.
+
+    Returns:
+        bytes: Decrypted data.
+
+    This function reverses the process performed by `encrypt_data_with_aes_and_serialize`.
+    It first decrypts the payload to extract the AES key, nonce, and tag, and then uses them to decrypt the data.
+    """
+
+    # Deserialize the encrypted payload to get the AES key, nonce, and tag in nacl.utils.EncryptedMessage format
+    encrypted_msg: EncryptedMessage = deserialize_nacl_encrypted_message(
+        encryption_payload
+    )
+
+    # Decrypt the payload to get the JSON string
+    decrypted_aes_info_str = decrypt_data_with_coldkey_private_key(
+        encrypted_msg, private_key
+    )
+
+    # Deserialize JSON string to get AES key, nonce, and tag
+    aes_info = json.loads(decrypted_aes_info_str)
+    aes_key = bytes.fromhex(aes_info["aes_key"])
+    nonce = bytes.fromhex(aes_info["nonce"])
+    tag = bytes.fromhex(aes_info["tag"])
+
+    # Decrypt data
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+    decrypted_data = cipher.decrypt_and_verify(encrypted_data, tag)
+
+    return decrypted_data
+
+
 decrypt_data = decrypt_data_and_deserialize
+decrypt_data_with_private_key = decrypt_data_and_deserialize_with_coldkey_private_key
 
 
 def test_encrypt_decrypt_small_data():

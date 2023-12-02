@@ -17,7 +17,9 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import torch
 import base64
+import random
 from typing import List, Union
 
 
@@ -27,27 +29,6 @@ def safe_key_search(database, pattern):
     `scan_iter` uses cursor under the hood.
     """
     return [key for key in database.scan_iter(pattern)]
-
-    """
-    Encodes the given data into a base64 string. If the data is a list or dictionary of bytes, it converts
-    the bytes into hexadecimal strings before encoding.
-
-    Args:
-        data (list or dict): The data to be base64 encoded. Can be a list of bytes or a dictionary with bytes values.
-
-    Returns:
-        str: The base64 encoded string of the input data.
-
-    Raises:
-        TypeError: If the input is not a list, dict, or bytes.
-    """
-    if isinstance(data, bytes):
-        data = data.hex()
-    if isinstance(data, list) and isinstance(data[0], bytes):
-        data = [d.hex() for d in data]
-    if isinstance(data, dict) and isinstance(data[list(data.keys())[0]], bytes):
-        data = {k: v.hex() for k, v in data.items()}
-    return base64.b64encode(json.dumps(data).encode()).decode("utf-8")
 
 
 def b64_encode(data):
