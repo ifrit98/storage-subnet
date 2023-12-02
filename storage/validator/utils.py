@@ -787,7 +787,6 @@ def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(self, data_size, 
                 break
             uid_groups.append(group)
 
-    data_chunks = chunk_data_generator(data, chunk_size)
     for i, (chunk_size, uid_group) in enumerate(zip(chunk_sizes, uid_groups)):
         yield {
             "chunk_size": chunk_size,

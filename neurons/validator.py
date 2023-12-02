@@ -1020,6 +1020,8 @@ class neuron:
         tasks = []
         total_size = 0
         bt.logging.debug(f"ordered metadata: {ordered_metadata}")
+        # TODO: change this to use retrieve_mutually_exclusive_hotkeys_full_hash
+        # to avoid possibly double querying miners for greater retrieval efficiency
         for chunk_metadata in ordered_metadata:
             uids = [self.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]]
             total_size += chunk_metadata["size"]
