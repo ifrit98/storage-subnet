@@ -109,7 +109,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.challenge_sample_size",
         type=int,
-        default=3,
+        default=20,
         help="Number of miners to challenge at a time. Target is ~90 miners per epoch.",
     )
     parser.add_argument(
@@ -141,6 +141,12 @@ def add_args(cls, parser):
         type=float,
         help="Moving average alpha parameter, how much to add of the new observation.",
         default=0.05,
+    )
+    parser.add_argument(
+        "--neuron.semaphore_size",
+        type=int,
+        help="How many async calls to limit concurrently.",
+        default=3,
     )
     parser.add_argument(
         "--neuron.store_timeout",

@@ -29,6 +29,7 @@ import random as pyrandom
 
 from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from ..shared.merkle import MerkleTree
+from ..validator.database import hotkey_at_capacity
 
 import bittensor as bt
 
@@ -168,7 +169,7 @@ def get_block_seed(subtensor):
     return int(current_block_hash(subtensor), 16)
 
 
-def get_pseudorandom_uids(subtensor, uids, k=3):
+def get_pseudorandom_uids(subtensor, uids, k):
     """
     Get a list of pseudorandom uids from the given list of uids.
 
@@ -325,7 +326,7 @@ def get_all_miners(self):
     return [uid.item() for uid in self.metagraph.uids if uid not in vuids]
 
 
-def get_query_miners(self, k=3):
+def get_query_miners(self, k=20):
     """
     Obtain a list of miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -340,7 +341,21 @@ def get_query_miners(self, k=3):
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 
 
-def get_available_query_miners(self, k=3):
+def get_query_validators(self, k=3):
+    """
+    Obtain a list of available validator UIDs selected pseudorandomly based on the current block hash.
+
+    Args:
+        k (int): The number of available miner UIDs to retreive.
+
+    Returns:
+        list: A list of pseudorandomly selected available validator UIDs
+    """
+    vuids = get_all_validators(self)
+    return get_pseudorandom_uids(self.subtensor, k=k)
+
+
+def get_available_query_miners(self, k):
     """
     Obtain a list of available miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -352,6 +367,9 @@ def get_available_query_miners(self, k=3):
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_avaialble_uids(self)
+    muids_nonfull = [
+        hotkey for hotkey in muids if not hotkey_at_capacity(hotkey, self.database)
+    ]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 
 
@@ -507,6 +525,10 @@ def optimal_chunk_size(
 
     # Ensure the chunk size is within the specified bounds
     chunk_size = max(min_chunk_size, min(ideal_chunk_size, max_chunk_size))
+
+    # Return data size if smaller than chunk size
+    if chunk_size > data_size:
+        return data_size
 
     return int(chunk_size)
 

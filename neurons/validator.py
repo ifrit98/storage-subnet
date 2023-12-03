@@ -49,11 +49,9 @@ from storage.validator.utils import (
     check_uid_availability,
     get_random_uids,
     get_query_miners,
+    get_query_validators,
     get_available_query_miners,
     get_current_validtor_uid_round_robin,
-    get_current_validator_uid_pseudorandom,
-    compute_chunk_distribution_mut_exclusive,
-    compute_chunk_distribution_mut_exclusive_numpy,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 
@@ -150,17 +148,21 @@ class neuron:
         bt.logging.info("neuron.__init__()")
 
         # Init device.
-        bt.logging.debug("loading", "device")
+        bt.logging.debug("loading device")
         self.device = torch.device(self.config.neuron.device)
         bt.logging.debug(str(self.device))
 
         # Init subtensor
-        bt.logging.debug("loading", "subtensor")
-        self.subtensor = bt.subtensor(config=self.config)
+        bt.logging.debug("loading subtensor")
+        self.subtensor = (
+            bt.MockSubtensor()
+            if self.config.neuron.mock_subtensor
+            else bt.subtensor(config=self.config)
+        )
         bt.logging.debug(str(self.subtensor))
 
         # Init wallet.
-        bt.logging.debug("loading", "wallet")
+        bt.logging.debug("loading wallet")
         self.wallet = bt.wallet(config=self.config)
         self.wallet.coldkey  # Unlock for testing
         self.wallet.create_if_non_existent()
@@ -175,7 +177,7 @@ class neuron:
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
         # Init metagraph.
-        bt.logging.debug("loading", "metagraph")
+        bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
             netuid=self.config.netuid, network=self.subtensor.network, sync=False
         )  # Make sure not to sync without passing subtensor
@@ -192,7 +194,7 @@ class neuron:
         self.db_semaphore = asyncio.Semaphore()
 
         # Init Weights.
-        bt.logging.debug("loading", "moving_averaged_scores")
+        bt.logging.debug("loading moving_averaged_scores")
         self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(self.device)
         bt.logging.debug(str(self.moving_averaged_scores))
 
@@ -213,15 +215,15 @@ class neuron:
                 del self.axon
 
             except Exception as e:
-                bt.logging.error(f"Failed to serve Axon with exception: {e}")
+                bt.logging.error(f"Failed to serve Axon: {e}")
                 pass
 
         except Exception as e:
-            bt.logging.error(f"Failed to create Axon initialize with exception: {e}")
+            bt.logging.error(f"Failed to create Axon initialize: {e}")
             pass
 
         # Dendrite pool for querying the network.
-        bt.logging.debug("loading", "dendrite_pool")
+        bt.logging.debug("loading dendrite_pool")
         if self.config.neuron.mock_dendrite_pool:
             self.dendrite = MockDendrite()
         else:
@@ -233,7 +235,7 @@ class neuron:
 
         # Init wandb.
         if not self.config.wandb.off:
-            bt.logging.debug("loading", "wandb")
+            bt.logging.debug("loading wandb")
             init_wandb(self)
 
         if self.config.neuron.epoch_length_override:
@@ -463,6 +465,7 @@ class neuron:
 
         # Make a random bytes file to test the miner if none provided
         data = make_random_file(maxsize=self.config.neuron.maxsize)
+        bt.logging.debug(f"Random store data size: {sys.getsizeof(data)}")
 
         # Encrypt the data
         # TODO: create and use a throwaway wallet (never decrypable)
@@ -869,7 +872,7 @@ class neuron:
             k: int
                 The target number of miners to query for each chunk.
         """
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
         # TODO: add a retry mechanism like with store_encrypted_data
         # TODO: how will you handle encryption here? (if at all)
@@ -911,7 +914,6 @@ class neuron:
         full_hash = hash_data(data)
         full_size = sys.getsizeof(data)
         async with semaphore:
-            # TODO: Don't yield chunks, this is slow an inefficient. Precompute then slice.
             for i, dist in enumerate(
                 compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
                     self, data, R, k
@@ -992,7 +994,7 @@ class neuron:
         Returns:
             The retrieved data if the verification is successful.
         """
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
         async def retrieve_chunk_group(chunk_hash, uids):
             synapse = protocol.Retrieve(
@@ -1058,25 +1060,32 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        try:
-            # Store some random data
-            bt.logging.info("initiating store random")
-            event = await self.store_random_data()
+        # Only store so often, say every 10 blocks
+        if self.step % self.config.neuron.store_epoch_length:
+            try:
+                # Store some random data
+                bt.logging.info("initiating store random")
+                event = await self.store_random_data()
 
-            # Store some data with broadband protocol
-            bt.logging.info("initiating store broadband data")
-            data = os.urandom(1024 * 1024 * 1024)  # 100MB test file
-            await self.store_broadband(data)
+                if self.config.neuron.verbose:
+                    bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-            if self.config.neuron.verbose:
-                bt.logging.debug(f"STORE EVENT LOG: {event}")
+                # Log event
+                log_event(self, event)
 
-            # Log event
-            log_event(self, event)
+            except Exception as e:
+                bt.logging.error(f"Failed to store random data: {e}")
 
-        except Exception as e:
-            bt.logging.error(f"Failed to store data with exception: {e}")
+            try:
+                # Store some data with broadband protocol
+                bt.logging.info("initiating store broadband data")
+                data = os.urandom(1024 * 1024 * 100)  # 100MB test file
+                await self.store_broadband(data)
 
+            except Exception as e:
+                bt.logging.error(f"Failed to store random broadband data: {e}")
+
+        # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
         try:
             # Challenge some data
             bt.logging.info("initiating challenge")
@@ -1089,29 +1098,30 @@ class neuron:
             log_event(self, event)
 
         except Exception as e:
-            bt.logging.error(f"Failed to challenge data with exception: {e}")
+            bt.logging.error(f"Failed to challenge data: {e}")
 
-        try:
-            # Retrieve some data
-            bt.logging.info("initiating retrieve")
-            event = await self.retrieve()
+        if self.step % self.config.neuron.retrieve_epoch_length:
+            try:
+                # Retrieve some data
+                bt.logging.info("initiating retrieve")
+                event = await self.retrieve()
 
-            if self.config.neuron.verbose:
-                bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+                if self.config.neuron.verbose:
+                    bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-            # Log event
-            log_event(self, event)
+                # Log event
+                log_event(self, event)
 
-            bt.logging.info("initiating retrieve broadband")
-            file_hash = random.choice(list(self.database.scan_iter(f"file:*")))
-            file_hash = file_hash.decode("utf-8").split(":")[1]
-            bt.logging.debug(f"Retrieving broadband data with hash: {file_hash}")
-            data = await self.retrieve_broadband(file_hash)
+                bt.logging.info("initiating retrieve broadband")
+                file_hash = random.choice(list(self.database.scan_iter(f"file:*")))
+                file_hash = file_hash.decode("utf-8").split(":")[1]
+                bt.logging.debug(f"Retrieving broadband data with hash: {file_hash}")
+                data = await self.retrieve_broadband(file_hash)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to retrieve data with exception: {e}")
+            except Exception as e:
+                bt.logging.error(f"Failed to retrieve data: {e}")
 
-        if self.step % 10 == 0:
+        if self.step % self.config.neuron.tier_update_epoch_length == 0:
             try:
                 # Update miner tiers
                 bt.logging.info("Computing tiers")
@@ -1129,15 +1139,19 @@ class neuron:
                     self.wandb.log(chunk_hash_map)
 
             except Exception as e:
-                bt.logging.error(f"Failed to compute tiers with exception: {e}")
+                bt.logging.error(f"Failed to compute tiers: {e}")
 
-        if self.step % 100:  # TODO: make this a hparam
-            # Update the total network storage
-            total_storage = total_network_storage(self.database)
-            bt.logging.info(f"Total network storage: {total_storage}")
-            # Log the total storage to wandb.
-            if not self.config.wandb.off:
-                self.wandb.log({"total_storage": total_storage})
+            try:
+                # Update the total network storage
+                total_storage = total_network_storage(self.database)
+                bt.logging.info(f"Total network storage: {total_storage}")
+
+                # Log the total storage to wandb.
+                if not self.config.wandb.off:
+                    self.wandb.log({"total_storage": total_storage})
+
+            except Exception as e:
+                bt.logging.error(f"Failed to calculate total network storage: {e}")
 
     def run(self):
         bt.logging.info("run()")
@@ -1149,9 +1163,10 @@ class neuron:
 
                 # --- Wait until next step epoch.
                 current_block = self.subtensor.get_current_block()
-                while self.my_subnet_uid != get_current_validtor_uid_round_robin(
+                # while self.my_subnet_uid != get_current_validtor_uid_round_robin(
+                while self.my_subnet_uid not in get_query_validators(
                     self,
-                    epoch_length=2,  # 2 for testing (interval for each validator slot)
+                    # epoch_length=2,  # 2 for testing (interval for each validator slot)
                 ) and (
                     current_block - self.prev_step_block
                     < self.config.neuron.blocks_per_step
