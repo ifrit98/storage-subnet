@@ -12,6 +12,7 @@ import argparse
 import traceback
 import bittensor as bt
 
+from typing import List, Optional, Tuple, Dict, Any
 from loguru import logger
 from pprint import pformat
 from functools import partial
@@ -219,6 +220,7 @@ class neuron:
                     netuid=self.config.netuid,
                     axon=self.axon,
                 )
+                self.axon.start()
 
             except Exception as e:
                 bt.logging.error(f"Failed to serve Axon: {e}")
@@ -262,12 +264,13 @@ class neuron:
         raise NotImplementedError
 
     async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
+        bt.logging.debug(f"store_user_data() {synapse.dict()}")
         await self.store_broadband(synapse.encrypted_data)
 
     async def store_blacklist(self, synapse: protocol.StoreUser) -> Tuple[bool, str]:
         return False, "NotImplemented. Whitelisting all.."
 
-    async def store_priority(self, synapse: protocl.StoreUser) -> float:
+    async def store_priority(self, synapse: protocol.StoreUser) -> float:
         return 0.0
 
     async def retrieve_user_data(
@@ -287,10 +290,10 @@ class neuron:
     ) -> Tuple[bool, str]:
         return False, "NotImplemented. Whitelisting all.."
 
-    async def retrieve_priority(self, synapse: protocl.RetrieveUser) -> float:
+    async def retrieve_priority(self, synapse: protocol.RetrieveUser) -> float:
         return 0.0
 
-    async def store_broadband(self, data, R=3, k=10):
+    async def store_broadband(self, data, payload, R=3, k=10):
         """
         Stores data on the network and ensures it is correctly committed by the miners.
 
@@ -308,7 +311,9 @@ class neuron:
 
         Parameters:
             data: bytes
-                The data to be stored.
+                The encryped data to be stored.
+            payload: dict
+                The encryption AES key payload associated with the data.
             R: int
                 The redundancy factor for the data storage.
             k: int
@@ -424,6 +429,7 @@ class neuron:
             chunk_hashes=chunk_hashes,
             chunk_indices=list(range(len(chunks))),
             database=self.database,
+            encryption_payload=encryption_payload,
         )
 
     async def retrieve_broadband(self, full_hash: str):

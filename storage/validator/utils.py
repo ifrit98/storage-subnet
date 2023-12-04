@@ -185,6 +185,7 @@ def get_pseudorandom_uids(subtensor, uids, k):
 
     # Ensure k is not larger than the number of uids
     k = min(k, len(uids))
+    bt.logging.info(f"uids: {uids} k: {k}")
 
     return pyrandom.sample(uids, k=k)
 
@@ -352,7 +353,7 @@ def get_query_validators(self, k=3):
         list: A list of pseudorandomly selected available validator UIDs
     """
     vuids = get_all_validators(self)
-    return get_pseudorandom_uids(self.subtensor, k=k)
+    return get_pseudorandom_uids(self.subtensor, uids=vuids.tolist(), k=k)
 
 
 def get_available_query_miners(self, k):
@@ -368,7 +369,7 @@ def get_available_query_miners(self, k):
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_avaialble_uids(self)
     muids_nonfull = [
-        hotkey for hotkey in muids if not hotkey_at_capacity(hotkey, self.database)
+        uid for uid in muids if not hotkey_at_capacity(self.hotkeys[uid], self.database)
     ]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 

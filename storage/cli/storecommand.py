@@ -19,6 +19,8 @@ from rich.align import Align
 from rich.table import Table
 from rich.prompt import Prompt
 from tqdm import tqdm
+from storage.validator.utils import get_all_validators
+
 
 from .default_values import defaults
 
@@ -158,12 +160,13 @@ class StoreData:
         mg = sub.metagraph(cli.config.netuid)
         bittensor.logging.debug("metagraph:", mg)
 
-        # Determine axons to query from metagraph
-        vpermits = mg.validator_permit
-        vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
-        vpermit_uids = torch.where(vpermits)[0]
+        self = argparse.Namespace()
+        self.config = cli.config
+        self.metagraph = mg
 
-        query_uids = torch.where(mg.S[vpermit_uids] > cli.config.stake_limit)[0]
+        # Determine axons to query from metagraph
+        query_uids = get_all_validators(self)
+        bittensor.logging.debug("query uids:", query_uids)
         axons = [mg.axons[uid] for uid in query_uids]
         bittensor.logging.debug("query axons:", axons)
 
@@ -233,7 +236,7 @@ class StoreData:
 
         if not config.is_set("filepath") and not config.no_prompt:
             config.filepath = Prompt.ask(
-                "Enter path to store retrieved data",
+                "Enter path to data you with to store on the Bittensor network",
             )
 
     @staticmethod
@@ -263,6 +266,12 @@ class StoreData:
             type=str,
             default=defaults.netuid,
             help="Network identifier for the Bittensor network.",
+        )
+        store_parser.add_argument(
+            "--neuron.vpermit_tao_limit",
+            type=int,
+            default=4096,
+            help="Tao limit for the validator permit.",
         )
 
         bittensor.wallet.add_args(store_parser)

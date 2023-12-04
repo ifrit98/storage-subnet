@@ -338,6 +338,7 @@ def store_file_chunk_mapping_ordered(
     chunk_hashes: List[str],
     chunk_indices: List[str],
     database: redis.Redis,
+    encryption_payload: Optional[Union[bytes, dict]] = None,
 ):
     """
     Store an ordered mapping of file chunks in the database.
@@ -351,10 +352,17 @@ def store_file_chunk_mapping_ordered(
     - chunk_hashes (List[str]): A list of hashes for the individual chunks of the file.
     - chunk_indices (List[int]): A list of indices corresponding to each chunk hash.
     - database (redis.Redis): An instance of the Redis database.
+    - encryption_payload (Optional[Union[bytes, dict]]): The encryption payload to store with the file.
     """
     key = f"file:{full_hash}"
     for chunk_index, chunk_hash in zip(chunk_indices, chunk_hashes):
         database.zadd(key, {chunk_hash: chunk_index})
+
+    # Store the encryption payload if provided
+    if encryption_payload:
+        if isinstaance(encryption_payload, dict):
+            encryption_payload = json.dumps(encryption_payload)
+        database.hset(f"file:{full_hash}", "encryption_payload", encryption_payload)
 
 
 def get_all_chunks_for_file(

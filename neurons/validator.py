@@ -749,8 +749,8 @@ class neuron:
             for uid in uids
             if get_metadata_for_hotkey(self.hotkeys[uid], self.database) != {}
         ]
-        bt.logging.debug(f"UIDs to query: {uids}")
-        bt.logging.debug(f"Hotkeys to query: {[self.hotkeys[uid] for uid in uids]}")
+        bt.logging.debug(f"UIDs to query   : {uids}")
+        bt.logging.debug(f"Hotkeys to query: {[self.hotkeys[uid][:5] for uid in uids]}")
 
         tasks = []
         for uid in uids:
@@ -872,7 +872,7 @@ class neuron:
             k: int
                 The target number of miners to query for each chunk.
         """
-        semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
+        semaphore = asyncio.Semaphore(1000)  # self.config.neuron.semaphore_size)
 
         # TODO: add a retry mechanism like with store_encrypted_data
         # TODO: how will you handle encryption here? (if at all)
@@ -898,45 +898,16 @@ class neuron:
             ]
 
             axons = [self.metagraph.axons[uid] for uid in uids]
-            responses = await self.dendrite(
+            responses = self.dendrite.query(
                 axons,
                 synapse,
                 deserialize=False,
-                timeout=60,
+                timeout=20,
             )
 
-            return responses
-
-        tasks = []
-        chunks = []
-        chunk_hashes = []
-        uids_nested = []
-        full_hash = hash_data(data)
-        full_size = sys.getsizeof(data)
-        async with semaphore:
-            for i, dist in enumerate(
-                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
-                    self, data, R, k
-                )
-            ):
-                bt.logging.debug(f"Chunk {i} | uid distribution: {dist['uids']}")
-                chunks.append(dist["chunk"])
-                uids_nested.append(dist["uids"])
-                chunk_hashes.append(dist["chunk_hash"])
-                tasks.append(
-                    asyncio.create_task(
-                        store_chunk_group(
-                            dist["chunk_hash"], dist["chunk"], dist["uids"]
-                        )
-                    )
-                )
-            responses_nested = await asyncio.gather(*tasks)
-
-        for i, (uids, responses, chunk, chunk_hash) in enumerate(
-            zip(uids_nested, responses_nested, chunks, chunk_hashes)
-        ):
             chunk_size = sys.getsizeof(chunk)
 
+            start = time.time()
             store_chunk_metadata(
                 full_hash,
                 chunk_hash,
@@ -944,21 +915,33 @@ class neuron:
                 chunk_size,
                 self.database,
             )
+            end = time.time()
+            bt.logging.debug(f"store_chunk_metadata time for uids {uids} : {end-start}")
 
             for uid, response in zip(uids, responses):
+                start = time.time()
                 verified = verify_store_with_seed(response)
+                end = time.time()
+                bt.logging.debug(
+                    f"verify_store_with_seed time for uids {uids} : {end-start}"
+                )
                 if verified:
                     # Prepare storage for the data for particular miner
                     response_storage = {
                         "prev_seed": response.seed,
                         "size": chunk_size,
                     }
+                    start = time.time()
                     # Store in the database according to the data hash and the miner hotkey
                     add_metadata_to_hotkey(
                         self.hotkeys[uid],
                         chunk_hash,
                         response_storage,  # seed + size
                         self.database,
+                    )
+                    end = time.time()
+                    bt.logging.debug(
+                        f"add_metadata_to_hotkey time for uids {uids} : {end-start}"
                     )
                     bt.logging.debug(
                         f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
@@ -968,6 +951,7 @@ class neuron:
                         f"Failed to verify store commitment from UID: {uid}"
                     )
 
+                start = time.time()
                 # Update the storage statistics
                 update_statistics(
                     ss58_address=self.hotkeys[uid],
@@ -975,8 +959,64 @@ class neuron:
                     task_type="store",
                     database=self.database,
                 )
+                end = time.time()
+                bt.logging.debug(
+                    f"update_statistics time for uids {uids} : {end-start}"
+                )
 
+            return responses
+
+        tasks = []
+        chunks = []
+        chunk_hashes = []
+        full_hash = hash_data(data)
+        full_size = sys.getsizeof(data)
+        ss = time.time()
+        # async with semaphore:
+        start = time.time()
+        for i, dist in enumerate(
+            compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k)
+        ):
+            start_inner = time.time()
+            bt.logging.debug(f"Chunk {i} | uid distribution: {dist['uids']}")
+            chunks.append(dist["chunk"])
+            chunk_hashes.append(dist["chunk_hash"])
+
+            # Create an asyncio task for each chunk processing
+            task = asyncio.create_task(
+                store_chunk_group(dist["chunk_hash"], dist["chunk"], dist["uids"])
+            )
+            tasks.append(task)
+            # def store_chunk_group_sync():
+            #     return store_chunk_group(dist["chunk_hash"], dist["chunk"], dist["uids"])
+
+            # # Use asyncio.to_thread to schedule this function in a separate thread
+            # tasks.append(
+            #     asyncio.to_thread(
+            #         store_chunk_group_sync
+            #     )
+            # )
+
+            end_inner = time.time()
+            bt.logging.debug(f"tasks inner time: {end_inner-start_inner}")
+
+        bt.logging.debug(f"gathering broadband tasks: {tasks}")
+        responses_nested = await asyncio.gather(*tasks)
+
+        end = time.time()
+        bt.logging.debug(f"tasks all time: {end-start}")
+
+        # bt.logging.debug(f"responses_nested: {responses_nested}")
+        # for i, routine in enumerate(responses_nested):
+        #     s = time.time()
+        #     await routine
+        #     e = time.time()
+        #     bt.logging.debug(f"routine {i} time: {e-s}")
+
+        ee = time.time()
+        bt.logging.debug(f"Full broadband time: {ee-ss}")
         # Update the chunk hash mapping for this entire file
+        # import pdb;pdb.set_trace()
         store_file_chunk_mapping_ordered(
             full_hash=full_hash,
             chunk_hashes=chunk_hashes,
@@ -1060,98 +1100,98 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        # Only store so often, say every 10 blocks
-        if self.step % self.config.neuron.store_epoch_length:
-            try:
-                # Store some random data
-                bt.logging.info("initiating store random")
-                event = await self.store_random_data()
+        # # Only store so often, say every 10 blocks
+        # if self.step % self.config.neuron.store_epoch_length == 0:
+        #     try:
+        #         # Store some random data
+        #         bt.logging.info("initiating store random")
+        #    event = await self.store_random_data()
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"STORE EVENT LOG: {event}")
+        #         if self.config.neuron.verbose:
+        #             bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+        #         # Log event
+        #         log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to store random data: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to store random data: {e}")
 
-            try:
-                # Store some data with broadband protocol
-                bt.logging.info("initiating store broadband data")
-                data = os.urandom(1024 * 1024 * 100)  # 100MB test file
-                await self.store_broadband(data)
+        # try:
+        # Store some data with broadband protocol
+        bt.logging.info("initiating store broadband data")
+        data = os.urandom(1024 * 1024 * 1000)  # 100MB test file
+        await self.store_broadband(data)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to store random broadband data: {e}")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to store random broadband data: {e}")
 
-        # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
-        try:
-            # Challenge some data
-            bt.logging.info("initiating challenge")
-            event = await self.challenge()
+        # # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
+        # try:
+        #     # Challenge some data
+        #     bt.logging.info("initiating challenge")
+        #     event = await self.challenge()
 
-            if self.config.neuron.verbose:
-                bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
+        #     if self.config.neuron.verbose:
+        #         bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
 
-            # Log event
-            log_event(self, event)
+        #     # Log event
+        #     log_event(self, event)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to challenge data: {e}")
+        # except Exception as e:
+        #     bt.logging.error(f"Failed to challenge data: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_length:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                event = await self.retrieve()
+        # if self.step % self.config.neuron.retrieve_epoch_length:
+        #     try:
+        #         # Retrieve some data
+        #         bt.logging.info("initiating retrieve")
+        #         event = await self.retrieve()
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+        #         if self.config.neuron.verbose:
+        #             bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+        #         # Log event
+        #         log_event(self, event)
 
-                bt.logging.info("initiating retrieve broadband")
-                file_hash = random.choice(list(self.database.scan_iter(f"file:*")))
-                file_hash = file_hash.decode("utf-8").split(":")[1]
-                bt.logging.debug(f"Retrieving broadband data with hash: {file_hash}")
-                data = await self.retrieve_broadband(file_hash)
+        #         bt.logging.info("initiating retrieve broadband")
+        #         file_hash = random.choice(list(self.database.scan_iter(f"file:*")))
+        #         file_hash = file_hash.decode("utf-8").split(":")[1]
+        #         bt.logging.debug(f"Retrieving broadband data with hash: {file_hash}")
+        #         data = await self.retrieve_broadband(file_hash)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to retrieve data: {e}")
 
-        if self.step % self.config.neuron.tier_update_epoch_length == 0:
-            try:
-                # Update miner tiers
-                bt.logging.info("Computing tiers")
-                await compute_all_tiers(self.database)
+        # if self.step % self.config.neuron.tier_update_epoch_length == 0:
+        #     try:
+        #         # Update miner tiers
+        #         bt.logging.info("Computing tiers")
+        #         await compute_all_tiers(self.database)
 
-                # Fetch miner statistics and usage data.
-                stats = get_miner_statistics(self.database)
+        #         # Fetch miner statistics and usage data.
+        #         stats = get_miner_statistics(self.database)
 
-                # Log all chunk hash <> hotkey pairs
-                chunk_hash_map = get_all_chunk_hashes(self.database)
+        #         # Log all chunk hash <> hotkey pairs
+        #         chunk_hash_map = get_all_chunk_hashes(self.database)
 
-                # Log the statistics and hashmap to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log(stats)
-                    self.wandb.log(chunk_hash_map)
+        #         # Log the statistics and hashmap to wandb.
+        #         if not self.config.wandb.off:
+        #             self.wandb.log(stats)
+        #             self.wandb.log(chunk_hash_map)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to compute tiers: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to compute tiers: {e}")
 
-            try:
-                # Update the total network storage
-                total_storage = total_network_storage(self.database)
-                bt.logging.info(f"Total network storage: {total_storage}")
+        #     try:
+        #         # Update the total network storage
+        #         total_storage = total_network_storage(self.database)
+        #         bt.logging.info(f"Total network storage: {total_storage}")
 
-                # Log the total storage to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log({"total_storage": total_storage})
+        #         # Log the total storage to wandb.
+        #         if not self.config.wandb.off:
+        #             self.wandb.log({"total_storage": total_storage})
 
-            except Exception as e:
-                bt.logging.error(f"Failed to calculate total network storage: {e}")
+        #     except Exception as e:
+        #         bt.logging.error(f"Failed to calculate total network storage: {e}")
 
     def run(self):
         bt.logging.info("run()")
