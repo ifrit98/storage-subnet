@@ -164,7 +164,7 @@ def add_args(cls, parser):
         "--neuron.semaphore_size",
         type=int,
         help="How many async calls to limit concurrently.",
-        default=3,
+        default=1000,
     )
     parser.add_argument(
         "--neuron.store_timeout",

@@ -304,7 +304,9 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = await get_available_query_miners(self, k=self.config.neuron.store_redundancy)
+        uids = await get_available_query_miners(
+            self, k=self.config.neuron.store_redundancy
+        )
         bt.logging.debug(f"store uids: {uids}")
         # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
         # before sending another storage request (do not allow higher than tier allow)
@@ -694,7 +696,9 @@ class neuron:
             bt.logging.trace(f"Fetching AES payload from UID: {uid}")
 
             # Load the data for this miner from validator storage
-            data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+            data = await get_metadata_for_hotkey_and_hash(
+                hotkey, data_hash, self.database
+            )
 
             # If we reach here, this miner has passed verification. Update the validator storage.
             data["prev_seed"] = synapse.seed
@@ -946,7 +950,11 @@ class neuron:
             k: int
                 The target number of miners to query for each chunk.
         """
-        semaphore = asyncio.Semaphore(10)  # self.config.neuron.semaphore_size)
+        # Create a profiler instance
+        profiler = Profiler()
+        profiler.start()
+
+        semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
         # TODO: add a retry mechanism like with store_encrypted_data
         # TODO: how will you handle encryption here? (if at all)
@@ -992,56 +1000,56 @@ class neuron:
             end = time.time()
             bt.logging.debug(f"store_chunk_metadata time for uids {uids} : {end-start}")
 
-            for uid, response in zip(uids, responses):
-                start = time.time()
-                verified = verify_store_with_seed(response)
-                end = time.time()
-                bt.logging.debug(
-                    f"verify_store_with_seed time for uids {uids} : {end-start}"
-                )
-                if verified:
-                    # Prepare storage for the data for particular miner
-                    response_storage = {
-                        "prev_seed": response.seed,
-                        "size": chunk_size,
-                    }
-                    start = time.time()
-                    # Store in the database according to the data hash and the miner hotkey
-                    await add_metadata_to_hotkey(
-                        self.hotkeys[uid],
-                        chunk_hash,
-                        response_storage,  # seed + size
-                        self.database,
-                    )
-                    end = time.time()
-                    bt.logging.debug(
-                        f"add_metadata_to_hotkey time for uids {uids} : {end-start}"
-                    )
-                    bt.logging.debug(
-                        f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
-                    )
-                else:
-                    bt.logging.error(
-                        f"Failed to verify store commitment from UID: {uid}"
-                    )
-
-                start = time.time()
-                # Update the storage statistics
-                await update_statistics(
-                    ss58_address=self.hotkeys[uid],
-                    success=verified,
-                    task_type="store",
-                    database=self.database,
-                )
-                end = time.time()
-                bt.logging.debug(
-                    f"update_statistics time for uids {uids} : {end-start}"
-                )
-
             return responses
+
+        async def handle_uid_operations(uid, response, chunk_hash, chunk_size):
+            ss = time.time()
+            start = time.time()
+            # verified = verify_store_with_seed(response)
+
+            # Offload the CPU-intensive verification to a separate thread
+            verified = await asyncio.to_thread(verify_store_with_seed, response)
+
+            end = time.time()
+            bt.logging.debug(f"verify_store_with_seed time for uid {uid} : {end-start}")
+            if verified:
+                # Prepare storage for the data for particular miner
+                response_storage = {
+                    "prev_seed": response.seed,
+                    "size": chunk_size,
+                }
+                start = time.time()
+                # Store in the database according to the data hash and the miner hotkey
+                await add_metadata_to_hotkey(
+                    self.hotkeys[uid],
+                    chunk_hash,
+                    response_storage,  # seed + size
+                    self.database,
+                )
+                end = time.time()
+                bt.logging.debug(
+                    f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
+                )
+            else:
+                bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+
+            start = time.time()
+            # Update the storage statistics
+            await update_statistics(
+                ss58_address=self.hotkeys[uid],
+                success=verified,
+                task_type="store",
+                database=self.database,
+            )
+            end = time.time()
+            bt.logging.debug(f"update_statistics time for uids {uids} : {end-start}")
+            bt.logging.debug(
+                f"handle_uid_operations time for uids {uids} : {time.time()-ss}"
+            )
 
         tasks = []
         chunks = []
+        uids_nested = []
         chunk_hashes = []
         full_hash = hash_data(data)
         full_size = sys.getsizeof(data)
@@ -1050,8 +1058,11 @@ class neuron:
         async with semaphore:
             start = time.time()
             for i, dist in enumerate(
-                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k)
+                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+                    self, data, R, k
+                )
             ):
+                uids_nested.append(dist["uids"])
                 chunk_size = sys.getsizeof(dist["chunk"])
                 bt.logging.debug(f"Chunk {i} | size: {chunk_size}")
                 start_inner = time.time()
@@ -1074,6 +1085,19 @@ class neuron:
         end_tasks = time.time()
         bt.logging.debug(f"tasks gather time: {end_tasks - start_tasks}")
 
+        # import pdb; pdb.set_trace()
+        tasks = []
+        for i, (uids, responses) in enumerate(zip(uids_nested, responses_nested)):
+            for uid, response in zip(uids, responses):
+                tasks.append(
+                    asyncio.create_task(
+                        handle_uid_operations(
+                            uid, response, chunk_hashes[i], chunk_size
+                        )
+                    )
+                )
+        asyncio.gather(*tasks)
+
         ee = time.time()
         bt.logging.debug(f"Full broadband time: {ee-ss}")
 
@@ -1085,16 +1109,15 @@ class neuron:
             database=self.database,
         )
 
-
+        # Stop the profiler
+        profiler.stop()
+        # Print the results
+        print(profiler.output_text(unicode=True, color=True))
 
     def run(self):
         bt.logging.info("run()")
         load_state(self)
         checkpoint(self)
-
-        # Create a profiler instance
-        profiler = Profiler()
-        profiler.start()
 
         try:
             while True:
@@ -1134,12 +1157,6 @@ class neuron:
 
                 self.loop.run_until_complete(run_forward())
 
-                # Stop the profiler
-                profiler.stop()
-
-                # Print the results
-                print(profiler.output_text(unicode=True, color=True))
-
                 # Resync the network state
                 bt.logging.info("Checking if should checkpoint")
                 if should_checkpoint(self):
@@ -1168,7 +1185,6 @@ class neuron:
             bt.logging.error("Error in training loop", str(err))
             bt.logging.debug(print_exception(type(err), err, err.__traceback__))
 
-
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
@@ -1176,7 +1192,6 @@ class neuron:
         bt.logging.info("initiating store broadband data")
         data = os.urandom(1024 * 1024 * 1000)  # 100MB test file
         await self.store_broadband(data)
-
 
     async def forward_og(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
@@ -1273,7 +1288,6 @@ class neuron:
 
             except Exception as e:
                 bt.logging.error(f"Failed to calculate total network storage: {e}")
-
 
 
 def main():

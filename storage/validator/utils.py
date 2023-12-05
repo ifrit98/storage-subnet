@@ -369,7 +369,9 @@ async def get_available_query_miners(self, k):
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_avaialble_uids(self)
     muids_nonfull = [
-        uid for uid in muids if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
+        uid
+        for uid in muids
+        if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
     ]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 

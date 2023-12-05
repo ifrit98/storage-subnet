@@ -303,7 +303,9 @@ class neuron:
         )
 
         # Select subset of miners to query (e.g. redunancy factor of N)
-        uids = await get_available_query_miners(self, k=self.config.neuron.store_redundancy)
+        uids = await get_available_query_miners(
+            self, k=self.config.neuron.store_redundancy
+        )
         bt.logging.debug(f"store uids: {uids}")
         # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
         # before sending another storage request (do not allow higher than tier allow)
@@ -693,7 +695,9 @@ class neuron:
             bt.logging.trace(f"Fetching AES payload from UID: {uid}")
 
             # Load the data for this miner from validator storage
-            data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+            data = await get_metadata_for_hotkey_and_hash(
+                hotkey, data_hash, self.database
+            )
 
             # If we reach here, this miner has passed verification. Update the validator storage.
             data["prev_seed"] = synapse.seed
@@ -1017,7 +1021,9 @@ class neuron:
         async with semaphore:
             start = time.time()
             for i, dist in enumerate(
-                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k)
+                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+                    self, data, R, k
+                )
             ):
                 start_inner = time.time()
                 bt.logging.debug(f"Chunk {i} | uid distribution: {dist['uids']}")
