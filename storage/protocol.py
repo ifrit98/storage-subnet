@@ -76,6 +76,77 @@ class Store(bt.Synapse):
         )
 
 
+class StreamStore(bt.StreamingSynapse):
+    # Data to store
+    encrypted_data: str  # base64 encoded string of encrypted data (bytes)
+
+    # Setup parameters
+    curve: str  # e.g. P-256
+    g: str  # base point   (hex string representation)
+    h: str  # random point (hex string representation)
+
+    seed: typing.Union[
+        str, int, bytes
+    ]  # random seed (bytes stored as hex) for the commitment
+
+    # Return signature of received data
+    randomness: typing.Optional[int] = None
+    commitment: typing.Optional[str] = None
+    signature: typing.Optional[bytes] = None
+    commitment_hash: typing.Optional[str] = None  # includes seed
+
+    required_hash_fields: typing.List[str] = pydantic.Field(
+        [
+            "curve",
+            "g",
+            "h",
+            "seed",
+            "randomness",
+            "commitment",
+            "signature",
+            "commitment_hash",
+        ],
+        title="Required Hash Fields",
+        description="A list of required fields for the hash.",
+        allow_mutation=False,
+    )
+
+    async def process_streaming_response(self, response: StreamingResponse):
+        async for chunk in response.content.iter_any():
+            yield chunk
+
+    def extract_response_json(self, response: StreamingResponse) -> dict:
+        headers = {
+            k.decode("utf-8"): v.decode("utf-8")
+            for k, v in response.__dict__["_raw_headers"]
+        }
+
+        def extract_info(prefix):
+            return {
+                key.split("_")[-1]: value
+                for key, value in headers.items()
+                if key.startswith(prefix)
+            }
+
+        return {
+            "name": headers.get("name", ""),
+            "timeout": float(headers.get("timeout", 0)),
+            "total_size": int(headers.get("total_size", 0)),
+            "header_size": int(headers.get("header_size", 0)),
+            "dendrite": extract_info("bt_header_dendrite"),
+            "axon": extract_info("bt_header_axon"),
+            "encrytped_data": self.encrypted_data,
+            "curve": self.curve,
+            "g": self.g,
+            "h": self.h,
+            "seed": self.seed,
+            "randomness": self.randomness,
+            "commitment": self.commitment,
+            "signature": self.signature,
+            "commitment_hash": self.commitment_hash,
+        }
+
+
 class StoreUser(bt.Synapse):
     # Data to store
     encrypted_data: str  # base64 encoded string of encrypted data (bytes)

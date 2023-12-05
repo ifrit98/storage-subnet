@@ -202,6 +202,14 @@ class miner:
             forward_fn=self.retrieve,
             blacklist_fn=self.retrieve_blacklist_fn,
             priority_fn=self.retrieve_priority_fn,
+        ).attach(
+            forward_fn=self.stream_store,
+            # blacklist_fn=self.store_blacklist_fn,
+            # priority_fn=self.store_priority_fn,
+        ).attach(
+            forward_fn=self.stream_retreive,
+            # blacklist_fn=self.retrieve_blacklist_fn,
+            # priority_fn=self.retrieve_priority_fn,
         )
 
         # Serve passes the axon information to the network + netuid we are hosting on.
@@ -226,6 +234,70 @@ class miner:
         self.request_timestamps: Dict = {}
 
         self.step = 0
+
+    async def stream_store(
+        self, synapse: storage.protocol.StreamStore
+    ) -> storage.protocol.StreamStore:
+        pass
+
+    async def stream_retreive(
+        self, synapse: storage.protocol.StreamRetrieve
+    ) -> storage.protocol.StreamRetrieve:
+        def chunk_data(data, chunk_size):
+            """Yield successive n-sized chunks from data."""
+            for i in range(0, len(data), chunk_size):
+                yield data[i : i + chunk_size]
+
+        async def _chunk_and_send(data: bytes, send: Send):
+            N = 1024  # Bytes per chunk
+            for chunk in chunk_data(data, N):
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": chunk,
+                        "more_body": True,
+                    }
+                )
+                bt.logging.debug(f"Streamed tokens: {joined_buffer}")
+
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": "".encode(),
+                    "more_body": False,  # No more bytes to send
+                }
+            )
+            bt.logging.trace(f"Streamed tokens: {joined_buffer}")
+
+        # Fetch the data from the miner database
+        data = await get_chunk_metadata(self.database, synapse.data_hash)
+
+        # Decode the data + metadata from bytes to json
+        bt.logging.debug(f"retrieved data: {pformat(data)}")
+
+        # load the data from the filesystem
+        filepath = data[b"filepath"]
+        encrypted_data_bytes = load_from_filesystem(filepath)
+
+        # incorporate a final seed challenge to verify they still have the data at retrieval time
+        commitment, proof = compute_subsequent_commitment(
+            encrypted_data_bytes,
+            data[b"seed"].encode(),
+            synapse.seed.encode(),
+            verbose=self.config.miner.verbose,
+        )
+        synapse.commitment_hash = commitment
+        synapse.commitment_proof = proof
+
+        # store new seed
+        await update_seed_info(self.database, synapse.data_hash, synapse.seed)
+        bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
+
+        # Return base64 data
+        data = base64.b64encode(encrypted_data_bytes)
+
+        token_streamer = partial(_chunk_and_send, data)
+        return synapse.create_streaming_response(token_streamer)
 
     @property
     async def total_storage(self):
