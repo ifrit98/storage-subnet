@@ -961,7 +961,8 @@ class neuron:
         async def store_chunk_group(chunk_hash, chunk, uids):
             g, h = setup_CRS(curve=self.config.neuron.curve)
 
-            b64_encoded_chunk = base64.b64encode(chunk).decode("utf-8")
+            b64_encoded_chunk = await asyncio.to_thread(base64.b64encode, chunk)
+            b64_encoded_chunk = b64_encoded_chunk.decode("utf-8")
 
             synapse = protocol.Store(
                 encrypted_data=b64_encoded_chunk,
@@ -1005,7 +1006,6 @@ class neuron:
         async def handle_uid_operations(uid, response, chunk_hash, chunk_size):
             ss = time.time()
             start = time.time()
-            # verified = verify_store_with_seed(response)
 
             # Offload the CPU-intensive verification to a separate thread
             verified = await asyncio.to_thread(verify_store_with_seed, response)
@@ -1033,7 +1033,6 @@ class neuron:
             else:
                 bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
 
-            start = time.time()
             # Update the storage statistics
             await update_statistics(
                 ss58_address=self.hotkeys[uid],
@@ -1041,10 +1040,8 @@ class neuron:
                 task_type="store",
                 database=self.database,
             )
-            end = time.time()
-            bt.logging.debug(f"update_statistics time for uids {uids} : {end-start}")
             bt.logging.debug(
-                f"handle_uid_operations time for uids {uids} : {time.time()-ss}"
+                f"handle_uid_operations time for uid {uid} : {time.time()-ss}"
             )
 
         tasks = []
