@@ -22,10 +22,10 @@ import copy
 import json
 import time
 import torch
-import redis
 import typing
 import base64
 import asyncio
+import aioredis
 import argparse
 import threading
 import traceback
@@ -168,7 +168,7 @@ class miner:
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
-        self.database = redis.StrictRedis(
+        self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
             db=self.config.database.index,
@@ -228,7 +228,7 @@ class miner:
         self.step = 0
 
     @property
-    def total_storage(self):
+    async def total_storage(self):
         """
         Calculates the total size of data stored by the miner.
 
@@ -243,7 +243,7 @@ class miner:
             102400  # Example output indicating 102,400 bytes of data stored
         """
         # Fetch all keys from Redis
-        all_keys = safe_key_search(self.database, "*")
+        all_keys = await safe_key_search(self.database, "*")
 
         # Filter out keys that contain a period (temporary, remove later)
         filtered_keys = [key for key in all_keys if b"." not in key]
@@ -251,7 +251,7 @@ class miner:
         # Get the size of each data object and sum them up
         total_size = sum(
             [
-                get_chunk_metadata(self.database, key).get(b"size", 0)
+                await get_chunk_metadata(self.database, key).get(b"size", 0)
                 for key in filtered_keys
             ]
         )
@@ -461,7 +461,7 @@ class miner:
         )
         return prirority
 
-    def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
+    async def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
         """
         Processes the storage request from a synapse by securely storing the provided data and returning
         a proof of storage. The data is committed using elliptic curve cryptography, stored on the filesystem,
@@ -503,9 +503,9 @@ class miner:
         data_hash = hash_data(encrypted_byte_data)
 
         # If already storing this hash, simply update the validator seeds and return challenge
-        if self.database.exists(data_hash):
+        if await self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
-            update_seed_info(self.database, data_hash, synapse.seed)
+            await update_seed_info(self.database, data_hash, synapse.seed)
             # TODO: should we pull the data from filesystem to prove we have it already instead of
             # using the sent one? Kinda weird that we just throw it away, but will be challenged later
         else:
@@ -515,7 +515,7 @@ class miner:
             )
             bt.logging.debug(f"stored data {data_hash} in filepath: {filepath}")
             # Add the initial chunk, size, and validator seed information
-            store_chunk_metadata(
+            await store_chunk_metadata(
                 self.database,
                 data_hash,
                 filepath,
@@ -550,7 +550,7 @@ class miner:
 
         return synapse
 
-    def challenge(
+    async def challenge(
         self, synapse: storage.protocol.Challenge
     ) -> storage.protocol.Challenge:
         """
@@ -586,7 +586,7 @@ class miner:
         """
         # Retrieve the data itself from miner storage
         bt.logging.debug(f"recieved challenge hash: {synapse.challenge_hash}")
-        data = get_chunk_metadata(self.database, synapse.challenge_hash)
+        data = await get_chunk_metadata(self.database, synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
             return synapse
@@ -616,7 +616,7 @@ class miner:
         synapse.commitment_proof = proof
 
         # update the commitment seed challenge hash in storage
-        update_seed_info(
+        await update_seed_info(
             self.database, synapse.challenge_hash, new_seed.decode("utf-8")
         )
         bt.logging.debug(f"udpated miner storage seed: {new_seed}")
@@ -653,7 +653,9 @@ class miner:
             bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
         return synapse
 
-    def retrieve(self, synapse: storage.protocol.Retrieve) -> storage.protocol.Retrieve:
+    async def retrieve(
+        self, synapse: storage.protocol.Retrieve
+    ) -> storage.protocol.Retrieve:
         """
         Retrieves the encrypted data associated with a specific hash from the storage system and
         validates the miner's continuous possession of the data. The method fetches the data's
@@ -685,7 +687,7 @@ class miner:
             >>> updated_synapse = self.retrieve(synapse)
         """
         # Fetch the data from the miner database
-        data = get_chunk_metadata(self.database, synapse.data_hash)
+        data = await get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
         bt.logging.debug(f"retrieved data: {pformat(data)}")
@@ -705,7 +707,7 @@ class miner:
         synapse.commitment_proof = proof
 
         # store new seed
-        update_seed_info(self.database, synapse.data_hash, synapse.seed)
+        await update_seed_info(self.database, synapse.data_hash, synapse.seed)
         bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
 
         # Return base64 data

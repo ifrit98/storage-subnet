@@ -1,4 +1,5 @@
 import asyncio
+import aioredis
 import bittensor as bt
 
 # Constants for storage limits in bytes
@@ -29,7 +30,7 @@ GOLD_TIER_TOTAL_SUCCESSES = 10**6  # 1 million
 SILVER_TIER_TOTAL_SUCCESSES = 10**5  # 100,000
 
 
-def miner_is_registered(ss58_address, database):
+async def miner_is_registered(ss58_address: str, database: aioredis.Redis):
     """
     Checks if a miner is registered in the database.
 
@@ -40,10 +41,10 @@ def miner_is_registered(ss58_address, database):
     Returns:
         True if the miner is registered, False otherwise.
     """
-    return database.exists(f"stats:{ss58_address}")
+    return await database.exists(f"stats:{ss58_address}")
 
 
-def register_miner(ss58_address, database):
+async def register_miner(ss58_address: str, database: aioredis.Redis):
     """
     Registers a new miner in the decentralized storage system, initializing their statistics.
     This function creates a new entry in the database for a miner with default values,
@@ -53,7 +54,7 @@ def register_miner(ss58_address, database):
         database (redis.Redis): The Redis client instance for database operations.
     """
     # Initialize statistics for a new miner in a separate hash
-    database.hmset(
+    await database.hmset(
         f"stats:{ss58_address}",
         {
             "store_attempts": 0,
@@ -68,7 +69,9 @@ def register_miner(ss58_address, database):
     )
 
 
-def update_statistics(ss58_address, success, task_type, database):
+async def update_statistics(
+    ss58_address: str, success: bool, task_type: str, database: aioredis.Redis
+):
     """
     Updates the statistics of a miner in the decentralized storage system.
     If the miner is not already registered, they are registered first. This function updates
@@ -81,29 +84,29 @@ def update_statistics(ss58_address, success, task_type, database):
         database (redis.Redis): The Redis client instance for database operations.
     """
     # Check and see if this miner is registered.
-    if not miner_is_registered(ss58_address, database):
-        register_miner(ss58_address, database)
+    if not await miner_is_registered(ss58_address, database):
+        await register_miner(ss58_address, database)
 
     # Update statistics in the stats hash
     stats_key = f"stats:{ss58_address}"
 
     if task_type == "store":
-        database.hincrby(stats_key, "store_attempts", 1)
+        await database.hincrby(stats_key, "store_attempts", 1)
         if success:
-            database.hincrby(stats_key, "store_successes", 1)
+            await database.hincrby(stats_key, "store_successes", 1)
     elif task_type == "challenge":
-        database.hincrby(stats_key, "challenge_attempts", 1)
+        await database.hincrby(stats_key, "challenge_attempts", 1)
         if success:
-            database.hincrby(stats_key, "challenge_successes", 1)
+            await database.hincrby(stats_key, "challenge_successes", 1)
     elif task_type == "retrieve":
-        database.hincrby(stats_key, "retrieval_attempts", 1)
+        await database.hincrby(stats_key, "retrieval_attempts", 1)
         if success:
-            database.hincrby(stats_key, "retrieval_successes", 1)
+            await database.hincrby(stats_key, "retrieval_successes", 1)
     else:
         bt.logging.error(f"Invalid task type {task_type}.")
 
 
-async def compute_tier(stats_key, database):
+async def compute_tier(stats_key: str, database: aioredis.Redis):
     """
     Asynchronously computes the tier of a miner based on their performance statistics.
     The function calculates the success rate for each type of task and total successes,
@@ -112,25 +115,25 @@ async def compute_tier(stats_key, database):
         stats_key (str): The key in the database where the miner's statistics are stored.
         database (redis.Redis): The Redis client instance for database operations.
     """
-    data = database.hgetall(stats_key)
+    data = await database.hgetall(stats_key)
 
-    registered = miner_is_registered(stats_key, database)
+    registered = await miner_is_registered(stats_key, database)
     if not data:
         bt.logging.warning(f"No statistics data found for {stats_key}! Skipping...")
         return
 
     # Get the number of successful challenges
-    challenge_successes = int(database.hget(stats_key, "challenge_successes"))
+    challenge_successes = int(await database.hget(stats_key, "challenge_successes"))
     # Get the number of successful retrievals
-    retrieval_successes = int(database.hget(stats_key, "retrieval_successes"))
+    retrieval_successes = int(await database.hget(stats_key, "retrieval_successes"))
     # Get the number of successful stores
-    store_successes = int(database.hget(stats_key, "store_successes"))
+    store_successes = int(await database.hget(stats_key, "store_successes"))
     # Get the number of total challenges
-    challenge_attempts = int(database.hget(stats_key, "challenge_attempts"))
+    challenge_attempts = int(await database.hget(stats_key, "challenge_attempts"))
     # Get the number of total retrievals
-    retrieval_attempts = int(database.hget(stats_key, "retrieval_attempts"))
+    retrieval_attempts = int(await database.hget(stats_key, "retrieval_attempts"))
     # Get the number of total stores
-    store_attempts = int(database.hget(stats_key, "store_attempts"))
+    store_attempts = int(await database.hget(stats_key, "store_attempts"))
 
     # Compute the success rate for each task type
     challenge_success_rate = (
@@ -167,9 +170,9 @@ async def compute_tier(stats_key, database):
         tier = b"Bronze"
 
     # (Potentially) set the new tier in the stats hash
-    current_tier = database.hget(stats_key, "tier")
+    current_tier = await database.hget(stats_key, "tier")
     if tier != current_tier:
-        database.hset(stats_key, "tier", tier)
+        await database.hset(stats_key, "tier", tier)
         bt.logging.trace(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
@@ -182,14 +185,14 @@ async def compute_tier(stats_key, database):
         else:
             storage_limit = STORAGE_LIMIT_BRONZE
 
-        current_limit = database.hget(stats_key, "storage_limit")
-        database.hset(stats_key, "storage_limit", storage_limit)
+        current_limit = await database.hget(stats_key, "storage_limit")
+        await database.hset(stats_key, "storage_limit", storage_limit)
         bt.logging.trace(
             f"Storage limit for {stats_key} set from {current_limit} -> {storage_limit} bytes."
         )
 
 
-async def compute_all_tiers(database):
+async def compute_all_tiers(database: aioredis.Redis):
     # Iterate over all miners
     """
     Asynchronously computes and updates the tiers for all miners in the decentralized storage system.
@@ -198,12 +201,12 @@ async def compute_all_tiers(database):
     Args:
         database (redis.Redis): The Redis client instance for database operations.
     """
-    miners = [miner for miner in database.scan_iter("stats:*")]
+    miners = [miner for miner in await database.scan_iter("stats:*")]
     tasks = [compute_tier(miner, database) for miner in miners]
     await asyncio.gather(*tasks)
 
 
-def get_tier_factor(ss58_address, database):
+async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
     """
     Retrieves the reward factor based on the tier of a given miner.
     This function returns a factor that represents the proportion of rewards a miner
@@ -214,7 +217,7 @@ def get_tier_factor(ss58_address, database):
     Returns:
         float: The reward factor corresponding to the miner's tier.
     """
-    tier = database.hget(f"stats:{ss58_address}", "tier")
+    tier = await database.hget(f"stats:{ss58_address}", "tier")
     if tier == b"Diamond":
         return DIAMOND_TIER_REWARD_FACTOR
     elif tier == b"Gold":

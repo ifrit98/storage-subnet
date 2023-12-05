@@ -17,15 +17,15 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
-import redis
+import aioredis
 import asyncio
 import bittensor as bt
 from typing import Dict, List, Any, Union, Optional, Tuple
 
 
 # Function to add metadata to a hash in Redis
-def add_metadata_to_hotkey(
-    ss58_address: str, data_hash: str, metadata: Dict, database: redis.Redis
+async def add_metadata_to_hotkey(
+    ss58_address: str, data_hash: str, metadata: Dict, database: aioredis.Redis
 ):
     """
     Associates a data hash and its metadata with a hotkey in Redis.
@@ -34,31 +34,31 @@ def add_metadata_to_hotkey(
         ss58_address (str): The primary key representing the hotkey.
         data_hash (str): The subkey representing the data hash.
         metadata (dict): The metadata to associate with the data hash.
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
     """
     # Serialize the metadata as a JSON string
     metadata_json = json.dumps(metadata)
     # Use HSET to associate the data hash with the hotkey
     key = f"hotkey:{ss58_address}"
-    database.hset(key, data_hash, metadata_json)
+    await database.hset(key, data_hash, metadata_json)
     bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
 
 
-def get_metadata_for_hotkey(
-    ss58_address: str, database: redis.Redis
+async def get_metadata_for_hotkey(
+    ss58_address: str, database: aioredis.Redis
 ) -> Dict[str, dict]:
     """
     Retrieves all data hashes and their metadata for a given hotkey.
 
     Parameters:
         ss58_address (str): The key representing the hotkey.
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         A dictionary where keys are data hashes and values are the associated metadata.
     """
     # Fetch all fields (data hashes) and values (metadata) for the hotkey
-    all_data_hashes = database.hgetall(f"hotkey:{ss58_address}")
+    all_data_hashes = await database.hgetall(f"hotkey:{ss58_address}")
 
     # Deserialize the metadata for each data hash
     return {
@@ -67,19 +67,21 @@ def get_metadata_for_hotkey(
     }
 
 
-def get_hashes_for_hotkey(ss58_address: str, database: redis.Redis) -> List[str]:
+async def get_hashes_for_hotkey(
+    ss58_address: str, database: aioredis.Redis
+) -> List[str]:
     """
     Retrieves all data hashes and their metadata for a given hotkey.
 
     Parameters:
         ss58_address (str): The key representing the hotkey.
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         A dictionary where keys are data hashes and values are the associated metadata.
     """
     # Fetch all fields (data hashes) and values (metadata) for the hotkey
-    all_data_hashes = database.hgetall(f"hotkey:{ss58_address}")
+    all_data_hashes = await database.hgetall(f"hotkey:{ss58_address}")
 
     # Deserialize the metadata for each data hash
     return [
@@ -87,8 +89,8 @@ def get_hashes_for_hotkey(ss58_address: str, database: redis.Redis) -> List[str]
     ]
 
 
-def update_metadata_for_data_hash(
-    ss58_address: str, data_hash: str, new_metadata: dict, database: redis.Redis
+async def update_metadata_for_data_hash(
+    ss58_address: str, data_hash: str, new_metadata: dict, database: aioredis.Redis
 ):
     """
     Updates the metadata for a specific data hash associated with a hotkey.
@@ -97,19 +99,19 @@ def update_metadata_for_data_hash(
         ss58_address (str): The key representing the hotkey.
         data_hash (str): The subkey representing the data hash to update.
         new_metadata (dict): The new metadata to associate with the data hash.
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
     """
     # Serialize the new metadata as a JSON string
     new_metadata_json = json.dumps(new_metadata)
     # Update the field in the hash with the new metadata
-    database.hset(f"hotkey:{ss58_address}", data_hash, new_metadata_json)
+    await database.hset(f"hotkey:{ss58_address}", data_hash, new_metadata_json)
     bt.logging.trace(
         f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
     )
 
 
-def get_metadata_for_hotkey_and_hash(
-    ss58_address: str, data_hash: str, database: redis.Redis, verbose: bool = False
+async def get_metadata_for_hotkey_and_hash(
+    ss58_address: str, data_hash: str, database: aioredis.Redis, verbose: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Retrieves specific metadata from a hash in Redis for the given field_key.
@@ -117,13 +119,13 @@ def get_metadata_for_hotkey_and_hash(
     Parameters:
         ss58_address (str): The hotkey assoicated.
         data_hash (str): The data hash associated.
-        databse (redis.Redis): The Redis client instance.
+        databse (aioredis.Redis): The Redis client instance.
 
     Returns:
         The deserialized metadata as a dictionary, or None if not found.
     """
     # Get the JSON string from Redis
-    metadata_json = database.hget(f"hotkey:{ss58_address}", data_hash)
+    metadata_json = await database.hget(f"hotkey:{ss58_address}", data_hash)
     if verbose:
         bt.logging.trace(
             f"hotkey {ss58_address[:16]} | data_hash {data_hash[:16]} | metadata_json {metadata_json}"
@@ -137,12 +139,12 @@ def get_metadata_for_hotkey_and_hash(
         return None
 
 
-def get_all_chunk_hashes(database: redis.Redis) -> Dict[str, List[str]]:
+async def get_all_chunk_hashes(database: aioredis.Redis) -> Dict[str, List[str]]:
     """
     Retrieves all chunk hashes and associated metadata from the Redis instance.
 
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         A dictionary where keys are chunk hashes and values are lists of hotkeys associated with each chunk hash.
@@ -152,10 +154,10 @@ def get_all_chunk_hashes(database: redis.Redis) -> Dict[str, List[str]]:
 
     # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
     for hotkey in database.scan_iter("*"):
-        if not hotkey.startswith(b"hotkey:"):
+        if not await hotkey.startswith(b"hotkey:"):
             continue
         # Fetch all fields (data hashes) for the current hotkey
-        data_hashes = database.hkeys(hotkey)
+        data_hashes = await database.hkeys(hotkey)
         # Iterate over each data hash and append the hotkey to the corresponding list
         for data_hash in data_hashes:
             data_hash = data_hash.decode("utf-8")
@@ -166,18 +168,19 @@ def get_all_chunk_hashes(database: redis.Redis) -> Dict[str, List[str]]:
     return chunk_hash_hotkeys
 
 
-def get_all_full_hashes(database: redis.Redis) -> List[str]:
+async def get_all_full_hashes(database: aioredis.Redis) -> List[str]:
     """
     Retrieves all data hashes and their corresponding hotkeys from the Redis instance.
 
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
     """
     data_hashes = []
-    for key in database.scan_iter("*"):
+    keys = await database.scan_iter("*")
+    for key in keys:
         if not key.startswith(b"file:"):
             continue
         data_hashes.append(key.decode("utf-8").split(":")[1])
@@ -185,13 +188,15 @@ def get_all_full_hashes(database: redis.Redis) -> List[str]:
     return data_hashes
 
 
-def get_all_hotkeys_for_data_hash(data_hash: str, database: redis.Redis) -> List[str]:
+async def get_all_hotkeys_for_data_hash(
+    data_hash: str, database: aioredis.Redis
+) -> List[str]:
     """
     Retrieves all hotkeys associated with a specific data hash.
 
     Parameters:
         data_hash (str): The data hash to look up.
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         A list of hotkeys associated with the data hash.
@@ -200,30 +205,32 @@ def get_all_hotkeys_for_data_hash(data_hash: str, database: redis.Redis) -> List
     hotkeys = []
 
     # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
-    for hotkey in database.scan_iter("*"):
+    keys = await database.scan_iter("*")
+    for hotkey in keys:
         # Check if the data hash exists within the hash of the hotkey
-        if database.hexists(hotkey, data_hash):
+        if await database.hexists(hotkey, data_hash):
             hotkey = hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
             hotkeys.append(hotkey)
 
     return hotkeys
 
 
-def total_hotkey_storage(hotkey: str, database: redis.Redis) -> int:
+async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
     """
     Calculates the total storage used by a hotkey in the database.
 
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
         hotkey (str): The key representing the hotkey.
 
     Returns:
         The total storage used by the hotkey in bytes.
     """
     total_storage = 0
-    for data_hash in database.hkeys(f"hotkey:{hotkey}"):
+    keys = await database.hkeys(f"hotkey:{hotkey}")
+    for data_hash in keys:
         # Get the metadata for the current data hash
-        metadata = get_metadata_for_hotkey_and_hash(hotkey, data_hash, database)
+        metadata = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, database)
         if metadata:
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
@@ -231,21 +238,21 @@ def total_hotkey_storage(hotkey: str, database: redis.Redis) -> int:
     return total_storage
 
 
-def hotkey_at_capacity(hotkey: str, database: redis.Redis) -> bool:
+async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
     """
     Checks if the hotkey is at capacity.
 
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
         hotkey (str): The key representing the hotkey.
 
     Returns:
         True if the hotkey is at capacity, False otherwise.
     """
     # Get the total storage used by the hotkey
-    total_storage = total_hotkey_storage(hotkey, database)
+    total_storage = await total_hotkey_storage(hotkey, database)
     # Check if the hotkey is at capacity
-    byte_limit = database.hget(f"stats:{hotkey}", "storage_limit")
+    byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
     if byte_limit is None:
         bt.logging.warning(f"Could not find storage limit for {hotkey}.")
         return False
@@ -264,60 +271,62 @@ def hotkey_at_capacity(hotkey: str, database: redis.Redis) -> bool:
         return False
 
 
-def total_network_storage(database: redis.Redis) -> int:
+async def total_network_storage(database: aioredis.Redis) -> int:
     """
     Calculates the total storage used by all hotkeys in the database.
 
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
 
     Returns:
         The total storage used by all hotkeys in the database in bytes.
     """
     total_storage = 0
     # Iterate over all hotkeys
-    for hotkey in database.scan_iter("*"):
-        if not hotkey.startswith(b"hotkey:"):
+    for hotkey in await database.scan_iter("*"):
+        if not await hotkey.startswith(b"hotkey:"):
             continue
         # Grab storage for that hotkey
-        total_storage += total_hotkey_storage(hotkey.decode().split(":")[1], database)
+        total_storage += await total_hotkey_storage(
+            hotkey.decode().split(":")[1], database
+        )
     return total_storage
 
 
-def get_miner_statistics(database: redis.Redis) -> Dict[str, Dict[str, str]]:
+async def get_miner_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, str]]:
     """
     Retrieves statistics for all miners in the database.
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
     Returns:
         A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
     """
     return {
         key.decode("utf-8").split(":")[-1]: {
             k.decode("utf-8"): v.decode("utf-8")
-            for k, v in database.hgetall(key).items()
+            for k, v in await database.hgetall(key).items()
         }
-        for key in database.scan_iter(b"stats:*")
+        for key in await database.scan_iter(b"stats:*")
     }
 
 
-def get_single_miner_statistics(
-    ss58_address: str, database: redis.Redis
+async def get_single_miner_statistics(
+    ss58_address: str, database: aioredis.Redis
 ) -> Dict[str, Dict[str, str]]:
     """
     Retrieves statistics for all miners in the database.
     Parameters:
-        database (redis.Redis): The Redis client instance.
+        database (aioredis.Redis): The Redis client instance.
     Returns:
         A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
     """
     return {
         k.decode("utf-8"): v.decode("utf-8")
-        for k, v in database.hgetall(f"stats:{ss58_address}").items()
+        for k, v in await database.hgetall(f"stats:{ss58_address}").items()
     }
 
 
-def get_redis_db_size(database: redis.Redis) -> int:
+async def get_redis_db_size(database: aioredis.Redis) -> int:
     """
     Calculates the total approximate size of all keys in a Redis database.
     Parameters:
@@ -326,18 +335,18 @@ def get_redis_db_size(database: redis.Redis) -> int:
         int: Total size of all keys in bytes
     """
     total_size = 0
-    for key in database.scan_iter("*"):
-        size = database.execute_command("MEMORY USAGE", key)
+    for key in await database.scan_iter("*"):
+        size = await database.execute_command("MEMORY USAGE", key)
         if size:
             total_size += size
     return total_size
 
 
-def store_file_chunk_mapping_ordered(
+async def store_file_chunk_mapping_ordered(
     full_hash: str,
     chunk_hashes: List[str],
     chunk_indices: List[str],
-    database: redis.Redis,
+    database: aioredis.Redis,
     encryption_payload: Optional[Union[bytes, dict]] = None,
 ):
     """
@@ -351,22 +360,24 @@ def store_file_chunk_mapping_ordered(
     - full_hash (str): The full hash of the file.
     - chunk_hashes (List[str]): A list of hashes for the individual chunks of the file.
     - chunk_indices (List[int]): A list of indices corresponding to each chunk hash.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
     - encryption_payload (Optional[Union[bytes, dict]]): The encryption payload to store with the file.
     """
     key = f"file:{full_hash}"
     for chunk_index, chunk_hash in zip(chunk_indices, chunk_hashes):
-        database.zadd(key, {chunk_hash: chunk_index})
+        await database.zadd(key, {chunk_hash: chunk_index})
 
     # Store the encryption payload if provided
     if encryption_payload:
         if isinstaance(encryption_payload, dict):
             encryption_payload = json.dumps(encryption_payload)
-        database.hset(f"file:{full_hash}", "encryption_payload", encryption_payload)
+        await database.hset(
+            f"file:{full_hash}", "encryption_payload", encryption_payload
+        )
 
 
-def get_all_chunks_for_file(
-    file_hash: str, database: redis.Redis
+async def get_all_chunks_for_file(
+    file_hash: str, database: aioredis.Redis
 ) -> Optional[Dict[int, Dict[str, Union[str, List[str], int]]]]:
     """
     Retrieve all chunk hashes and their metadata for a given file hash.
@@ -376,21 +387,23 @@ def get_all_chunks_for_file(
 
     Parameters:
     - file_hash (str): The full hash of the file whose chunks are to be retrieved.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
 
     Returns:
     - dict: A dictionary where keys are chunk indices, and values are dictionaries with chunk metadata.
       Returns None if no chunks are found.
     """
     file_chunks_key = f"file:{file_hash}"
-    chunk_hashes_with_index = database.zrange(file_chunks_key, 0, -1, withscores=True)
+    chunk_hashes_with_index = await database.zrange(
+        file_chunks_key, 0, -1, withscores=True
+    )
     if not chunk_hashes_with_index:
         return None
 
     chunks_info = {}
     for chunk_hash_bytes, index in chunk_hashes_with_index:
         chunk_hash = chunk_hash_bytes.decode()
-        chunk_metadata = database.hgetall(f"chunk:{chunk_hash}")
+        chunk_metadata = await database.hgetall(f"chunk:{chunk_hash}")
         if chunk_metadata:
             chunks_info[int(index)] = {
                 "chunk_hash": chunk_hash,
@@ -400,15 +413,15 @@ def get_all_chunks_for_file(
     return chunks_info
 
 
-def get_hotkeys_for_hash(
-    hash_value: str, database: redis.Redis, is_full_hash: bool = False
+async def get_hotkeys_for_hash(
+    hash_value: str, database: aioredis.Redis, is_full_hash: bool = False
 ):
     """
     Fetch all hotkeys associated with a given hash, which can be a full file hash or a chunk hash.
 
     Parameters:
     - hash_value (str): The hash value of the file or chunk.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
     - is_full_hash (bool): A flag indicating if the hash_value is a full file hash.
 
     Returns:
@@ -426,7 +439,7 @@ def get_hotkeys_for_hash(
             all_hotkeys.update(chunk_info["hotkeys"])
     else:
         # Get UIDs for a single chunk hash
-        chunk_metadata = database.hgetall(f"chunk:{hash_value}")
+        chunk_metadata = await database.hgetall(f"chunk:{hash_value}")
         if chunk_metadata:
             hotkeys = chunk_metadata.get(b"hotkeys")
             if hotkeys:
@@ -435,7 +448,7 @@ def get_hotkeys_for_hash(
     return list(all_hotkeys)
 
 
-def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: redis.Redis):
+async def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: aioredis.Redis):
     """
     Add a hotkey to the metadata of a specific chunk.
 
@@ -445,34 +458,36 @@ def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: redis.Redis):
     Parameters:
     - chunk_hash (str): The hash of the chunk to which the hotkey is to be added.
     - hotkey (str): The hotkey to add to the chunk's metadata.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
     """
     chunk_metadata_key = f"chunk:{chunk_hash}"
 
     # Fetch existing UIDs for the chunk
-    existing_metadata = database.hget(chunk_metadata_key, "hotkeys")
+    existing_metadata = await database.hget(chunk_metadata_key, "hotkeys")
     if existing_metadata:
         existing_hotkeys = existing_metadata.decode().split(",")
 
         # Add new UID if it's not already in the list
         if hotkey not in existing_hotkeys:
             updated_hotkeys = existing_hotkeys + [hotkey]
-            database.hset(chunk_metadata_key, "hotkeys", ",".join(updated_hotkeys))
+            await database.hset(
+                chunk_metadata_key, "hotkeys", ",".join(updated_hotkeys)
+            )
             print(f"UID {hotkey} added to chunk {chunk_hash}.")
         else:
             print(f"UID {hotkey} already exists for chunk {chunk_hash}.")
     else:
         # If no UIDs are associated with this chunk, create a new entry
-        database.hmset(chunk_metadata_key, {"hotkeys": hotkey})
+        await database.hmset(chunk_metadata_key, {"hotkeys": hotkey})
         print(f"UID {hotkey} set for new chunk {chunk_hash}.")
 
 
-def store_chunk_metadata(
+async def store_chunk_metadata(
     full_hash: str,
     chunk_hash: str,
     hotkeys: List[str],
     chunk_size: int,
-    database: redis.Redis,
+    database: aioredis.Redis,
 ):
     """
     Store metadata for a specific file chunk.
@@ -484,20 +499,20 @@ def store_chunk_metadata(
     - chunk_hash (str): The hash of the chunk whose metadata is to be stored.
     - hotkeys (List[str]): A list of hotkeys associated with the chunk.
     - chunk_size (int): The size of the chunk in bytes.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
     """
     chunk_metadata_key = f"chunk:{chunk_hash}"
-    existing_metadata = database.hget(chunk_metadata_key, "hotkeys")
+    existing_metadata = await database.hget(chunk_metadata_key, "hotkeys")
     if existing_metadata:
         existing_hotkeys = existing_metadata.decode().split(",")
         hotkeys = set(existing_hotkeys + hotkeys)
     metadata = {"hotkeys": ",".join(hotkeys), "size": chunk_size}
 
-    database.hmset(chunk_metadata_key, metadata)
+    await database.hmset(chunk_metadata_key, metadata)
 
 
-def get_ordered_metadata(
-    file_hash: str, database: redis.Redis
+async def get_ordered_metadata(
+    file_hash: str, database: aioredis.Redis
 ) -> List[Dict[str, Union[str, List[str], int]]]:
     """
     Retrieve the metadata for all chunks of a file in the order of their indices.
@@ -507,13 +522,13 @@ def get_ordered_metadata(
 
     Parameters:
     - file_hash (str): The full hash of the file whose ordered metadata is to be retrieved.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
 
     Returns:
     - List[dict]: A list of metadata dictionaries for each chunk, ordered by their chunk index.
       Returns None if no chunks are found.
     """
-    chunks_info = get_all_chunks_for_file(file_hash, database)
+    chunks_info = await get_all_chunks_for_file(file_hash, database)
     if chunks_info is None:
         return None
 
@@ -522,8 +537,8 @@ def get_ordered_metadata(
 
 
 # Function to grab mutually exclusiv UIDs for a specific full_hash (get chunks of non-overlapping UIDs)
-def retrieve_mutually_exclusive_hotkeys_full_hash(
-    full_hash: str, database: redis.Redis
+async def retrieve_mutually_exclusive_hotkeys_full_hash(
+    full_hash: str, database: aioredis.Redis
 ) -> Dict[str, List[str]]:
     """
     Retrieve a list of mutually exclusive hotkeys for a specific full hash.
@@ -534,13 +549,13 @@ def retrieve_mutually_exclusive_hotkeys_full_hash(
 
     Parameters:
     - full_hash (str): The full hash of the file whose ordered metadata is to be retrieved.
-    - database (redis.Redis): An instance of the Redis database.
+    - database (aioredis.Redis): An instance of the Redis database.
 
     Returns:
     - Dict[str, List[str]]: A dict of mutually exclusive hotkeys for each corresponding hash.
       Returns None if no chunks are found.
     """
-    chunks_info = get_all_chunks_for_file(full_hash, database)
+    chunks_info = await get_all_chunks_for_file(full_hash, database)
     if chunks_info is None:
         return None
 

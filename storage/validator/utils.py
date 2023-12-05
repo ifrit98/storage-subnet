@@ -356,7 +356,7 @@ def get_query_validators(self, k=3):
     return get_pseudorandom_uids(self.subtensor, uids=vuids.tolist(), k=k)
 
 
-def get_available_query_miners(self, k):
+async def get_available_query_miners(self, k):
     """
     Obtain a list of available miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -369,7 +369,7 @@ def get_available_query_miners(self, k):
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_avaialble_uids(self)
     muids_nonfull = [
-        uid for uid in muids if not hotkey_at_capacity(self.hotkeys[uid], self.database)
+        uid for uid in muids if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
     ]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 

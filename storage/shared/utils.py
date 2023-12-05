@@ -20,18 +20,19 @@ import json
 import torch
 import base64
 import random
+import aioredis
 from typing import List, Union
 
 
-def safe_key_search(database, pattern):
+async def safe_key_search(database: aioredis.Redis, pattern: str) -> List[str]:
     """
     Safely search for keys in the database that doesn't block.
     `scan_iter` uses cursor under the hood.
     """
-    return [key for key in database.scan_iter(pattern)]
+    return [key for key in await database.scan_iter(pattern)]
 
 
-def b64_encode(data):
+def b64_encode(data: Union[bytes, str, List[str], List[bytes], dict]) -> str:
     """
     Encodes the given data into a base64 string. If the data is a list or dictionary of bytes, it converts
     the bytes into hexadecimal strings before encoding.
@@ -54,7 +55,7 @@ def b64_encode(data):
     return base64.b64encode(json.dumps(data).encode()).decode("utf-8")
 
 
-def b64_decode(data, decode_hex=False, encrypted=False):
+def b64_decode(data: bytes, decode_hex: bool = False, encrypted: bool = False):
     """
     Decodes a base64 string into a list or dictionary. If decode_hex is True, it converts any hexadecimal strings
     within the data back into bytes.
