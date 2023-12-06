@@ -47,48 +47,18 @@ from storage.shared.utils import (
 )
 
 from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
 )
 
 from storage.validator.verify import (
     verify_store_with_seed,
-    verify_challenge_with_seed,
     verify_retrieve_with_seed,
 )
 
 from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
+from storage.validator.state import init_wandb, ttl_get_block
 from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
+from storage.validator.weights import set_weights
 
 from storage.validator.database import (
     add_metadata_to_hotkey,
@@ -190,7 +160,7 @@ class neuron:
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
-            db=6,  # self.config.database.index,
+            db=self.config.database.index,
         )
         self.db_semaphore = asyncio.Semaphore()
 
@@ -338,9 +308,10 @@ class neuron:
             k: int
                 The target number of miners to query for each chunk.
         """
-        # Create a profiler instance
-        profiler = Profiler()
-        profiler.start()
+        if self.config.neuron.profile:
+            # Create a profiler instance
+            profiler = Profiler()
+            profiler.start()
 
         semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
@@ -504,10 +475,11 @@ class neuron:
             database=self.database,
         )
 
-        # Stop the profiler
-        profiler.stop()
-        # Print the results
-        print(profiler.output_text(unicode=True, color=True))
+        if self.config.neuron.profile:
+            # Stop the profiler
+            profiler.stop()
+            # Print the results
+            print(profiler.output_text(unicode=True, color=True))
 
         return full_hash
 

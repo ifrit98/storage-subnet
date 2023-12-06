@@ -190,7 +190,7 @@ class neuron:
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
-            db=6,  # self.config.database.index,
+            db=self.config.database.index,
         )
         self.db_semaphore = asyncio.Semaphore()
 
