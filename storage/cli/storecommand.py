@@ -197,7 +197,7 @@ class StoreData:
                 hash_filepath, filename=cli.config.filepath, data_hash=data_hash
             )
             bittensor.logging.info(
-                f"Stored {cli.config.filepath} on the Bittensor network with hash {data_hash}!"
+                f"Stored {cli.config.filepath} on the Bittensor network with hash {data_hash}"
             )
         else:
             bittensor.logging.error(f"Failed to store data at {cli.config.filepath}.")

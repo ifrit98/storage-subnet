@@ -33,7 +33,8 @@ async def add_metadata_to_hotkey(
     Parameters:
         ss58_address (str): The primary key representing the hotkey.
         data_hash (str): The subkey representing the data hash.
-        metadata (dict): The metadata to associate with the data hash.
+        metadata (dict): The metadata to associate with the data hash. Includes the size of the data, the seed,
+            and the encryption payload. E.g. {'size': 123, 'seed': 456, 'encryption_payload': 'abc'}.
         database (aioredis.Redis): The Redis client instance.
     """
     # Serialize the metadata as a JSON string
@@ -369,11 +370,38 @@ async def store_file_chunk_mapping_ordered(
 
     # Store the encryption payload if provided
     if encryption_payload:
-        if isinstaance(encryption_payload, dict):
+        if isinstance(encryption_payload, dict):
             encryption_payload = json.dumps(encryption_payload)
-        await database.hset(
-            f"file:{full_hash}", "encryption_payload", encryption_payload
-        )
+        await database.set(f"payload:{full_hash}", encryption_payload)
+
+
+async def retrieve_encryption_payload(
+    full_hash: str,
+    database: aioredis.Redis,
+    return_dict: bool = False,
+) -> Optional[Union[bytes, dict]]:
+    """
+    Retrieve the encryption payload for a file.
+
+    This function fetches the encryption payload for a file from the Redis database.
+
+    Parameters:
+    - full_hash (str): The full hash of the file.
+    - database (aioredis.Redis): An instance of the Redis database.
+
+    Returns:
+    - Optional[Union[bytes, dict]]: The encryption payload for the file.
+    """
+    encryption_payload = await database.get(f"payload:{full_hash}")
+    if encryption_payload:
+        if return_dict:
+            return encryption_payload
+        try:
+            return json.loads(encryption_payload)
+        except json.JSONDecodeError:
+            return encryption_payload
+    else:
+        return None
 
 
 async def get_all_chunks_for_file(

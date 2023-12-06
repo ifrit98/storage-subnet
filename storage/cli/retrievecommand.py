@@ -26,6 +26,15 @@ from .default_values import defaults
 console = bittensor.__console__
 
 
+def list_all_hashes(hash_file):
+    try:
+        with open(os.path.expanduser(hash_file), "r") as file:
+            hashes = json.load(file)
+            return hashes
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
 def get_coldkey_wallets_for_path(path: str) -> List["bittensor.wallet"]:
     try:
         wallet_names = next(os.walk(os.path.expanduser(path)))[1]
@@ -90,9 +99,28 @@ class RetrieveData:
                 "generating filepath: {}".format(cli.config.storage_basepath)
             )
             os.makedirs(cli.config.storage_basepath)
-        outpath = os.path.expanduser(cli.config.storage_basepath)
-        outpath = os.path.join(outpath, cli.config.data_hash)
-        bittensor.logging.debug("outpath:", outpath)
+        base_outpath = os.path.expanduser(cli.config.storage_basepath)
+        outpath = os.path.join(base_outpath, cli.config.data_hash)
+        try:
+            if (
+                wallet.coldkeypub_file.exists_on_device()
+                and not wallet.coldkeypub_file.is_encrypted()
+            ):
+                hash_file = (
+                    os.path.join(cli.config.hash_basepath, wallet.name) + ".json"
+                )
+                hashes_dict = list_all_hashes(hash_file)
+                bittensor.logging.debug(f"hashes dict: {hashes_dict}")
+                reverse_hashes_dict = {v: k for k, v in hashes_dict.items()}
+                if cli.config.data_hash in reverse_hashes_dict:
+                    filename = reverse_hashes_dict[cli.config.data_hash]
+                    outpath = os.path.join(base_outpath, filename)
+                    bittensor.logging.debug(f"set filename: {filename}")
+        except Exception as e:
+            bittensor.logging.warning(
+                "Failed to lookup filename for data_hash: {} ".format(e),
+                "Reverting to hash value as filename {outpath}",
+            )
 
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
@@ -128,6 +156,9 @@ class RetrieveData:
             # Decrypt the response
             bittensor.logging.trace(f"encrypted_data: {response.encrypted_data}")
             encrypted_data = base64.b64decode(response.encrypted_data)
+            bittensor.logging.debug(
+                f"encryption_payload: {response.encryption_payload}"
+            )
             decrypted_data = decrypt_data_with_private_key(
                 encrypted_data,
                 response.encryption_payload,
