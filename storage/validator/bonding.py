@@ -3,31 +3,32 @@ import aioredis
 import bittensor as bt
 
 # Constants for storage limits in bytes
-STORAGE_LIMIT_DIAMOND = 100000 * 10**9  # 100000 GB
-STORAGE_LIMIT_GOLD = 10000 * 10**9  # 10000 GB
-STORAGE_LIMIT_SILVER = 1000 * 10**9  # 1000 GB
-STORAGE_LIMIT_BRONZE = 100 * 10**9  # 100 GB
+STORAGE_LIMIT_DIAMOND = 1024**5 * 1  # 1 PB
+STORAGE_LIMIT_GOLD = 1024**4 * 100  # 100 TB
+STORAGE_LIMIT_SILVER = 1024**4 * 10  # 10 TB
+STORAGE_LIMIT_BRONZE = 1024**4 * 1  # 1 TB
 
+# Requirements for each tier. These must be maintained for a miner to remain in that tier.
 DIAMOND_STORE_SUCCESS_RATE = 0.995  # 1/200 chance of failure
-DIAMOND_RETRIEVAL_SUCCESS_RATE = 0.9999  # 1/100000 chance of failure
-DIAMOND_CHALLENGE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+DIAMOND_RETRIEVAL_SUCCESS_RATE = 0.995  # 1/200 chance of failure
+DIAMOND_CHALLENGE_SUCCESS_RATE = 0.995  # 1/200 chance of failure
 
 GOLD_STORE_SUCCESS_RATE = 0.99  # 1/100 chance of failure
-GOLD_RETRIEVAL_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+GOLD_RETRIEVAL_SUCCESS_RATE = 0.99  # 1/100 chance of failure
 GOLD_CHALLENGE_SUCCESS_RATE = 0.99  # 1/100 chance of failure
 
-SILVER_STORE_SUCCESS_RATE = 0.98  # 1/50 chance of failure
-SILVER_RETRIEVAL_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
-SILVER_CHALLENGE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+SILVER_STORE_SUCCESS_RATE = 0.975  # 1/50 chance of failure
+SILVER_RETRIEVAL_SUCCESS_RATE = 0.975  # 1/50 chance of failure
+SILVER_CHALLENGE_SUCCESS_RATE = 0.975  # 1/50 chance of failure
 
 DIAMOND_TIER_REWARD_FACTOR = 1.0  # Get 100% of rewards
 GOLD_TIER_REWARD_FACTOR = 0.888  # Get 88.8% of rewards
 SILVER_TIER_REWARD_FACTOR = 0.555  # Get 55.5% of rewards
-BRONZE_TIER_REWARD_FACTOR = 0.222  # Get 22.2% of rewards
+BRONZE_TIER_REWARD_FACTOR = 0.333  # Get 33.3% of rewards
 
-DIAMOND_TIER_TOTAL_SUCCESSES = 10**7  # 10 million
-GOLD_TIER_TOTAL_SUCCESSES = 10**6  # 1 million
-SILVER_TIER_TOTAL_SUCCESSES = 10**5  # 100,000
+DIAMOND_TIER_TOTAL_SUCCESSES = 10**5  # 100,000
+GOLD_TIER_TOTAL_SUCCESSES = 10**4  # 10,000
+SILVER_TIER_TOTAL_SUCCESSES = 10**3  # 1,000
 
 
 async def miner_is_registered(ss58_address: str, database: aioredis.Redis):
