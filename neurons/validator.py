@@ -494,7 +494,7 @@ class neuron:
         if self.config.neuron.verbose:
             bt.logging.trace(f"Handling challenge from hotkey: {hotkey}")
 
-        keys = self.database.hkeys(f"hotkey:{hotkey}")
+        keys = await self.database.hkeys(f"hotkey:{hotkey}")
         bt.logging.debug(f"{len(keys)} hashes pulled for hotkey {hotkey}")
         if keys == []:
             # Create a dummy response to send back
@@ -512,7 +512,7 @@ class neuron:
             ]  # no data found associated with this miner hotkey
 
         data_hash = random.choice(keys).decode("utf-8")
-        data = get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+        data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
 
         if self.config.neuron.verbose:
             bt.logging.trace(f"Challenge lookup key: {data_hash}")
@@ -565,7 +565,7 @@ class neuron:
 
         if verified:
             data["prev_seed"] = synapse.seed
-            update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
+            await update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
 
         # Record the time taken for the challenge
         return verified, response
@@ -986,10 +986,10 @@ class neuron:
                 await compute_all_tiers(self.database)
 
                 # Fetch miner statistics and usage data.
-                stats = get_miner_statistics(self.database)
+                stats = await get_miner_statistics(self.database)
 
                 # Log all chunk hash <> hotkey pairs
-                chunk_hash_map = get_all_chunk_hashes(self.database)
+                chunk_hash_map = await get_all_chunk_hashes(self.database)
 
                 # Log the statistics and hashmap to wandb.
                 if not self.config.wandb.off:
@@ -1001,7 +1001,7 @@ class neuron:
 
             try:
                 # Update the total network storage
-                total_storage = total_network_storage(self.database)
+                total_storage = await total_network_storage(self.database)
                 bt.logging.info(f"Total network storage: {total_storage}")
 
                 # Log the total storage to wandb.

@@ -90,7 +90,7 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--neuron.min_chunk_size",
-        default=24,
+        default=256,
         type=int,
         help="Minimum chunk size of random data to challenge.",
     )
@@ -170,25 +170,25 @@ def add_args(cls, parser):
         "--neuron.store_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=10,
+        default=60,
     )
     parser.add_argument(
         "--neuron.challenge_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=10,
+        default=60,
     )
     parser.add_argument(
         "--neuron.retrieve_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=10,
+        default=60,
     )
     parser.add_argument(
         "--neuron.checkpoint_block_length",
         type=int,
         help="Blocks before a checkpoint is saved.",
-        default=50,
+        default=100,
     )
     parser.add_argument(
         "--neuron.blocks_per_step",
@@ -232,6 +232,12 @@ def add_args(cls, parser):
         help="The number of blocks before data expires.",
         default=50000,  # 7 days
     )
+    parser.add_argument(
+        "--neuron.profile",
+        action="store_true",
+        help="If set, we will profile the neuron network and I/O actions.",
+        default=False,
+    )
 
     # Redis arguments
     parser.add_argument(
@@ -242,7 +248,7 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--database.index",
-        default=11,
+        default=1,
         help="The database number of the redis database.",
     )
 

@@ -202,7 +202,7 @@ async def compute_all_tiers(database: aioredis.Redis):
     Args:
         database (redis.Redis): The Redis client instance for database operations.
     """
-    miners = [miner for miner in await database.scan_iter("stats:*")]
+    miners = [miner async for miner in database.scan_iter("stats:*")]
     tasks = [compute_tier(miner, database) for miner in miners]
     await asyncio.gather(*tasks)
 

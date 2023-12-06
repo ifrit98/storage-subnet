@@ -154,8 +154,8 @@ async def get_all_chunk_hashes(database: aioredis.Redis) -> Dict[str, List[str]]
     chunk_hash_hotkeys = {}
 
     # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
-    for hotkey in database.scan_iter("*"):
-        if not await hotkey.startswith(b"hotkey:"):
+    async for hotkey in database.scan_iter("*"):
+        if not hotkey.startswith(b"hotkey:"):
             continue
         # Fetch all fields (data hashes) for the current hotkey
         data_hashes = await database.hkeys(hotkey)
@@ -284,8 +284,8 @@ async def total_network_storage(database: aioredis.Redis) -> int:
     """
     total_storage = 0
     # Iterate over all hotkeys
-    for hotkey in await database.scan_iter("*"):
-        if not await hotkey.startswith(b"hotkey:"):
+    async for hotkey in database.scan_iter("*"):
+        if not hotkey.startswith(b"hotkey:"):
             continue
         # Grab storage for that hotkey
         total_storage += await total_hotkey_storage(
@@ -302,13 +302,17 @@ async def get_miner_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, 
     Returns:
         A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
     """
-    return {
-        key.decode("utf-8").split(":")[-1]: {
-            k.decode("utf-8"): v.decode("utf-8")
-            for k, v in await database.hgetall(key).items()
+    stats = {}
+    async for key in database.scan_iter(b"stats:*"):
+        # Await the hgetall call and then process its result
+        key_stats = await database.hgetall(key)
+        # Process the key_stats as required
+        processed_stats = {
+            k.decode("utf-8"): v.decode("utf-8") for k, v in key_stats.items()
         }
-        for key in await database.scan_iter(b"stats:*")
-    }
+        stats[key.decode("utf-8").split(":")[-1]] = processed_stats
+
+    return stats
 
 
 async def get_single_miner_statistics(
@@ -321,10 +325,8 @@ async def get_single_miner_statistics(
     Returns:
         A dictionary where keys are hotkeys and values are dictionaries containing the statistics for each hotkey.
     """
-    return {
-        k.decode("utf-8"): v.decode("utf-8")
-        for k, v in await database.hgetall(f"stats:{ss58_address}").items()
-    }
+    stats = await database.hgetall(f"stats:{ss58_address}")
+    return {k.decode("utf-8"): v.decode("utf-8") for k, v in stats.items()}
 
 
 async def get_redis_db_size(database: aioredis.Redis) -> int:
@@ -336,7 +338,7 @@ async def get_redis_db_size(database: aioredis.Redis) -> int:
         int: Total size of all keys in bytes
     """
     total_size = 0
-    for key in await database.scan_iter("*"):
+    async for key in await database.scan_iter("*"):
         size = await database.execute_command("MEMORY USAGE", key)
         if size:
             total_size += size
