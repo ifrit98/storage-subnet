@@ -3,4 +3,5 @@ torch==2.0.1
 redis==5.0.1
 aioredis==2.0.1
 pycryptodome==3.18.0
+pyinstrument==4.6.1
 wandb==0.16.0
