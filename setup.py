@@ -62,16 +62,16 @@ with codecs.open(
     version_string = version_match.group(1)
 
 setup(
-    name="PhilanthropicStorage",  # TODO(developer): Change this value to your module subnet name.
+    name="FileTAO",
     version=version_string,
-    description="PhilanthropicStorage subnet for the masses",  # TODO(developer): Change this value to your module subnet description.
+    description="Philanthropic storage subnet for the masses. (FileTAO)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/opentensor/bittensor-subnet-template",  # TODO(developer): Change this url to your module subnet github url.
-    author="philanthrope",  # TODO(developer): Change this value to your module subnet author name.
+    url="https://github.com/ifrit98/storage-subnet",
+    author="philanthrope",
     packages=find_packages(),
     include_package_data=True,
-    author_email="ifrit98@gmail.com",  # TODO(developer): Change this value to your module subnet author email.
+    author_email="ifrit98@gmail.com",
     license="MIT",
     python_requires=">=3.8",
     scripts=["bin/stcli"],
