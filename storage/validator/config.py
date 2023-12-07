@@ -312,6 +312,18 @@ def add_args(cls, parser):
 
     # API specific
     parser.add_argument(
+        "--api.store_timeout",
+        type=int,
+        help="Store data query timeout.",
+        default=60,
+    )
+    parser.add_argument(
+        "--api.retrieve_timeout",
+        type=int,
+        help="Retrieve data query timeout.",
+        default=60,
+    )
+    parser.add_argument(
         "--api.whitelisted_hotkeys",
         nargs="+",
         type=list,

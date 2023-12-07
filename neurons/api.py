@@ -249,7 +249,7 @@ class neuron:
     def get_top_n_validators(self):
         top_uids = torch.where(
             self.metagraph.S > torch.quantile(self.metagraph.S, 1 - 0.1)
-        )  # [0].tolist()
+        )[0].tolist()
         if self.my_subnet_uid in top_uids:
             top_uids.remove(self.my_subnet_uid)
         return top_uids
@@ -378,7 +378,7 @@ class neuron:
                 axons,
                 synapse,
                 deserialize=False,
-                timeout=30,
+                timeout=self.config.api.store_timeout,
             )
 
             chunk_size = sys.getsizeof(chunk)
@@ -537,7 +537,7 @@ class neuron:
                 axons,
                 synapse,
                 deserialize=False,
-                timeout=60,
+                timeout=self.config.api.retrieve_timeout,
             )
 
             return responses
