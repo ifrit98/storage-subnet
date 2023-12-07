@@ -20,7 +20,6 @@ from . import config
 from . import utils
 from .run import run
 from .set_weights import set_weights
-from .priority import priority, default_priority
 
 
 __version__ = "1.0.0"
