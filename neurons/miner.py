@@ -506,8 +506,6 @@ class miner:
         if await self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
             await update_seed_info(self.database, data_hash, synapse.seed)
-            # TODO: should we pull the data from filesystem to prove we have it already instead of
-            # using the sent one? Kinda weird that we just throw it away, but will be challenged later
         else:
             # Store the data in the filesystem
             filepath = save_data_to_filesystem(
