@@ -269,13 +269,30 @@ class neuron:
 
         self.step = 0
 
+        self._top_n_validators = self.get_top_n_validators()
+
     # TODO: Develop the agreement gossip protocol across validators to accept storage requests
     # and accept retrieve requests given agreement of top n % stake
     async def agreement_protocol(self):
         raise NotImplementedError
 
+    def get_top_n_validators(self):
+        top_uids = torch.where(
+            self.metagraph.S
+            > torch.quantile(self.metagraph.S, 1 - 0.1)  # top 10% stake UIDs
+        )[0].tolist()
+        if self.my_subnet_uid in top_uids:
+            top_uids.remove(self.my_subnet_uid)
+        return top_uids
+
+    @property
+    def top_n_validators(self):
+        if self._top_n_validatrs == None or should_checkpoint(self):
+            self._top_n_validators = self.get_top_n_validators()
+        return self._top_n_validators
+
     async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
-        bt.logging.debug(f"store_user_data() {synapse.dict()}")
+        bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
         data_hash = await self.store_broadband(
             encrypted_data=synapse.encrypted_data,
             encryption_payload=synapse.encryption_payload,
@@ -284,7 +301,17 @@ class neuron:
         return synapse
 
     async def store_blacklist(self, synapse: protocol.StoreUser) -> Tuple[bool, str]:
-        return False, "NotImplemented. Whitelisting all.."
+        # If explicitly whitelisted hotkey, allow.
+        if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
+            return False, f"Hotkey {synapse.dendrite.hotkey} whitelisted."
+        # If a validator with top n% stake, allow.
+        if synapse.dendrite.hotkey in self.top_n_validators:
+            return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
+        # Otherwise, reject.
+        return (
+            True,
+            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        )
 
     async def store_priority(self, synapse: protocol.StoreUser) -> float:
         return 0.0
@@ -304,7 +331,17 @@ class neuron:
     async def retrieve_blacklist(
         self, synapse: protocol.RetrieveUser
     ) -> Tuple[bool, str]:
-        return False, "NotImplemented. Whitelisting all..."
+        # If explicitly whitelisted hotkey, allow.
+        if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
+            return False, f"Hotkey {synapse.dendrite.hotkey} whitelisted."
+        # If a validator with top n% stake, allow.
+        if synapse.dendrite.hotkey in self.top_n_validators:
+            return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
+        # Otherwise, reject.
+        return (
+            True,
+            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        )
 
     async def retrieve_priority(self, synapse: protocol.RetrieveUser) -> float:
         return 0.0
