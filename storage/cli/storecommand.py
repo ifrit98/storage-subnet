@@ -192,12 +192,13 @@ class StoreData:
             break
 
         if success:
+            filename = os.path.basename(cli.config.filepath)
             # Save hash mapping after successful storage
             save_hash_mapping(
-                hash_filepath, filename=cli.config.filepath, data_hash=data_hash
+                hash_filepath, filename=filename, data_hash=data_hash
             )
             bittensor.logging.info(
-                f"Stored {cli.config.filepath} on the Bittensor network with hash {data_hash}"
+                f"Stored {filename} on the Bittensor network with hash {data_hash}"
             )
         else:
             bittensor.logging.error(f"Failed to store data at {cli.config.filepath}.")
