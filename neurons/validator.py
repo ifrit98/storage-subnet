@@ -190,7 +190,7 @@ class neuron:
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
-            db=6,  # self.config.database.index,
+            db=self.config.database.index,
         )
         self.db_semaphore = asyncio.Semaphore()
 
@@ -376,7 +376,7 @@ class neuron:
                         self.database,
                     )
                     if ttl > 0:
-                        self.database.expire(
+                        await self.database.expire(
                             f"{hotkey}:{data_hash}",
                             ttl,
                         )
@@ -430,7 +430,7 @@ class neuron:
             # Get a new set of UIDs to query for those left behind
             if failed_uids != []:
                 bt.logging.trace(f"Failed to store on uids: {failed_uids}")
-                uids = get_available_query_miners(self, k=len(failed_uids))
+                uids = await get_available_query_miners(self, k=len(failed_uids))
                 bt.logging.trace(f"Retrying with new uids: {uids}")
                 axons = [self.metagraph.axons[uid] for uid in uids]
                 failed_uids = []  # reset failed uids for next round
@@ -781,7 +781,7 @@ class neuron:
                 bt.logging.error(
                     f"Failed to decode data from UID: {uids[idx]} with error {e}"
                 )
-                rewards[idx] = -1.0
+                rewards[idx] = -0.1
 
                 # Update the retrieve statistics
                 await update_statistics(
@@ -796,7 +796,7 @@ class neuron:
                 bt.logging.error(
                     f"Hash of recieved data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
                 )
-                rewards[idx] = -1.0
+                rewards[idx] = -0.1
 
                 # Update the retrieve statistics
                 await update_statistics(
@@ -812,7 +812,7 @@ class neuron:
                 bt.logging.error(
                     f"data verification failed! {pformat(response.axon.dict())}"
                 )
-                rewards[idx] = -1.0  # Losing use data is unacceptable, harsh punishment
+                rewards[idx] = -0.1  # Losing use data is unacceptable, harsh punishment
 
                 # Update the retrieve statistics
                 bt.logging.trace(f"Updating retrieve statistics for {hotkey}")
@@ -865,10 +865,7 @@ class neuron:
                 # --- Wait until next step epoch.
                 current_block = self.subtensor.get_current_block()
                 # while self.my_subnet_uid != get_current_validtor_uid_round_robin(
-                while self.my_subnet_uid not in get_query_validators(
-                    self,
-                    # epoch_length=2,  # 2 for testing (interval for each validator slot)
-                ) and (
+                while self.my_subnet_uid not in get_query_validators(self) and (
                     current_block - self.prev_step_block
                     < self.config.neuron.blocks_per_step
                 ):
@@ -969,12 +966,6 @@ class neuron:
 
                 # Log event
                 log_event(self, event)
-
-                bt.logging.info("initiating retrieve broadband")
-                file_hash = random.choice(list(self.database.scan_iter(f"file:*")))
-                file_hash = file_hash.decode("utf-8").split(":")[1]
-                bt.logging.debug(f"Retrieving broadband data with hash: {file_hash}")
-                data = await self.retrieve_broadband(file_hash)
 
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data: {e}")

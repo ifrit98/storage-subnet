@@ -47,48 +47,18 @@ from storage.shared.utils import (
 )
 
 from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
 )
 
 from storage.validator.verify import (
     verify_store_with_seed,
-    verify_challenge_with_seed,
     verify_retrieve_with_seed,
 )
 
 from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
+from storage.validator.state import init_wandb, ttl_get_block
 from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
+from storage.validator.weights import set_weights
 
 from storage.validator.database import (
     add_metadata_to_hotkey,
@@ -278,9 +248,8 @@ class neuron:
 
     def get_top_n_validators(self):
         top_uids = torch.where(
-            self.metagraph.S
-            > torch.quantile(self.metagraph.S, 1 - 0.1)  # top 10% stake UIDs
-        )[0].tolist()
+            self.metagraph.S > torch.quantile(self.metagraph.S, 1 - 0.1)
+        )  # [0].tolist()
         if self.my_subnet_uid in top_uids:
             top_uids.remove(self.my_subnet_uid)
         return top_uids
@@ -292,7 +261,7 @@ class neuron:
         return self._top_n_validators
 
     async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
-        bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
+        bt.logging.debug(f"store_user_data() {synapse.dict()}")
         data_hash = await self.store_broadband(
             encrypted_data=synapse.encrypted_data,
             encryption_payload=synapse.encryption_payload,
@@ -370,9 +339,10 @@ class neuron:
             k: int
                 The target number of miners to query for each chunk.
         """
-        # Create a profiler instance
-        profiler = Profiler()
-        profiler.start()
+        if self.config.neuron.profile:
+            # Create a profiler instance
+            profiler = Profiler()
+            profiler.start()
 
         semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
@@ -536,10 +506,11 @@ class neuron:
             database=self.database,
         )
 
-        # Stop the profiler
-        profiler.stop()
-        # Print the results
-        print(profiler.output_text(unicode=True, color=True))
+        if self.config.neuron.profile:
+            # Stop the profiler
+            profiler.stop()
+            # Print the results
+            print(profiler.output_text(unicode=True, color=True))
 
         return full_hash
 
