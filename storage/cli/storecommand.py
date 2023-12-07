@@ -129,10 +129,14 @@ class StoreData:
         with open(cli.config.filepath, "rb") as f:
             raw_data = f.read()
 
-        encrypted_data, encryption_payload = encrypt_data(
-            bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
-            wallet,
-        )
+        if not cli.config.noencrypt:
+            encrypted_data, encryption_payload = encrypt_data(
+                bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
+                wallet,
+            )
+        else:
+            encrypted_data = raw_data
+            encryption_payload = {}
         bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:200]}")
         bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
         bittensor.logging.trace(
@@ -271,6 +275,11 @@ class StoreData:
             type=int,
             default=4096,
             help="Tao limit for the validator permit.",
+        )
+        store_parser.add_argument(
+            "--noencrypt",
+            action="store_true",
+            help="Do not encrypt the data before storing it on the Bittensor network.",
         )
 
         bittensor.wallet.add_args(store_parser)

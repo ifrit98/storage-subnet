@@ -159,13 +159,22 @@ class RetrieveData:
             bittensor.logging.debug(
                 f"encryption_payload: {response.encryption_payload}"
             )
-            decrypted_data = decrypt_data_with_private_key(
-                encrypted_data,
-                response.encryption_payload,
-                bytes(wallet.coldkey.private_key.hex(), "utf-8"),
-            )
+            if (
+                response.encryption_payload == None
+                or response.encryption_payload == ""
+                or response.encryption_payload == "{}"
+            ):
+                bittensor.logging.warning(
+                    "No encryption payload found. Unencrypted data."
+                )
+                decrypted_data = encrypted_data
+            else:
+                decrypted_data = decrypt_data_with_private_key(
+                    encrypted_data,
+                    response.encryption_payload,
+                    bytes(wallet.coldkey.private_key.hex(), "utf-8"),
+                )
             bittensor.logging.trace(f"decrypted_data: {decrypted_data}")
-            bittensor.logging.debug(decrypted_data)
             success = True
 
         if success:
