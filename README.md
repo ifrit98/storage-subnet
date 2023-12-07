@@ -174,6 +174,24 @@ In each phase, cryptographic primitives ensure data integrity and confidentialit
 In each phase, cryptographic primitives like hashing, commitment schemes (e.g., Elliptic Curve Cryptography and Pedersen commitments), and data structures like Merkle trees are employed to ensure the integrity, confidentiality, and availability of the data. The use of seeds and randomness in commitments adds an additional layer of security and ensures that each instance of data storage and retrieval is unique and verifiable.
 
 
+## Epoch UID selection
+Miners are chosen pseudorandomly using the current block hash as a random seed. This allows for public verification of which miners are selected for each challenge round (3 blocks).
+
+Only a single specific validator is only allowed to make challenge requests each epoch in a round-robin fashion based on the current block number % num_validators. This is an important security measure and will allow appropriate coverage for miner challenges as well as clarity and visiblity across the network. 
+
+For example:
+```python
+block_hash = get_block_hash(subtensor)
+random.seed(block_hash)
+
+miner_uids = get_query_miners(metagraph, k = 3)
+miner_uids
+>>> [0, 4, 9] # Only these miners are allowed to be challenged this round (3 blocks, ~36 sec)
+
+validator_uid = get_validator_uid(metagraph)
+validator_uid
+>>> 5 # Only this validator is allowed to query during this epoch (100 blocks, ~33 minutes)
+```
 
 ## Installation
 ```bash

@@ -26,8 +26,6 @@ from loguru import logger
 def check_config(cls, config: "bt.Config"):
     r"""Checks/validates the config namespace object."""
     bt.logging.check_config(config)
-    # bt.wallet.check_config(config)
-    # bt.subtensor.check_config(config)
 
     if config.mock:
         config.wallet._mock = True
@@ -107,10 +105,10 @@ def add_args(cls, parser):
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
-        "--neuron.store_epoch_length",
+        "--neuron.store_step_length",
         type=int,
-        default=10,
-        help="Number of blocks before random store epoch is complete.",
+        default=5,
+        help="Number of steps before random store epoch is complete.",
     )
     parser.add_argument(
         "--neuron.challenge_sample_size",
@@ -119,16 +117,16 @@ def add_args(cls, parser):
         help="Number of miners to challenge at a time. Target is ~90 miners per epoch.",
     )
     parser.add_argument(
-        "--neuron.retrieve_epoch_length",
+        "--neuron.retrieve_step_length",
         type=int,
-        default=20,
-        help="Number of blocks before random retrieve epoch is complete.",
+        default=5,
+        help="Number of steps before random retrieve epoch is complete.",
     )
     parser.add_argument(
-        "--neuron.tier_update_epoch_length",
+        "--neuron.tier_update_step_length",
         type=int,
         default=100,
-        help="Number of blocks before tier update epoch is complete.",
+        help="Number of steps before tier update epoch is complete.",
     )
     parser.add_argument(
         "--neuron.disable_log_rewards",
@@ -176,7 +174,7 @@ def add_args(cls, parser):
         "--neuron.challenge_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=60,
+        default=30,
     )
     parser.add_argument(
         "--neuron.retrieve_timeout",
@@ -194,7 +192,7 @@ def add_args(cls, parser):
         "--neuron.blocks_per_step",
         type=int,
         help="Blocks before a step is taken.",
-        default=2,
+        default=3,
     )
     parser.add_argument(
         "--neuron.events_retention_size",
@@ -315,13 +313,13 @@ def add_args(cls, parser):
         "--api.store_timeout",
         type=int,
         help="Store data query timeout.",
-        default=60,
+        default=90,
     )
     parser.add_argument(
         "--api.retrieve_timeout",
         type=int,
         help="Retrieve data query timeout.",
-        default=60,
+        default=90,
     )
     parser.add_argument(
         "--api.whitelisted_hotkeys",

@@ -185,7 +185,7 @@ def get_pseudorandom_uids(subtensor, uids, k):
 
     # Ensure k is not larger than the number of uids
     k = min(k, len(uids))
-    bt.logging.info(f"uids: {uids} k: {k}")
+    bt.logging.trace(f"uids: {uids} k: {k}")
 
     return pyrandom.sample(uids, k=k)
 
@@ -209,47 +209,7 @@ def get_avaialble_uids(self):
     return avail_uids
 
 
-def get_random_uids_OG(
-    self, k: int, exclude: List[int] = [8, 9, 10, 11, 12, 13]
-) -> torch.LongTensor:
-    """Returns k available random uids from the metagraph.
-    Args:
-        k (int): Number of uids to return.
-        exclude (List[int]): List of uids to exclude from the random sampling.
-    Returns:
-        uids (torch.LongTensor): Randomly sampled available uids.
-    Notes:
-        If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
-    """
-    candidate_uids = []
-    avail_uids = []
-
-    for uid in range(self.metagraph.n.item()):
-        uid_is_available = check_uid_availability(
-            self.metagraph, uid, self.config.neuron.vpermit_tao_limit
-        )
-        uid_is_not_excluded = exclude is None or uid not in exclude
-
-        if uid_is_available:
-            avail_uids.append(uid)
-            if uid_is_not_excluded:
-                candidate_uids.append(uid)
-
-    # Check if candidate_uids contain enough for querying, if not grab all avaliable uids
-    available_uids = candidate_uids
-    if len(candidate_uids) < k:
-        available_uids += random.sample(
-            [uid for uid in avail_uids if uid not in candidate_uids],
-            k - len(candidate_uids),
-        )
-    uids = torch.tensor(random.sample(available_uids, k))
-    bt.logging.debug(f"returning available uids: {uids}")
-    return uids.tolist()
-
-
-def get_random_uids(
-    self, k: int, exclude: List[int] = [8, 9, 10, 11, 12, 13]
-) -> torch.LongTensor:
+def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
     """Returns k available random uids from the metagraph.
     Args:
         k (int): Number of uids to return.
@@ -389,18 +349,15 @@ def get_current_validator_uid_pseudorandom(self):
     return pyrandom.choice(vuids).item()
 
 
-def get_current_validtor_uid_round_robin(self, epoch_length=760):
+def get_current_validtor_uid_round_robin(self):
     """
-    Retrieve a validator UID using a round-robin selection based on the current block and a specified epoch length.
-
-    Args:
-        epoch_length (int): The length of an epoch, used to determine the validator index in a round-robin manner.
+    Retrieve a validator UID using a round-robin selection based on the current block and epoch length.
 
     Returns:
         int: The UID of the validator selected via round-robin.
     """
     vuids = get_all_validators(self)
-    vidx = self.subtensor.get_current_block() // epoch_length % len(vuids)
+    vidx = self.subtensor.get_current_block() // 100 % len(vuids)
     return vuids[vidx].item()
 
 

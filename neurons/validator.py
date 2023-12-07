@@ -239,10 +239,7 @@ class neuron:
             bt.logging.debug("loading wandb")
             init_wandb(self)
 
-        if self.config.neuron.epoch_length_override:
-            self.config.neuron.epoch_length = self.config.neuron.epoch_length_override
-        else:
-            self.config.neuron.epoch_length = 100
+        self.config.neuron.epoch_length = 100
         bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
 
         if self.config.neuron.challenge_sample_size == 0:
@@ -864,13 +861,14 @@ class neuron:
 
                 # --- Wait until next step epoch.
                 current_block = self.subtensor.get_current_block()
-                # while self.my_subnet_uid != get_current_validtor_uid_round_robin(
-                while self.my_subnet_uid not in get_query_validators(self) and (
+                while self.my_subnet_uid != get_current_validtor_uid_round_robin(
+                    self
+                ) or (
                     current_block - self.prev_step_block
                     < self.config.neuron.blocks_per_step
                 ):
                     bt.logging.trace(
-                        f"my uid: {self.my_subnet_uid} - selected uid: {get_current_validtor_uid_round_robin(self, epoch_length=2)}"
+                        f"my uid: {self.my_subnet_uid} - selected uid: {get_current_validtor_uid_round_robin(self)} - block: {ttl_get_block(self)}"
                     )
                     # --- Wait for next block.
                     time.sleep(1)
@@ -924,8 +922,8 @@ class neuron:
     async def forward(self) -> torch.Tensor:
         bt.logging.info(f"forward step: {self.step}")
 
-        # Only store so often, say every 10 blocks
-        if self.step % self.config.neuron.store_epoch_length == 0:
+        # Only store so often, say every 10 steps
+        if self.step % self.config.neuron.store_step_length == 0:
             try:
                 # Store some random data
                 bt.logging.info("initiating store random")
@@ -955,7 +953,7 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to challenge data: {e}")
 
-        if self.step % self.config.neuron.retrieve_epoch_length:
+        if self.step % self.config.neuron.retrieve_step_length == 0:
             try:
                 # Retrieve some data
                 bt.logging.info("initiating retrieve")
@@ -970,7 +968,7 @@ class neuron:
             except Exception as e:
                 bt.logging.error(f"Failed to retrieve data: {e}")
 
-        if self.step % self.config.neuron.tier_update_epoch_length == 0:
+        if self.step % self.config.neuron.tier_update_step_length == 0:
             try:
                 # Update miner tiers
                 bt.logging.info("Computing tiers")
