@@ -190,7 +190,7 @@ class neuron:
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
-            db=6,  # self.config.database.index,
+            db=self.config.database.index,
         )
         self.db_semaphore = asyncio.Semaphore()
 
@@ -300,11 +300,6 @@ class neuron:
             json.dumps(payload) if isinstance(payload, dict) else payload
         )
         return synapse
-        # TODO: determine at what level we will use encryption
-        # Will we decrypt here or just pass encrypted data + payload back to user for them to decrypt?
-        # Are we going to use bittensor wallet encryptin for everything? E.g. create user accounts WITH
-        # bittensor wallets, even if they're not on the blockchain or have TAO. Just to keep the scheme
-        # consistent and easy to develop with. (no other encryption schemes except to login to frontend)
 
     async def retrieve_blacklist(
         self, synapse: protocol.RetrieveUser
