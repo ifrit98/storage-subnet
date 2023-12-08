@@ -263,11 +263,11 @@ async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
         bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
         return False
     if total_storage >= limit:
-        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 10**9} GB.")
+        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")
         return True
     else:
         bt.logging.trace(
-            f"Hotkey {hotkey} has {(limit - total_storage) // 10**9} GB free."
+            f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
         )
         return False
 

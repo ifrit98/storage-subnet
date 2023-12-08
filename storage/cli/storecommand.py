@@ -116,8 +116,9 @@ class StoreData:
         bittensor.logging.debug("wallet:", wallet)
 
         # Unlock the wallet
-        wallet.hotkey
-        wallet.coldkey
+        if not cli.config.noencrypt:
+            wallet.hotkey
+            wallet.coldkey
 
         cli.config.filepath = os.path.expanduser(cli.config.filepath)
         if not os.path.exists(cli.config.filepath):
@@ -136,20 +137,16 @@ class StoreData:
             )
         else:
             encrypted_data = raw_data
-            encryption_payload = {}
-        bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:200]}")
+            encryption_payload = "{}"
+        decoded_data = base64.b64encode(encrypted_data)
+        bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:100]}")
         bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
-        bittensor.logging.trace(
-            f"CLI B64ENCODED DATA: {base64.b64encode(encrypted_data)}"
-        )
-        bittensor.logging.trace(
-            f"CLI hash(encrypted_data): {hash_data(encrypted_data)})"
-        )
+        bittensor.logging.trace(f"CLI B64ENCODED DATA: {decoded_data[:100]}")
         synapse = storage.protocol.StoreUser(
-            encrypted_data=base64.b64encode(encrypted_data),
+            encrypted_data=decoded_data,
             encryption_payload=encryption_payload,
         )
-        bittensor.logging.debug(f"sending synapse: {synapse}")
+        bittensor.logging.debug(f"sending synapse: {synapse.dendrite.dict()}")
 
         hash_basepath = os.path.expanduser(cli.config.hash_basepath)
         hash_filepath = os.path.join(hash_basepath, wallet.name + ".json")
@@ -175,8 +172,10 @@ class StoreData:
         bittensor.logging.debug("query axons:", axons)
 
         # Query axons
-        responses = dendrite.query(axons, synapse, deserialize=False)
-        bittensor.logging.debug("axon responses:", responses)
+        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
+        bittensor.logging.debug(
+            "axon responses:", [resp.dendrite.dict() for resp in responses]
+        )
 
         success = False
         failure_modes = {"code": [], "message": []}

@@ -190,7 +190,7 @@ def get_pseudorandom_uids(subtensor, uids, k):
     return pyrandom.sample(uids, k=k)
 
 
-def get_avaialble_uids(self):
+def get_avaialble_uids(self, exclude=None):
     """Returns all available uids from the metagraph.
 
     Returns:
@@ -203,12 +203,14 @@ def get_avaialble_uids(self):
             self.metagraph, uid, self.config.neuron.vpermit_tao_limit
         )
 
-        if uid_is_available:
+        if uid_is_available and (exclude is None or uid not in exclude):
             avail_uids.append(uid)
 
     return avail_uids
 
 
+# TODO: update this to use the block hash seed paradigm so that we don't get uids that are unavailable
+# and have to do that stupid pinging bullshit. Just use the block hash seed to get a random uid 1st pass
 def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
     """Returns k available random uids from the metagraph.
     Args:
@@ -287,7 +289,7 @@ def get_all_miners(self):
     return [uid.item() for uid in self.metagraph.uids if uid not in vuids]
 
 
-def get_query_miners(self, k=20):
+def get_query_miners(self, k=20, exlucde=None):
     """
     Obtain a list of miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -299,6 +301,8 @@ def get_query_miners(self, k=20):
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_all_miners(self)
+    if exlucde is not None:
+        muids = [muid for muid in muids if muid not in exlucde]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 
 
@@ -316,7 +320,7 @@ def get_query_validators(self, k=3):
     return get_pseudorandom_uids(self.subtensor, uids=vuids.tolist(), k=k)
 
 
-async def get_available_query_miners(self, k):
+async def get_available_query_miners(self, k, exclude=None):
     """
     Obtain a list of available miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -327,7 +331,7 @@ async def get_available_query_miners(self, k):
         list: A list of pseudorandomly selected available miner UIDs.
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
-    muids = get_avaialble_uids(self)
+    muids = get_avaialble_uids(self, exclude=exclude)
     muids_nonfull = [
         uid
         for uid in muids
@@ -704,9 +708,6 @@ def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
     # Partition UIDs into exclusive groups
     uid_groups = partition_uids(available_uids, R)
 
-    # Convert uid_groups to a more efficient numpy array if beneficial
-    uid_groups = np.array(uid_groups)
-
     data_chunks = chunk_data_generator(data, chunk_size)
 
     for chunk, uid_group in zip(data_chunks, uid_groups):
@@ -714,8 +715,8 @@ def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
-def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
-    available_uids = get_random_uids(self, k=k)
+async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
+    available_uids = await get_available_query_miners(self, k=k)
     data_size = len(data)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
     available_uids = adjust_uids_to_multiple(available_uids, R)
@@ -737,17 +738,16 @@ def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
                 break
             uid_groups.append(group)
 
-    # Convert uid_groups to a numpy array
-    uid_groups = np.array(uid_groups)
-
     data_chunks = chunk_data_generator(data, chunk_size)
     for chunk, uid_group in zip(data_chunks, uid_groups):
         chunk_hash = hash_data(chunk)
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
-def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(self, data_size, R, k):
-    available_uids = get_random_uids(self, k=k)
+async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(
+    self, data_size, R, k
+):
+    available_uids = await get_available_query_miners(self, k=k)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
     available_uids = adjust_uids_to_multiple(available_uids, R)
     chunk_sizes = [chunk_size] * (data_size - 1) + [data_size % chunk_size]
