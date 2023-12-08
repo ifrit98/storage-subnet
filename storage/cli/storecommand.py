@@ -21,10 +21,7 @@ from rich.prompt import Prompt
 from tqdm import tqdm
 from storage.validator.utils import get_all_validators
 
-
 from .default_values import defaults
-
-bittensor.trace()
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -171,28 +168,29 @@ class StoreData:
         axons = [mg.axons[uid] for uid in query_uids]
         bittensor.logging.debug("query axons:", axons)
 
-        # Query axons
-        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-        bittensor.logging.debug(
-            "axon responses:", [resp.dendrite.dict() for resp in responses]
-        )
-
-        success = False
-        failure_modes = {"code": [], "message": []}
-        for response in responses:
-            if response.dendrite.status_code != 200:
-                failure_modes["code"].append(response.dendrite.status_code)
-                failure_modes["message"].append(response.dendrite.status_message)
-                continue
-
-            data_hash = (
-                response.data_hash.decode("utf-8")
-                if isinstance(response.data_hash, bytes)
-                else response.data_hash
+        with bittensor.__console__.status(":satellite: Storing data..."):
+            # Query axons
+            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
+            bittensor.logging.debug(
+                "axon responses:", [resp.dendrite.dict() for resp in responses]
             )
-            bittensor.logging.debug("recieved data hash: {}".format(data_hash))
-            success = True
-            break
+
+            success = False
+            failure_modes = {"code": [], "message": []}
+            for response in responses:
+                if response.dendrite.status_code != 200:
+                    failure_modes["code"].append(response.dendrite.status_code)
+                    failure_modes["message"].append(response.dendrite.status_message)
+                    continue
+
+                data_hash = (
+                    response.data_hash.decode("utf-8")
+                    if isinstance(response.data_hash, bytes)
+                    else response.data_hash
+                )
+                bittensor.logging.debug("recieved data hash: {}".format(data_hash))
+                success = True
+                break
 
         if success:
             # Save hash mapping after successful storage

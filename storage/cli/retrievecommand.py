@@ -143,37 +143,44 @@ class RetrieveData:
         axons = [mg.axons[uid] for uid in query_uids]
         bittensor.logging.debug("query axons:", axons)
 
-        # Query axons
-        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-        success = False
-        for response in responses:
-            bittensor.logging.trace(f"response: {response.dendrite.dict()}")
-            if response.dendrite.status_code != 200 or response.encrypted_data == None:
-                continue
+        with bittensor.__console__.status(":satellite: Storing data..."):
+            # Query axons
+            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
+            success = False
+            for response in responses:
+                bittensor.logging.trace(f"response: {response.dendrite.dict()}")
+                if (
+                    response.dendrite.status_code != 200
+                    or response.encrypted_data == None
+                ):
+                    continue
 
-            # Decrypt the response
-            bittensor.logging.trace(f"encrypted_data: {response.encrypted_data[:100]}")
-            encrypted_data = base64.b64decode(response.encrypted_data)
-            bittensor.logging.debug(
-                f"encryption_payload: {response.encryption_payload}"
-            )
-            if (
-                response.encryption_payload == None
-                or response.encryption_payload == ""
-                or response.encryption_payload == "{}"
-            ):
-                bittensor.logging.warning(
-                    "No encryption payload found. Unencrypted data."
+                # Decrypt the response
+                bittensor.logging.trace(
+                    f"encrypted_data: {response.encrypted_data[:100]}"
                 )
-                decrypted_data = encrypted_data
-            else:
-                decrypted_data = decrypt_data_with_private_key(
-                    encrypted_data,
-                    response.encryption_payload,
-                    bytes(wallet.coldkey.private_key.hex(), "utf-8"),
+                encrypted_data = base64.b64decode(response.encrypted_data)
+                bittensor.logging.debug(
+                    f"encryption_payload: {response.encryption_payload}"
                 )
-            bittensor.logging.trace(f"decrypted_data: {decrypted_data[:100]}")
-            success = True
+                if (
+                    response.encryption_payload == None
+                    or response.encryption_payload == ""
+                    or response.encryption_payload == "{}"
+                ):
+                    bittensor.logging.warning(
+                        "No encryption payload found. Unencrypted data."
+                    )
+                    decrypted_data = encrypted_data
+                else:
+                    decrypted_data = decrypt_data_with_private_key(
+                        encrypted_data,
+                        response.encryption_payload,
+                        bytes(wallet.coldkey.private_key.hex(), "utf-8"),
+                    )
+                bittensor.logging.trace(f"decrypted_data: {decrypted_data[:100]}")
+                success = True
+                break  # No need to keep going if we returned data.
 
         if success:
             # Save the data
