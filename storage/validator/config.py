@@ -167,13 +167,13 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.store_timeout",
         type=float,
-        help="Retreive data query timeout.",
+        help="Store data query timeout.",
         default=60,
     )
     parser.add_argument(
         "--neuron.challenge_timeout",
         type=float,
-        help="Retreive data query timeout.",
+        help="Challenge data query timeout.",
         default=30,
     )
     parser.add_argument(

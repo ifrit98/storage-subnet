@@ -488,11 +488,8 @@ class neuron:
         - Tuple[bool, protocol.Challenge]: A tuple containing the verification result and the challenge.
         """
         hotkey = self.metagraph.hotkeys[uid]
-        if self.config.neuron.verbose:
-            bt.logging.trace(f"Handling challenge from hotkey: {hotkey}")
-
         keys = await self.database.hkeys(f"hotkey:{hotkey}")
-        bt.logging.debug(f"{len(keys)} hashes pulled for hotkey {hotkey}")
+        bt.logging.trace(f"{len(keys)} hashes pulled for hotkey {hotkey}")
         if keys == []:
             # Create a dummy response to send back
             dummy_response = protocol.Challenge(
@@ -533,8 +530,11 @@ class neuron:
             )
             chunk_size = 0
 
-        num_chunks = data["size"] // chunk_size
+        num_chunks = (
+            data["size"] // chunk_size if data["size"] > chunk_size else data["size"]
+        )
         if self.config.neuron.verbose:
+            bt.logging.trace(f"challenge data size : {data['size']}")
             bt.logging.trace(f"challenge chunk size: {chunk_size}")
             bt.logging.trace(f"challenge num chunks: {num_chunks}")
 
@@ -557,6 +557,7 @@ class neuron:
             [axon],
             synapse,
             deserialize=True,
+            timeout=self.config.neuron.challenge_timeout,
         )
         verified = verify_challenge_with_seed(response[0])
 
@@ -687,6 +688,7 @@ class neuron:
             [axon],
             synapse,
             deserialize=False,
+            timeout=self.config.neuron.retrieve_timeout,
         )
 
         try:

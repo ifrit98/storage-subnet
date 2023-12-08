@@ -190,7 +190,7 @@ def get_pseudorandom_uids(subtensor, uids, k):
     return pyrandom.sample(uids, k=k)
 
 
-def get_avaialble_uids(self, exclude=None):
+def get_available_uids(self):
     """Returns all available uids from the metagraph.
 
     Returns:
@@ -331,7 +331,7 @@ async def get_available_query_miners(self, k, exclude=None):
         list: A list of pseudorandomly selected available miner UIDs.
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
-    muids = get_avaialble_uids(self, exclude=exclude)
+    muids = get_available_uids(self)
     muids_nonfull = [
         uid
         for uid in muids
