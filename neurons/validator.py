@@ -483,7 +483,7 @@ class neuron:
                 challenge_index=0,
                 seed="",
             )
-            return False, [
+            return None, [
                 dummy_response
             ]  # no data found associated with this miner hotkey
 
@@ -603,6 +603,9 @@ class neuron:
 
             hotkey = self.hotkeys[uid]
 
+            if verified == None:
+                continue  # We don't have any data for this hotkey, skip it.
+
             # Update the challenge statistics
             await update_statistics(
                 ss58_address=hotkey,
@@ -651,10 +654,9 @@ class neuron:
         keys = await self.database.hkeys(f"hotkey:{hotkey}")
 
         if keys == []:
-            # TODO: make this legit and return something useful...
             bt.logging.warning(f"No data found for uid: {uid} | hotkey: {hotkey}")
             # Create a dummy response to send back
-            return False
+            return None, ""
 
         data_hash = random.choice(keys).decode("utf-8")
         bt.logging.debug(f"handle_retrieve data_hash: {data_hash}")
@@ -756,6 +758,10 @@ class neuron:
 
         for idx, (uid, (response, data_hash)) in enumerate(zip(uids, response_tuples)):
             hotkey = self.hotkeys[uid]
+
+            if response == None:
+                continue  # We don't have any data for this hotkey, skip it.
+
             try:
                 decoded_data = base64.b64decode(response.data)
             except Exception as e:
