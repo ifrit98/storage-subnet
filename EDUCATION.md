@@ -1,8 +1,8 @@
-### Detailed User Education and Policies for Philanthropic
+### Detailed User Education and Policies for FileTAO
 
 **Introduction**
 
-Welcome to Philanthropic (built on Bittensor), where we prioritize secure and responsible decentralized data storage. Our protocol, built with end-to-end encryption on top of the bittensor decentralized network, offers users unparalleled control and security over their data. This comprehensive guide is designed to help you understand the best practices for using our service, ensuring legal compliance, maintaining high security standards, and upholding ethical conduct.
+Welcome to FileTAO (built on Bittensor), where we prioritize secure and responsible decentralized data storage. Our protocol, built with end-to-end encryption on top of the bittensor decentralized network, offers users unparalleled control and security over their data. This comprehensive guide is designed to help you understand the best practices for using our service, ensuring legal compliance, maintaining high security standards, and upholding ethical conduct.
 
 #### Understanding End-to-End Encryption
 
@@ -49,6 +49,6 @@ Welcome to Philanthropic (built on Bittensor), where we prioritize secure and re
 
 By using [Your Decentralized Storage Network], you agree to adhere to these guidelines, ensuring a secure, legal, and respectful digital environment for all users.
 
-**Philanthropic**
+**FileTAO**
 
 philanthropic21@gmail.com

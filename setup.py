@@ -64,7 +64,7 @@ with codecs.open(
 setup(
     name="FileTAO",
     version=version_string,
-    description="Philanthropic storage subnet for the masses. (FileTAO)",
+    description="Philanthropic storage for the masses. (FileTAO)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ifrit98/storage-subnet",
