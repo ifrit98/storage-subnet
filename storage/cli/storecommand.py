@@ -288,7 +288,7 @@ class StoreData:
         store_parser.add_argument(
             "--neuron.vpermit_tao_limit",
             type=int,
-            default=4096,
+            default=2048,
             help="Tao limit for the validator permit.",
         )
         store_parser.add_argument(
