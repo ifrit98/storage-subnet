@@ -53,7 +53,6 @@ from storage.validator.utils import (
     get_query_validators,
     get_available_query_miners,
     get_current_validtor_uid_round_robin,
-    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 
 from storage.validator.encryption import (

@@ -17,15 +17,18 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
+import math
+import time
 import torch
+import functools
 import numpy as np
 import multiprocessing
+import random as pyrandom
+
 from math import comb
+from Crypto.Random import random
 from itertools import combinations, cycle
 from typing import Dict, List, Any, Union, Optional, Tuple
-
-from Crypto.Random import random
-import random as pyrandom
 
 from ..shared.ecc import hex_to_ecc_point, ecc_point_to_hex, hash_data, ECCommitment
 from ..shared.merkle import MerkleTree
@@ -143,9 +146,31 @@ def check_uid_availability(
     return True
 
 
+def ttl_cache(maxsize=128, ttl=10):
+    """A simple TTL cache decorator for functions with a single argument."""
+
+    def wrapper_cache(func):
+        cache = functools.lru_cache(maxsize=maxsize)(func)
+        last_time = time.time()
+
+        @functools.wraps(func)
+        def wrapped_func(*args, **kwargs):
+            nonlocal last_time
+            current_time = time.time()
+            if current_time - last_time > ttl:
+                cache.cache_clear()
+                last_time = current_time
+            return cache(*args, **kwargs)
+
+        return wrapped_func
+
+    return wrapper_cache
+
+
+@ttl_cache(ttl=12)  # Cache TTL of 30 seconds
 def current_block_hash(subtensor):
     """
-    Get the current block hash.
+    Get the current block hash with caching.
 
     Args:
         subtensor (bittensor.subtensor.Subtensor): The subtensor instance to use for getting the current block hash.
@@ -719,7 +744,9 @@ def compute_chunk_distribution_mut_exclusive_numpy(self, data, R, k):
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
-async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, R, k):
+async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids_yield(
+    self, data, R, k
+):
     available_uids = await get_available_query_miners(self, k=k)
     data_size = len(data)
     chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
@@ -748,7 +775,30 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, 
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
-def calculate_chunk_indices(data_size, num_chunks):
+def calculate_chunk_indices(data_size, chunk_size):
+    """
+    Calculate the start and end indices for each chunk.
+
+    :param data_size: The total size of the data to be chunked.
+    :param chunk_size: The chunk size.
+    :return: A list of tuples, each tuple containing the start and end index of a chunk.
+    """
+    indices = []
+    num_chunks = math.ceil(data_size / chunk_size)
+
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = min(start_idx + chunk_size, data_size)
+        indices.append((start_idx, end_idx))
+
+        # Adjust the end index for the last chunk if necessary
+        if i == num_chunks - 1 and end_idx < data_size:
+            indices[-1] = (start_idx, data_size)
+
+    return indices
+
+
+def calculate_chunk_indices_from_num_chunks(data_size, num_chunks):
     """
     Calculate the start and end indices for each chunk.
 
@@ -771,7 +821,7 @@ def calculate_chunk_indices(data_size, num_chunks):
     return indices
 
 
-async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(
+async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
     self, data_size, R, k, chunk_size=None
 ):
     available_uids = await get_available_query_miners(self, k=k)
