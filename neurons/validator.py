@@ -557,6 +557,7 @@ class neuron:
             [axon],
             synapse,
             deserialize=True,
+            timeout=self.config.neuron.challenge_timeout,
         )
         verified = verify_challenge_with_seed(response[0])
 
@@ -687,6 +688,7 @@ class neuron:
             [axon],
             synapse,
             deserialize=False,
+            timeout=self.config.neuron.retrieve_timeout,
         )
 
         try:
