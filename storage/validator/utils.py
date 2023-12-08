@@ -190,7 +190,7 @@ def get_pseudorandom_uids(subtensor, uids, k):
     return pyrandom.sample(uids, k=k)
 
 
-def get_available_uids(self):
+def get_available_uids(self, exclude: list = None):
     """Returns all available uids from the metagraph.
 
     Returns:
@@ -211,7 +211,9 @@ def get_available_uids(self):
 
 # TODO: update this to use the block hash seed paradigm so that we don't get uids that are unavailable
 # and have to do that stupid pinging bullshit. Just use the block hash seed to get a random uid 1st pass
-def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor:
+def get_random_uids(
+    self, k: int, exclude: List[int] = None, seed: int = None
+) -> torch.LongTensor:
     """Returns k available random uids from the metagraph.
     Args:
         k (int): Number of uids to return.
@@ -246,9 +248,11 @@ def get_random_uids(self, k: int, exclude: List[int] = None) -> torch.LongTensor
 
     # Safeguard against trying to sample more than what is available
     num_to_sample = min(k, len(candidate_uids))
-    uids = torch.tensor(random.sample(candidate_uids, num_to_sample))
+    if seed:  # use block hash seed if provided
+        random.seed(seed)
+    uids = random.sample(candidate_uids, num_to_sample)
     bt.logging.debug(f"returning available uids: {uids}")
-    return uids.tolist()
+    return uids
 
 
 def get_all_validators(self, return_hotkeys=False):
