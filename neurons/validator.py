@@ -204,25 +204,6 @@ class neuron:
         )
         bt.logging.info(f"Running validator on uid: {self.my_subnet_uid}")
 
-        bt.logging.debug("serving ip to chain...")
-        try:
-            self.axon = bt.axon(wallet=self.wallet, config=self.config)
-
-            try:
-                self.subtensor.serve_axon(
-                    netuid=self.config.netuid,
-                    axon=self.axon,
-                )
-                del self.axon
-
-            except Exception as e:
-                bt.logging.error(f"Failed to serve Axon: {e}")
-                pass
-
-        except Exception as e:
-            bt.logging.error(f"Failed to create Axon initialize: {e}")
-            pass
-
         # Dendrite pool for querying the network.
         bt.logging.debug("loading dendrite_pool")
         if self.config.neuron.mock_dendrite_pool:
