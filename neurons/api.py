@@ -656,10 +656,16 @@ class neuron:
         chunks = {}
         for i, response_group in enumerate(responses):
             for response in response_group:
+                bt.logging.debug(f"response: {response.dendrite.dict()}")
+                if response.dendrite.status_code != 200:
+                    continue
                 verified = verify_retrieve_with_seed(response)
                 if verified:
                     # Add to final chunks dict
                     if i not in list(chunks.keys()):
+                        bt.logging.debug(
+                            f"Adding {i} to chunks, size: {sys.getsizeof(response.data)}"
+                        )
                         chunks[i] = base64.b64decode(response.data)
                 else:
                     bt.logging.error(

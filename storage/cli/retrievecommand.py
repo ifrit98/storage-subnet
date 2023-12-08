@@ -144,7 +144,7 @@ class RetrieveData:
         bittensor.logging.debug("query axons:", axons)
 
         # Query axons
-        responses = dendrite.query(axons, synapse, deserialize=False)
+        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
         success = False
         for response in responses:
             bittensor.logging.trace(f"response: {response.dendrite.dict()}")
