@@ -53,7 +53,6 @@ from storage.validator.utils import (
     get_query_validators,
     get_available_query_miners,
     get_current_validtor_uid_round_robin,
-    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 
 from storage.validator.encryption import (
@@ -204,25 +203,6 @@ class neuron:
         )
         bt.logging.info(f"Running validator on uid: {self.my_subnet_uid}")
 
-        bt.logging.debug("serving ip to chain...")
-        try:
-            self.axon = bt.axon(wallet=self.wallet, config=self.config)
-
-            try:
-                self.subtensor.serve_axon(
-                    netuid=self.config.netuid,
-                    axon=self.axon,
-                )
-                del self.axon
-
-            except Exception as e:
-                bt.logging.error(f"Failed to serve Axon: {e}")
-                pass
-
-        except Exception as e:
-            bt.logging.error(f"Failed to create Axon initialize: {e}")
-            pass
-
         # Dendrite pool for querying the network.
         bt.logging.debug("loading dendrite_pool")
         if self.config.neuron.mock_dendrite_pool:
@@ -358,7 +338,9 @@ class neuron:
                     # Prepare storage for the data for particular miner
                     response_storage = {
                         "prev_seed": synapse.seed,
-                        "size": sys.getsizeof(encrypted_data),
+                        "size": sys.getsizeof(
+                            encrypted_data
+                        ),  # in bytes, not len(data)
                         "encryption_payload": encryption_payload,
                     }
                     bt.logging.trace(
@@ -631,7 +613,7 @@ class neuron:
 
             # Apply reward for this challenge
             tier_factor = await get_tier_factor(hotkey, self.database)
-            rewards[idx] = 1.0 * tier_factor if verified else -0.25 * tier_factor
+            rewards[idx] = 1.0 * tier_factor if verified else -0.1 * tier_factor
 
             # Log the event data for this specific challenge
             event.uids.append(uid)

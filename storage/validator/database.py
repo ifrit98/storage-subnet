@@ -263,11 +263,72 @@ async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
         bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
         return False
     if total_storage >= limit:
-        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 10**9} GB.")
+        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")
         return True
     else:
         bt.logging.trace(
-            f"Hotkey {hotkey} has {(limit - total_storage) // 10**9} GB free."
+            f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
+        )
+        return False
+
+
+async def cache_hotkeys_capacity(hotkeys, database):
+    """
+    Caches the capacity information for a list of hotkeys.
+
+    Parameters:
+        hotkeys (list): List of hotkey strings to check.
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        dict: A dictionary with hotkeys as keys and a tuple of (total_storage, limit) as values.
+    """
+    hotkeys_capacity = {}
+
+    for hotkey in hotkeys:
+        # Get the total storage used by the hotkey
+        total_storage = await total_hotkey_storage(hotkey, database)
+        # Get the byte limit for the hotkey
+        byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
+
+        if byte_limit is None:
+            bt.logging.warning(f"Could not find storage limit for {hotkey}.")
+            limit = None
+        else:
+            try:
+                limit = int(byte_limit)
+            except Exception as e:
+                bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
+                limit = None
+
+        hotkeys_capacity[hotkey] = (total_storage, limit)
+
+    return hotkeys_capacity
+
+
+async def check_hotkeys_capacity(hotkeys_capacity, hotkey):
+    """
+    Checks if a hotkey is at capacity using the cached information.
+
+    Parameters:
+        hotkeys_capacity (dict): Dictionary with cached capacity information.
+        hotkey (str): The key representing the hotkey.
+
+    Returns:
+        True if the hotkey is at capacity, False otherwise.
+    """
+    total_storage, limit = hotkeys_capacity.get(hotkey, (0, None))
+
+    if limit is None:
+        # Limit information not available or couldn't be parsed
+        return False
+
+    if total_storage >= limit:
+        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")
+        return True
+    else:
+        bt.logging.trace(
+            f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
         )
         return False
 

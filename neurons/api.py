@@ -11,6 +11,7 @@ import asyncio
 import aioredis
 import argparse
 import traceback
+import websocket
 import bittensor as bt
 
 from typing import List, Optional, Tuple, Dict, Any
@@ -47,6 +48,7 @@ from storage.shared.utils import (
 )
 
 from storage.validator.utils import (
+    get_available_query_miners,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 
@@ -239,7 +241,8 @@ class neuron:
 
         self.step = 0
 
-        self._top_n_validators = self.get_top_n_validators()
+        self._top_n_validators = None
+        self.get_top_n_validators()
 
     # TODO: Develop the agreement gossip protocol across validators to accept storage requests
     # and accept retrieve requests given agreement of top n % stake
@@ -256,12 +259,12 @@ class neuron:
 
     @property
     def top_n_validators(self):
-        if self._top_n_validatrs == None or should_checkpoint(self):
+        if self._top_n_validators == None or should_checkpoint(self):
             self._top_n_validators = self.get_top_n_validators()
         return self._top_n_validators
 
     async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
-        bt.logging.debug(f"store_user_data() {synapse.dict()}")
+        bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
         data_hash = await self.store_broadband(
             encrypted_data=synapse.encrypted_data,
             encryption_payload=synapse.encryption_payload,
@@ -289,7 +292,7 @@ class neuron:
         self, synapse: protocol.RetrieveUser
     ) -> protocol.RetrieveUser:
         data, payload = await self.retrieve_broadband(synapse.data_hash)
-        bt.logging.debug(f"returning user data: {data}")
+        bt.logging.debug(f"returning user data: {data[:100]}")
         bt.logging.debug(f"returning user payload: {payload}")
         synapse.encrypted_data = data
         synapse.encryption_payload = (
@@ -314,6 +317,58 @@ class neuron:
 
     async def retrieve_priority(self, synapse: protocol.RetrieveUser) -> float:
         return 0.0
+
+    async def ping_uids(self, uids):
+        """
+        Ping a list of UIDs to check their availability.
+        Returns a tuple with a list of successful UIDs and a list of failed UIDs.
+        """
+        axons = [self.metagraph.axons[uid] for uid in uids]
+        responses = await self.dendrite(
+            axons,
+            bt.Synapse(),
+            deserialize=False,
+            timeout=3,
+        )
+        successful_uids = [
+            uid
+            for uid, response in zip(uids, responses)
+            if response.dendrite.status_code == 200
+        ]
+        failed_uids = [
+            uid
+            for uid, response in zip(uids, responses)
+            if response.dendrite.status_code != 200
+        ]
+        bt.logging.trace("successful uids:", successful_uids)
+        bt.logging.trace("failed uids    :", failed_uids)
+        return successful_uids, failed_uids
+
+    # TODO: This is still giving us UIDs that are going to timeout. What the fuck?
+    async def compute_and_ping_chunks(self, distributions):
+        for dist in distributions:
+            uids = dist["uids"]
+            successful_uids, failed_uids = await self.ping_uids(uids)
+            if len(successful_uids) < len(uids):
+                # Reroll for specific UIDs that did not succeed
+                new_uids = await get_available_query_miners(
+                    self, k=len(uids), exclude=failed_uids
+                )
+                bt.logging.trace("new uids:", new_uids)
+                # Update the distribution with new UIDs
+                dist["uids"] = tuple(new_uids)  # Assuming new_uids is a list of UIDs
+
+        # Continue with your logic using the updated distributions
+        bt.logging.trace("new distributions:", distributions)
+        return distributions
+
+    async def reroll_distribution(self, distribution, failed_uids):
+        # Get new UIDs to replace the failed ones
+        new_uids = await get_available_query_miners(
+            self, k=len(failed_uids), exclude=failed_uids
+        )
+        distribution["uids"] = new_uids
+        return distribution
 
     async def store_broadband(self, encrypted_data, encryption_payload, R=3, k=10):
         """
@@ -350,11 +405,11 @@ class neuron:
             g, h = setup_CRS(curve=self.config.neuron.curve)
 
             bt.logging.debug(f"type(chunk): {type(chunk)}")
-            bt.logging.debug(f"chunk: {chunk}")
+            bt.logging.debug(f"chunk: {chunk[:100]}")
             chunk = chunk.encode("utf-8") if isinstance(chunk, str) else chunk
             b64_encoded_chunk = await asyncio.to_thread(base64.b64encode, chunk)
             b64_encoded_chunk = b64_encoded_chunk.decode("utf-8")
-            bt.logging.debug(f"b64_encoded_chunk: {b64_encoded_chunk}")
+            bt.logging.debug(f"b64_encoded_chunk: {b64_encoded_chunk[:100]}")
 
             synapse = protocol.Store(
                 encrypted_data=b64_encoded_chunk,
@@ -363,10 +418,7 @@ class neuron:
                 h=ecc_point_to_hex(h),
                 seed=get_random_bytes(32).hex(),
             )
-            bt.logging.debug(f"synapse created...")
 
-            # TODO: do this more elegantly, possibly reroll with fresh miner
-            # uids to get back to redundancy factor R before querying
             uids = [
                 uid
                 for uid in uids
@@ -381,7 +433,7 @@ class neuron:
                 timeout=self.config.api.store_timeout,
             )
 
-            chunk_size = sys.getsizeof(chunk)
+            chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
             bt.logging.debug(f"chunk size: {chunk_size}")
 
             start = time.time()
@@ -389,7 +441,7 @@ class neuron:
                 full_hash,
                 chunk_hash,
                 [self.hotkeys[uid] for uid in uids],
-                chunk_size,
+                chunk_size,  # this should be len(chunk) but we need to fix the chunking
                 self.database,
             )
             end = time.time()
@@ -439,69 +491,145 @@ class neuron:
                 f"handle_uid_operations time for uid {uid} : {time.time()-ss}"
             )
 
-        bt.logging.debug(f"store_broadband() {encrypted_data}")
+            return {"chunk_hash": chunk_hash, "uid": uid, "verified": verified}
 
-        tasks = []
-        chunks = []
-        uids_nested = []
-        chunk_hashes = []
+        async def semaphore_query_miners(distributions):
+            tasks = []
+            async with semaphore:
+                for i, dist in enumerate(distributions):
+                    bt.logging.trace(
+                        f"Start index: {dist['start_idx']}, End index: {dist['end_idx']}"
+                    )
+                    chunk = encrypted_data[dist["start_idx"] : dist["end_idx"]]
+                    bt.logging.trace(f"chunk: {chunk[:100]}")
+                    dist["chunk_hash"] = hash_data(chunk)
+                    bt.logging.debug(
+                        f"Chunk {i} | uid distribution: {dist['uids']} | size: {dist['chunk_size']}"
+                    )
+
+                    # Create an asyncio task for each chunk processing
+                    task = asyncio.create_task(
+                        store_chunk_group(dist["chunk_hash"], chunk, dist["uids"])
+                    )
+                    tasks.append(task)
+
+            bt.logging.debug(f"gathering broadband tasks: {pformat(tasks)}")
+            responses_nested = await asyncio.gather(*tasks)
+
+            # Update the distributions with respones
+            for i, responses in enumerate(responses_nested):
+                distributions[i]["responses"] = responses
+            return distributions
+
+        async def semaphore_query_uid_operations(distributions):
+            tasks = []
+            for dist in distributions:
+                chunk_hash = dist["chunk_hash"]
+                chunk_size = dist["chunk_size"]
+                for uid, response in zip(dist["uids"], dist["responses"]):
+                    task = asyncio.create_task(
+                        handle_uid_operations(uid, response, chunk_hash, chunk_size)
+                    )
+                    tasks.append(task)
+            uid_verified_dict_list = await asyncio.gather(*tasks)
+            return uid_verified_dict_list
+
+        async def create_initial_distributions(encrypted_data, R, k):
+            dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+                self,
+                sys.getsizeof(encrypted_data),
+                R,
+                k,
+            )
+            # Ping first to see if we need to reroll instead of waiting for the timeout
+            distributions = [dist async for dist in dist_gen]
+            distributions = await self.compute_and_ping_chunks(distributions)
+            return distributions
+
+        bt.logging.debug(f"store_broadband() {encrypted_data[:100]}")
+
         full_hash = hash_data(encrypted_data)
         bt.logging.debug(f"full hash: {full_hash}")
+
+        # Check and see if hash already exists, reject if so.
+        if await get_ordered_metadata(full_hash, self.database):
+            bt.logging.warning(f"Hash {full_hash} already exists on the network.")
+            return full_hash
+
         full_size = sys.getsizeof(encrypted_data)
         bt.logging.debug(f"full size: {full_size}")
-        ss = time.time()
 
-        async with semaphore:
-            start = time.time()
-            for i, dist in enumerate(
-                compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
-                    self, encrypted_data, R, k
+        # Sometimes this can fail, try/catch and retry for starters...
+        # Compute the chunk distribution
+        retries = 0
+        while retries < 3:
+            try:
+                distributions = await create_initial_distributions(encrypted_data, R, k)
+                break
+            except websocket._exceptions.WebSocketConnectionClosedException:
+                bt.logging.warning(
+                    f"Failed to create initial distributions, retrying..."
                 )
-            ):
-                uids_nested.append(dist["uids"])
-                chunk_size = sys.getsizeof(dist["chunk"])
-                bt.logging.debug(f"chunk_size: {chunk_size}")
-                bt.logging.debug(f"Chunk {i} | size: {chunk_size}")
-                start_inner = time.time()
-                bt.logging.debug(f"Chunk {i} | uid distribution: {dist['uids']}")
-                chunks.append(dist["chunk"])
-                chunk_hashes.append(dist["chunk_hash"])
-
-                # Create an asyncio task for each chunk processing
-                task = asyncio.create_task(
-                    store_chunk_group(dist["chunk_hash"], dist["chunk"], dist["uids"])
+                retries += 1
+            except Exception as e:
+                bt.logging.warning(
+                    f"Failed to create initial distributions: {e}, retrying..."
                 )
-                tasks.append(task)
+                retries += 1
 
-                end_inner = time.time()
-                bt.logging.debug(f"tasks inner time: {end_inner-start_inner}")
+        bt.logging.trace(f"computed distributions: {pformat(distributions)}")
 
-        bt.logging.debug(f"gathering broadband tasks: {pformat(tasks)}")
-        start_tasks = time.time()
-        responses_nested = await asyncio.gather(*tasks)
-        end_tasks = time.time()
-        bt.logging.debug(f"tasks gather time: {end_tasks - start_tasks}")
-
-        tasks = []
-        for i, (uids, responses) in enumerate(zip(uids_nested, responses_nested)):
-            for uid, response in zip(uids, responses):
-                tasks.append(
-                    asyncio.create_task(
-                        handle_uid_operations(
-                            uid, response, chunk_hashes[i], chunk_size
-                        )
+        chunk_hashes = []
+        retry_dists = [None]  # sentinel for first iteration
+        retries = 0
+        while len(distributions) > 0 and retries < 3:
+            async with semaphore:
+                # Store on the network: query miners for each chunk
+                # Updated distributions now contain responses from the network
+                updated_distributions = await semaphore_query_miners(distributions)
+                # Verify the responses and store the metadata for each verified response
+                verifications = await semaphore_query_uid_operations(
+                    updated_distributions
+                )
+                if (
+                    chunk_hashes == []
+                ):  # First time only. Grab all hashes in order after processed.
+                    chunk_hashes.extend(
+                        [dist["chunk_hash"] for dist in updated_distributions]
                     )
-                )
-        asyncio.gather(*tasks)
 
-        ee = time.time()
-        bt.logging.debug(f"Full broadband time: {ee-ss}")
+                # Process verification results and reroll failed distributions in a single loop
+                distributions = (
+                    []
+                )  # reset original distributions to populate for next round
+                for i, dist in enumerate(updated_distributions):
+                    # Get verification status for the current distribution
+                    bt.logging.trace(f"verifications: {pformat(verifications)}")
+
+                    # Check if any UID in the distribution failed verification
+                    if any(not v["verified"] for v in verifications):
+                        # Extract failed UIDs
+                        failed_uids = [
+                            v["uid"] for v in verifications if not v["verified"]
+                        ]
+                        bt.logging.trace(f"failed uids: {pformat(failed_uids)}")
+                        # Reroll distribution with failed UIDs
+                        rerolled_dist = await self.reroll_distribution(
+                            dist, failed_uids
+                        )
+                        bt.logging.trace(
+                            f"rerolled uids: {pformat(rerolled_dist['uids'])}"
+                        )
+                        # Replace the original distribution with the rerolled one
+                        distributions.append(rerolled_dist)
+
+            retries += 1
 
         # Update the chunk hash mapping for this entire file
         await store_file_chunk_mapping_ordered(
             full_hash=full_hash,
             chunk_hashes=chunk_hashes,
-            chunk_indices=list(range(len(chunks))),
+            chunk_indices=list(range(len(chunk_hashes))),
             encryption_payload=encryption_payload,
             database=self.database,
         )
@@ -551,32 +679,48 @@ class neuron:
         # Get the hotkeys/uids to query
         tasks = []
         total_size = 0
-        bt.logging.debug(f"ordered metadata: {ordered_metadata}")
+        bt.logging.debug(f"ordered metadata: {pformat(ordered_metadata)}")
         # TODO: change this to use retrieve_mutually_exclusive_hotkeys_full_hash
         # to avoid possibly double querying miners for greater retrieval efficiency
-        for chunk_metadata in ordered_metadata:
-            uids = [self.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]]
-            total_size += chunk_metadata["size"]
-            tasks.append(
-                asyncio.create_task(
-                    retrieve_chunk_group(chunk_metadata["chunk_hash"], uids)
-                )
-            )
-        responses = await asyncio.gather(*tasks)
 
-        chunks = {}
-        for i, response_group in enumerate(responses):
-            for response in response_group:
-                verified = verify_retrieve_with_seed(response)
-                if verified:
-                    # Add to final chunks dict
-                    if i not in list(chunks.keys()):
-                        chunks[i] = base64.b64decode(response.data)
-                else:
-                    bt.logging.error(
-                        f"Failed to verify store commitment from UID: {uid}"
+        async with semaphore:
+            for chunk_metadata in ordered_metadata:
+                bt.logging.debug(f"chunk metadata: {chunk_metadata}")
+                uids = [
+                    self.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]
+                ]
+                total_size += chunk_metadata["size"]
+                tasks.append(
+                    asyncio.create_task(
+                        retrieve_chunk_group(chunk_metadata["chunk_hash"], uids)
                     )
+                )
+            responses = await asyncio.gather(*tasks)
 
+            chunks = {}
+            for i, response_group in enumerate(responses):
+                for response in response_group:
+                    if response.dendrite.status_code != 200:
+                        bt.logging.debug(f"failed response: {response.dendrite.dict()}")
+                        continue
+                    verified = verify_retrieve_with_seed(response)
+                    if verified:
+                        # Add to final chunks dict
+                        if i not in list(chunks.keys()):
+                            bt.logging.debug(
+                                f"Adding chunk {i} to chunks, size: {sys.getsizeof(response.data)}"
+                            )
+                            chunks[i] = base64.b64decode(response.data)
+                            bt.logging.debug(f"chunk {i} | {chunks[i][:100]}")
+                    else:
+                        bt.logging.error(
+                            f"Failed to verify store commitment from UID: {uid}"
+                        )
+
+        bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
+        bt.logging.trace(
+            f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}"
+        )
         # Reconstruct the data
         data = b"".join(chunks.values())
 

@@ -144,17 +144,15 @@ class RetrieveData:
         bittensor.logging.debug("query axons:", axons)
 
         # Query axons
-        responses = dendrite.query(axons, synapse, deserialize=False)
-        bittensor.logging.debug("axon responses:", responses)
-
+        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
         success = False
         for response in responses:
-            bittensor.logging.trace(f"response: {response}")
+            bittensor.logging.trace(f"response: {response.dendrite.dict()}")
             if response.dendrite.status_code != 200 or response.encrypted_data == None:
                 continue
 
             # Decrypt the response
-            bittensor.logging.trace(f"encrypted_data: {response.encrypted_data}")
+            bittensor.logging.trace(f"encrypted_data: {response.encrypted_data[:100]}")
             encrypted_data = base64.b64decode(response.encrypted_data)
             bittensor.logging.debug(
                 f"encryption_payload: {response.encryption_payload}"
@@ -174,7 +172,7 @@ class RetrieveData:
                     response.encryption_payload,
                     bytes(wallet.coldkey.private_key.hex(), "utf-8"),
                 )
-            bittensor.logging.trace(f"decrypted_data: {decrypted_data}")
+            bittensor.logging.trace(f"decrypted_data: {decrypted_data[:100]}")
             success = True
 
         if success:
