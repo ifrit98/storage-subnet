@@ -433,7 +433,7 @@ class neuron:
                 timeout=self.config.api.store_timeout,
             )
 
-            chunk_size = sys.getsizeof(chunk)
+            chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
             bt.logging.debug(f"chunk size: {chunk_size}")
 
             start = time.time()
@@ -441,7 +441,7 @@ class neuron:
                 full_hash,
                 chunk_hash,
                 [self.hotkeys[uid] for uid in uids],
-                chunk_size,
+                chunk_size,  # this should be len(chunk) but we need to fix the chunking
                 self.database,
             )
             end = time.time()
@@ -538,8 +538,11 @@ class neuron:
         bt.logging.debug(f"full size: {full_size}")
 
         # Compute the chunk distribution
-        dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(
-            self, sys.getsizeof(encrypted_data), R, k
+        dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+            self,
+            sys.getsizeof(encrypted_data),
+            R,
+            k,
         )
         # Ping first to see if we need to reroll instead of waiting for the timeout
         distributions = [dist async for dist in dist_gen]

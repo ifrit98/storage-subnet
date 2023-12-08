@@ -748,13 +748,36 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(self, data, 
         yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
 
 
+def calculate_chunk_indices(data_size, num_chunks):
+    """
+    Calculate the start and end indices for each chunk.
+
+    :param data_size: The total size of the data to be chunked.
+    :param num_chunks: The desired number of chunks.
+    :return: A list of tuples, each tuple containing the start and end index of a chunk.
+    """
+    chunk_size = max(1, data_size // num_chunks)  # Determine the size of each chunk
+    indices = []
+
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = min(start_idx + chunk_size, data_size)
+        indices.append((start_idx, end_idx))
+
+        # Adjust the end index for the last chunk if necessary
+        if i == num_chunks - 1 and end_idx < data_size:
+            indices[-1] = (start_idx, data_size)
+
+    return indices
+
+
 async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(
-    self, data_size, R, k
+    self, data_size, R, k, chunk_size=None
 ):
     available_uids = await get_available_query_miners(self, k=k)
-    chunk_size = optimal_chunk_size(data_size, len(available_uids), R)
+    chunk_size = chunk_size or optimal_chunk_size(data_size, len(available_uids), R)
     available_uids = adjust_uids_to_multiple(available_uids, R)
-    chunk_sizes = [chunk_size] * (data_size - 1) + [data_size % chunk_size]
+    chunk_indices = calculate_chunk_indices(data_size, chunk_size)
 
     if R > len(available_uids):
         raise ValueError(
@@ -773,12 +796,13 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids2(
                 break
             uid_groups.append(group)
 
-    for i, (chunk_size, uid_group) in enumerate(zip(chunk_sizes, uid_groups)):
+    for i, ((start, end), uid_group) in enumerate(zip(chunk_indices, uid_groups)):
         yield {
             "chunk_size": chunk_size,
-            "start_idx": i * chunk_size,
-            "end_idx": (i + 1) * chunk_size,
+            "start_idx": start,
+            "end_idx": end,
             "uids": uid_group,
+            "chunk_index": i,
         }
 
 

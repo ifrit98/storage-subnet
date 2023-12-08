@@ -339,7 +339,9 @@ class neuron:
                     # Prepare storage for the data for particular miner
                     response_storage = {
                         "prev_seed": synapse.seed,
-                        "size": sys.getsizeof(encrypted_data),
+                        "size": sys.getsizeof(
+                            encrypted_data
+                        ),  # in bytes, not len(data)
                         "encryption_payload": encryption_payload,
                     }
                     bt.logging.trace(
