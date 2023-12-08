@@ -143,7 +143,7 @@ class RetrieveData:
         axons = [mg.axons[uid] for uid in query_uids]
         bittensor.logging.debug("query axons:", axons)
 
-        with bittensor.__console__.status(":satellite: Storing data..."):
+        with bittensor.__console__.status(":satellite: Retreiving data..."):
             # Query axons
             responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
             success = False

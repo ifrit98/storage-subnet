@@ -799,11 +799,6 @@ class neuron:
         # Reconstruct the data
         data = b"".join(chunks.values())
 
-        if total_size != sys.getsizeof(data):
-            bt.logging.warning(
-                f"Data reconstruction has different size than metadata: {total_size} != {sys.getsizeof(data)}"
-            )
-
         encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
         bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
         return data, encryption_payload
