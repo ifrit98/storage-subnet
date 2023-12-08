@@ -335,7 +335,7 @@ async def get_available_query_miners(self, k, exclude=None):
         list: A list of pseudorandomly selected available miner UIDs.
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
-    muids = get_available_uids(self)
+    muids = get_available_uids(self, exclude=exclude)
     muids_nonfull = [
         uid
         for uid in muids
