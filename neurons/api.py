@@ -49,6 +49,7 @@ from storage.validator.verify import (
     verify_store_with_seed,
     verify_retrieve_with_seed,
 )
+from storage.validator.encryption import decrypt_data_with_private_key
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import ttl_get_block
 from storage.validator.reward import apply_reward_scores
@@ -277,8 +278,19 @@ class neuron:
             - The method logs detailed information about the storage process for monitoring and debugging.
         """
         bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
+
+        validator_encrypted_data, valdiator_encryption_payload = encrypt_data(
+            synapse.encrypted_data, self.wallet
+        )
+
+        if isinstance(validator_encryption_payload, dict):
+            validator_encryption_payload = json.dumps(validator_encryption_payload)
+            await database.set(
+                f"validator:payload:{full_hash}", validator_encryption_payload
+            )
+
         data_hash = await self.store_broadband(
-            encrypted_data=synapse.encrypted_data,
+            encrypted_data=validator_encrypted_data,
             encryption_payload=synapse.encryption_payload,
         )
         synapse.data_hash = data_hash
@@ -392,7 +404,6 @@ class neuron:
         bt.logging.trace("failed uids    :", failed_uids)
         return successful_uids, failed_uids
 
-    # TODO: This is still giving us UIDs that are going to timeout. What the fuck?
     async def compute_and_ping_chunks(self, distributions):
         """
         Asynchronously evaluates the availability of miners for the given chunk distributions by pinging them.
@@ -818,10 +829,18 @@ class neuron:
         )
         # Reconstruct the data
         data = b"".join(chunks.values())
+        validator_encryption_payload = await retrieve_encryption_payload(
+            "validator:" + full_hash, self.database
+        )
+        decrypted_data = decrypt_data_with_private_key(
+            data,
+            encryption_payload,
+            bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
+        )
 
         encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
         bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
-        return data, encryption_payload
+        return decrypted_data, encryption_payload
 
     def run(self):
         bt.logging.info("run()")
