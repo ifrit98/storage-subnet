@@ -152,26 +152,21 @@ def resync_metagraph(self: "validator.neuron.neuron"):
     metagraph_axon_info_updated = previous_metagraph.axons != self.metagraph.axons
 
     if metagraph_axon_info_updated:
-        bt.logging.info(
-            "Metagraph updated, re-syncing hotkeys, dendrite pool and moving averages"
-        )
+        bt.logging.info("Metagraph updated, re-syncing moving averages")
 
         # Zero out all hotkeys that have been replaced.
-        for uid, hotkey in enumerate(self.hotkeys):
+        for uid, hotkey in enumerate(self.metagraph.hotkeys):
             if hotkey != self.metagraph.hotkeys[uid]:
                 self.moving_averaged_scores[uid] = 0  # hotkey has been replaced
 
         # Check to see if the metagraph has changed size.
         # If so, we need to add new hotkeys and moving averages.
-        if len(self.hotkeys) < len(self.metagraph.hotkeys):
+        if len(self.moving_averaged_scores) < len(self.metagraph.hotkeys):
             # Update the size of the moving average scores.
             new_moving_average = torch.zeros((self.metagraph.n)).to(self.device)
-            min_len = min(len(self.hotkeys), len(self.moving_averaged_scores))
+            min_len = min(len(self.metagraph.hotkeys), len(self.moving_averaged_scores))
             new_moving_average[:min_len] = self.moving_averaged_scores[:min_len]
             self.moving_averaged_scores = new_moving_average
-
-        # Update the hotkeys.
-        self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
 
 def check_uid_availability(
@@ -202,7 +197,6 @@ def save_state(self):
     try:
         neuron_state_dict = {
             "neuron_weights": self.moving_averaged_scores.to("cpu").tolist(),
-            "neuron_hotkeys": self.hotkeys,
         }
         torch.save(neuron_state_dict, f"{self.config.neuron.full_path}/model.torch")
         bt.logging.success(
@@ -234,7 +228,6 @@ def load_state(self):
         # Check for nans in saved state dict
         elif not torch.isnan(neuron_weights).any():
             self.moving_averaged_scores = neuron_weights.to(self.device)
-        self.hotkeys = state_dict["neuron_hotkeys"]
         bt.logging.success(
             prefix="Reloaded model",
             sufix=f"<blue>{ self.config.neuron.full_path }/model.torch</blue>",

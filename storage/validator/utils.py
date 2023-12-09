@@ -363,7 +363,7 @@ async def get_available_query_miners(self, k, exclude=None):
     muids_nonfull = [
         uid
         for uid in muids
-        if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
+        if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
     ]
     return get_pseudorandom_uids(self.subtensor, muids, k=k)
 

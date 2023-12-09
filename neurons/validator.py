@@ -200,7 +200,6 @@ class neuron:
             netuid=self.config.netuid, network=self.subtensor.network, sync=False
         )  # Make sure not to sync without passing subtensor
         self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
-        self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
@@ -309,7 +308,7 @@ class neuron:
         avaialble_uids = [
             uid
             for uid in uids
-            if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
+            if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
         ]
 
         axons = [self.metagraph.axons[uid] for uid in avaialble_uids]
@@ -619,7 +618,7 @@ class neuron:
                     f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
                 )
 
-            hotkey = self.hotkeys[uid]
+            hotkey = self.metagraph.hotkeys[uid]
 
             if verified == None:
                 continue  # We don't have any data for this hotkey, skip it.
@@ -668,7 +667,7 @@ class neuron:
 
     async def handle_retrieve(self, uid):
         bt.logging.debug(f"handle_retrieve uid: {uid}")
-        hotkey = self.hotkeys[uid]
+        hotkey = self.metagraph.hotkeys[uid]
         keys = await self.database.hkeys(f"hotkey:{hotkey}")
 
         if keys == []:
@@ -753,10 +752,13 @@ class neuron:
         uids = [
             uid
             for uid in uids
-            if await get_metadata_for_hotkey(self.hotkeys[uid], self.database) != {}
+            if await get_metadata_for_hotkey(self.metagraph.hotkeys[uid], self.database)
+            != {}
         ]
         bt.logging.debug(f"UIDs to query   : {uids}")
-        bt.logging.debug(f"Hotkeys to query: {[self.hotkeys[uid][:5] for uid in uids]}")
+        bt.logging.debug(
+            f"Hotkeys to query: {[self.metagraph.hotkeys[uid][:5] for uid in uids]}"
+        )
 
         tasks = []
         for uid in uids:
@@ -775,7 +777,7 @@ class neuron:
         ).to(self.device)
 
         for idx, (uid, (response, data_hash)) in enumerate(zip(uids, response_tuples)):
-            hotkey = self.hotkeys[uid]
+            hotkey = self.metagraph.hotkeys[uid]
 
             if response == None:
                 continue  # We don't have any data for this hotkey, skip it.
@@ -931,20 +933,19 @@ class neuron:
         bt.logging.info(f"forward step: {self.step}")
 
         # Only store so often, say every 10 steps
-        if self.step % self.config.neuron.store_step_length == 0:
-            try:
-                # Store some random data
-                bt.logging.info("initiating store random")
-                event = await self.store_random_data()
+        try:
+            # Store some random data
+            bt.logging.info("initiating store random")
+            event = await self.store_random_data()
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"STORE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to store random data: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to store random data: {e}")
 
         # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
         try:
@@ -961,52 +962,50 @@ class neuron:
         except Exception as e:
             bt.logging.error(f"Failed to challenge data: {e}")
 
-        if self.step % self.config.neuron.retrieve_step_length == 0:
-            try:
-                # Retrieve some data
-                bt.logging.info("initiating retrieve")
-                event = await self.retrieve()
+        try:
+            # Retrieve some data
+            bt.logging.info("initiating retrieve")
+            event = await self.retrieve()
 
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+            if self.config.neuron.verbose:
+                bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-                # Log event
-                log_event(self, event)
+            # Log event
+            log_event(self, event)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to retrieve data: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to retrieve data: {e}")
 
-        if self.step % self.config.neuron.tier_update_step_length == 0:
-            try:
-                # Update miner tiers
-                bt.logging.info("Computing tiers")
-                await compute_all_tiers(self.database)
+        try:
+            # Update miner tiers
+            bt.logging.info("Computing tiers")
+            await compute_all_tiers(self.database)
 
-                # Fetch miner statistics and usage data.
-                stats = await get_miner_statistics(self.database)
+            # Fetch miner statistics and usage data.
+            stats = await get_miner_statistics(self.database)
 
-                # Log all chunk hash <> hotkey pairs
-                chunk_hash_map = await get_all_chunk_hashes(self.database)
+            # Log all chunk hash <> hotkey pairs
+            chunk_hash_map = await get_all_chunk_hashes(self.database)
 
-                # Log the statistics and hashmap to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log(stats)
-                    self.wandb.log(chunk_hash_map)
+            # Log the statistics and hashmap to wandb.
+            if not self.config.wandb.off:
+                self.wandb.log(stats)
+                self.wandb.log(chunk_hash_map)
 
-            except Exception as e:
-                bt.logging.error(f"Failed to compute tiers: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to compute tiers: {e}")
 
-            try:
-                # Update the total network storage
-                total_storage = await total_network_storage(self.database)
-                bt.logging.info(f"Total network storage: {total_storage}")
+        try:
+            # Update the total network storage
+            total_storage = await total_network_storage(self.database)
+            bt.logging.info(f"Total network storage: {total_storage}")
 
-                # Log the total storage to wandb.
-                if not self.config.wandb.off:
-                    self.wandb.log({"total_storage": total_storage})
+            # Log the total storage to wandb.
+            if not self.config.wandb.off:
+                self.wandb.log({"total_storage": total_storage})
 
-            except Exception as e:
-                bt.logging.error(f"Failed to calculate total network storage: {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to calculate total network storage: {e}")
 
 
 def main():

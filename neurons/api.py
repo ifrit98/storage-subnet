@@ -132,7 +132,6 @@ class neuron:
             netuid=self.config.netuid, network=self.subtensor.network, sync=False
         )  # Make sure not to sync without passing subtensor
         self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
-        self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
@@ -504,7 +503,9 @@ class neuron:
             uids = [
                 uid
                 for uid in uids
-                if not await hotkey_at_capacity(self.hotkeys[uid], self.database)
+                if not await hotkey_at_capacity(
+                    self.metagraph.hotkeys[uid], self.database
+                )
             ]
 
             axons = [self.metagraph.axons[uid] for uid in uids]
@@ -522,7 +523,7 @@ class neuron:
             await store_chunk_metadata(
                 full_hash,
                 chunk_hash,
-                [self.hotkeys[uid] for uid in uids],
+                [self.metagraph.hotkeys[uid] for uid in uids],
                 chunk_size,  # this should be len(chunk) but we need to fix the chunking
                 self.database,
             )
@@ -550,7 +551,7 @@ class neuron:
                 start = time.time()
                 # Store in the database according to the data hash and the miner hotkey
                 await add_metadata_to_hotkey(
-                    self.hotkeys[uid],
+                    self.metagraph.hotkeys[uid],
                     chunk_hash,
                     response_storage,  # seed + size + encryption keys
                     self.database,
@@ -564,7 +565,7 @@ class neuron:
 
             # Update the storage statistics
             await update_statistics(
-                ss58_address=self.hotkeys[uid],
+                ss58_address=self.metagraph.hotkeys[uid],
                 success=verified,
                 task_type="store",
                 database=self.database,
@@ -780,7 +781,8 @@ class neuron:
             for chunk_metadata in ordered_metadata:
                 bt.logging.debug(f"chunk metadata: {chunk_metadata}")
                 uids = [
-                    self.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]
+                    self.metagraph.hotkeys.index(hotkey)
+                    for hotkey in chunk_metadata["hotkeys"]
                 ]
                 total_size += chunk_metadata["size"]
                 tasks.append(
@@ -853,7 +855,7 @@ class neuron:
                     lite=True,
                     block=self.prev_step_block,
                 )
-                self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
+                self.metagraph.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
         # If someone intentionally stops the miner, it'll safely terminate operations.
         except KeyboardInterrupt:
