@@ -45,6 +45,13 @@ from storage.validator.utils import (
     get_available_query_miners,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
+from storage.shared.ecc import (
+    hash_data,
+    setup_CRS,
+    ECCommitment,
+    ecc_point_to_hex,
+    hex_to_ecc_point,
+)
 from storage.validator.verify import (
     verify_store_with_seed,
     verify_retrieve_with_seed,
@@ -62,6 +69,10 @@ from storage.validator.database import (
     retrieve_encryption_payload,
 )
 from storage.validator.bonding import update_statistics
+from storage.validator.encryption import (
+    decrypt_data,
+    encrypt_data,
+)
 
 
 class neuron:
@@ -193,12 +204,6 @@ class neuron:
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
 
-        if self.config.neuron.epoch_length_override:
-            self.config.neuron.epoch_length = self.config.neuron.epoch_length_override
-        else:
-            self.config.neuron.epoch_length = 100
-        bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
-
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
@@ -279,8 +284,15 @@ class neuron:
         """
         bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
 
-        validator_encrypted_data, valdiator_encryption_payload = encrypt_data(
-            synapse.encrypted_data, self.wallet
+
+        decoded_data = base64.b64decode(synapse.encrypted_data)
+        decoded_data = (
+            decoded_data.encode("utf-8")
+            if isinstance(decoded_data, str)
+            else decoded_data
+        )
+        validator_encrypted_data, validator_encryption_payload = encrypt_data(
+            decoded_data, self.wallet
         )
 
         if isinstance(validator_encryption_payload, dict):
@@ -289,7 +301,8 @@ class neuron:
                 f"validator:payload:{full_hash}", validator_encryption_payload
             )
 
-        data_hash = await self.store_broadband(
+        data_hash = hash_data(decoded_data) # Hash the original data to avoid data confusion
+        _ = await self.store_broadband(
             encrypted_data=validator_encrypted_data,
             encryption_payload=synapse.encryption_payload,
         )
@@ -304,10 +317,11 @@ class neuron:
         if synapse.dendrite.hotkey in self.top_n_validators:
             return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
         # Otherwise, reject.
-        return (
-            True,
-            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
-        )
+        return False, "Debug all whitelisted"
+        # return (
+        #     True,
+        #     f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        # )
 
     async def store_priority(self, synapse: protocol.StoreUser) -> float:
         caller_uid = self.metagraph.hotkeys.index(
@@ -361,10 +375,11 @@ class neuron:
         if synapse.dendrite.hotkey in self.top_n_validators:
             return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
         # Otherwise, reject.
-        return (
-            True,
-            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
-        )
+        return False, "Debug all whitelisted."
+        # return (
+        #     True,
+        #     f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        # )
 
     async def retrieve_priority(self, synapse: protocol.RetrieveUser) -> float:
         caller_uid = self.metagraph.hotkeys.index(
@@ -407,31 +422,50 @@ class neuron:
     async def compute_and_ping_chunks(self, distributions):
         """
         Asynchronously evaluates the availability of miners for the given chunk distributions by pinging them.
-        If certain miners are not available, the function rerolls the distribution, selecting new miners as replacements.
+        Rerolls the distribution to replace failed miners, ensuring exactly k successful miners are selected.
 
         Parameters:
             distributions (list of dicts): A list of chunk distribution dictionaries, each containing
                                         information about chunk indices and assigned miner UIDs.
 
         Returns:
-            list of dicts: The updated list of chunk distributions with possibly changed miner UIDs based on availability.
+            list of dicts: The updated list of chunk distributions with exactly k successful miner UIDs.
 
         Note:
             - This function is crucial for ensuring that data chunks are assigned to available and responsive miners.
             - Pings miners based on their UIDs and updates the distributions accordingly.
             - Logs the new set of UIDs and distributions for traceability.
         """
+        max_retries = 3  # Define the maximum number of retries
+        target_number_of_uids = len(distributions[0]['uids'])  # Assuming k is the length of the uids in the first distribution
+
         for dist in distributions:
-            uids = dist["uids"]
-            successful_uids, failed_uids = await self.ping_uids(uids)
-            if len(successful_uids) < len(uids):
-                # Reroll for specific UIDs that did not succeed
+            retries = 0
+            successful_uids = set()
+
+            while len(successful_uids) < target_number_of_uids and retries < max_retries:
+                # Ping all UIDs
+                current_successful_uids, _ = await self.ping_uids(dist["uids"])
+                successful_uids.update(current_successful_uids)
+
+                # If enough UIDs are successful, select the first k items
+                if len(successful_uids) >= target_number_of_uids:
+                    dist["uids"] = tuple(sorted(successful_uids)[:target_number_of_uids])
+                    break
+
+                # Reroll for k UIDs excluding the successful ones
                 new_uids = await get_available_query_miners(
-                    self, k=len(uids), exclude=failed_uids
+                    self, k=target_number_of_uids, exclude=successful_uids
                 )
                 bt.logging.trace("new uids:", new_uids)
+
                 # Update the distribution with new UIDs
-                dist["uids"] = tuple(new_uids)  # Assuming new_uids is a list of UIDs
+                dist["uids"] = tuple(new_uids)
+                retries += 1
+
+            # Log if the maximum retries are reached without enough successful UIDs
+            if len(successful_uids) < target_number_of_uids:
+                bt.logging.warning(f"Insufficient successful UIDs for distribution: {dist}")
 
         # Continue with your logic using the updated distributions
         bt.logging.trace("new distributions:", distributions)
@@ -460,7 +494,7 @@ class neuron:
         distribution["uids"] = new_uids
         return distribution
 
-    async def store_broadband(self, encrypted_data, encryption_payload, R=3, k=10):
+    async def store_broadband(self, encrypted_data, encryption_payload, R=3, k=10, data_hash=None):
         """
         Asynchronously stores encrypted data across a distributed network by splitting it into chunks and
         assigning these chunks to various miners for storage. This method ensures redundancy and efficient
@@ -474,6 +508,7 @@ class neuron:
             encryption_payload (dict): Additional payload information required for encryption.
             R (int, optional): The redundancy factor, denoting how many times each chunk is replicated. Default is 3.
             k (int, optional): The number of miners to query for each chunk. Default is 10.
+            data_hash (str, optional): The hash of the data to be stored. If not provided, compute it. Default is None.
 
         Returns:
             str: The hash of the full data, representing its unique identifier in the network.
@@ -642,7 +677,7 @@ class neuron:
 
         bt.logging.debug(f"store_broadband() {encrypted_data[:100]}")
 
-        full_hash = hash_data(encrypted_data)
+        full_hash = data_hash or hash_data(encrypted_data)
         bt.logging.debug(f"full hash: {full_hash}")
 
         # Check and see if hash already exists, reject if so.
@@ -874,7 +909,6 @@ class neuron:
                     lite=True,
                     block=self.prev_step_block,
                 )
-                self.metagraph.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
         # If someone intentionally stops the miner, it'll safely terminate operations.
         except KeyboardInterrupt:
