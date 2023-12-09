@@ -21,7 +21,6 @@
 import wandb
 import torch
 import bittensor as bt
-from copy import deepcopy
 from storage.validator.state import ttl_get_block
 from storage import __spec_version__ as spec_version
 
@@ -30,10 +29,11 @@ def should_set_weights(self) -> bool:
     # Check if enough epoch blocks have elapsed since the last epoch.
     if self.config.neuron.disable_set_weights:
         return False
-    return (
-        ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
-        < self.prev_step_block % self.config.neuron.set_weights_epoch_length
-    )
+    return True
+    # return (
+    #     ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
+    #     < self.prev_step_block % self.config.neuron.set_weights_epoch_length
+    # )
 
 
 def set_weights(self):
@@ -42,8 +42,7 @@ def set_weights(self):
     raw_weights = torch.nn.functional.normalize(self.moving_averaged_scores, p=1, dim=0)
 
     bt.logging.debug("raw_weights", raw_weights)
-    bt.logging.debug("top10 values", deepcopy(raw_weights).sort()[:10])
-
+    bt.logging.debug("raw_weight_uids", self.metagraph.uids.to("cpu"))
     # Process the raw weights to final_weights via subtensor limitations.
     (
         processed_weight_uids,
@@ -59,18 +58,20 @@ def set_weights(self):
     bt.logging.debug("processed_weight_uids", processed_weight_uids)
 
     # Convert to uint16 weights and uids.
-    uids, uint_weights = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
+    uint_uids, uint_weights = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
         uids=processed_weight_uids, weights=processed_weights
     )
     bt.logging.debug("uint_weights", uint_weights)
+    bt.logging.debug("uint_uids", uint_uids)
 
     # Set the weights on chain via our subtensor connection.
     result = self.subtensor.set_weights(
         wallet=self.wallet,
         netuid=self.config.netuid,
-        uids=uids,
+        uids=uint_uids,
         weights=uint_weights,
         wait_for_finalization=False,
+        wait_for_inclusion=True,
         version_key=spec_version,
     )
     if result is True:
