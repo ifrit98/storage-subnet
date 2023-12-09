@@ -29,10 +29,9 @@ def should_set_weights(self) -> bool:
     # Check if enough epoch blocks have elapsed since the last epoch.
     if self.config.neuron.disable_set_weights:
         return False
-
     return (
-        ttl_get_block(self) % self.config.neuron.epoch_length
-        < self.prev_step_block % self.config.neuron.epoch_length
+        ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
+        < self.prev_step_block % self.config.neuron.set_weights_epoch_length
     )
 
 
@@ -40,10 +39,9 @@ def set_weights(self):
     # Calculate the average reward for each uid across non-zero values.
     # Replace any NaN values with 0.
     raw_weights = torch.nn.functional.normalize(self.moving_averaged_scores, p=1, dim=0)
-    bt.logging.trace("raw_weights", raw_weights)
-    bt.logging.trace("top10 values", raw_weights.sort()[0])
-    bt.logging.trace("top10 uids", raw_weights.sort()[1])
 
+    bt.logging.debug("raw_weights", raw_weights)
+    bt.logging.debug("raw_weight_uids", self.metagraph.uids.to("cpu"))
     # Process the raw weights to final_weights via subtensor limitations.
     (
         processed_weight_uids,
@@ -55,16 +53,24 @@ def set_weights(self):
         subtensor=self.subtensor,
         metagraph=self.metagraph,
     )
-    bt.logging.trace("processed_weights", processed_weights)
-    bt.logging.trace("processed_weight_uids", processed_weight_uids)
+    bt.logging.debug("processed_weights", processed_weights)
+    bt.logging.debug("processed_weight_uids", processed_weight_uids)
+
+    # Convert to uint16 weights and uids.
+    uint_uids, uint_weights = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
+        uids=processed_weight_uids, weights=processed_weights
+    )
+    bt.logging.debug("uint_weights", uint_weights)
+    bt.logging.debug("uint_uids", uint_uids)
 
     # Set the weights on chain via our subtensor connection.
     result = self.subtensor.set_weights(
         wallet=self.wallet,
         netuid=self.config.netuid,
-        uids=processed_weight_uids,
-        weights=processed_weights,
+        uids=uint_uids,
+        weights=uint_weights,
         wait_for_finalization=False,
+        wait_for_inclusion=True,
         version_key=spec_version,
     )
     if result is True:
