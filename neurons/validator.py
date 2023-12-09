@@ -860,6 +860,109 @@ class neuron:
 
         return event
 
+    async def select_new_miner_for_rebalance(
+        self, old_hotkey: str, excluded_uids: list
+    ) -> int:
+        """
+        Select a new miner for rebalancing, excluding certain miners.
+
+        Parameters:
+        - old_hotkey (str): The hotkey of the old miner to exclude.
+        - excluded_uids (list): List of UIDs to exclude from the selection.
+
+        Returns:
+        - int: UID of the new miner.
+        """
+        all_uids = list(range(len(self.metagraph.hotkeys)))
+        valid_uids = [
+            uid
+            for uid in all_uids
+            if uid not in excluded_uids and self.metagraph.hotkeys[uid] != old_hotkey
+        ]
+        return random_choice(valid_uids)
+
+    async def store_encrypted_data_on_specific_miner(
+        self,
+        encrypted_data: bytes,
+        encryption_payload: dict,
+        hotkey: str,
+        data_hash: str,
+    ):
+        """
+        Store encrypted data on a specific miner identified by hotkey.
+
+        Parameters:
+        - encrypted_data (bytes): The encrypted data to store.
+        - encryption_payload (dict): The encryption payload.
+        - hotkey (str): The hotkey of the miner where the data is to be stored.
+        - data_hash (str): The hash of the data being stored.
+        """
+        # Prepare the synapse protocol for storing data
+        synapse = protocol.Store(
+            encrypted_data=encrypted_data,
+            encryption_payload=encryption_payload,
+            data_hash=data_hash,
+            miner_hotkey=hotkey,
+        )
+
+        # Retrieve the axon for the specified miner
+        uid = self.metagraph.hotkeys.index(hotkey)
+        axon = self.metagraph.axons[uid]
+
+        # Send the store request to the miner
+        response = await self.dendrite(
+            [axon],
+            synapse,
+            deserialize=False,
+            timeout=self.config.neuron.store_timeout,
+        )
+
+    async def rebalance_data(self, k: int):
+        """
+        Rebalance data storage among miners by migrating data from a set of miners to others.
+
+        Parameters:
+        - k (int): The number of miners to query and rebalance data from.
+
+        Returns:
+        - A report of the rebalancing process.
+        """
+        # Select k miners randomly
+        source_uids = await get_available_query_miners(self, k=k)
+
+        # Fetch data hashes from each selected miner
+        data_to_migrate = {}
+        for uid in source_uids:
+            hotkey = self.metagraph.hotkeys[uid]
+            keys = await self.database.hkeys(f"hotkey:{hotkey}")
+            if keys:
+                # Select a random hash to migrate
+                data_hash = random.choice(keys).decode("utf-8")
+                data_to_migrate[data_hash] = hotkey
+
+        # Find new miners for each data hash
+        for data_hash, old_hotkey in data_to_migrate.items():
+            # Get the encrypted data from the old miner
+            data_metadata = await get_metadata_for_hotkey_and_hash(
+                old_hotkey, data_hash, self.database
+            )
+            encrypted_data = data_metadata["encrypted_data"]
+            encryption_payload = data_metadata["encryption_payload"]
+
+            # Select a new miner
+            new_uid = await self.select_new_miner_for_rebalance(old_hotkey, source_uids)
+            new_hotkey = self.metagraph.hotkeys[new_uid]
+
+            # Store data to the new miner
+            await self.store_encrypted_data_on_specific_miner(
+                encrypted_data, encryption_payload, new_hotkey, data_hash
+            )
+
+            # Delete the old data
+            await self.database.delete(f"{old_hotkey}:{data_hash}")
+
+        return f"Rebalanced {len(data_to_migrate)} data items."
+
     def run(self):
         bt.logging.info("run()")
         load_state(self)
