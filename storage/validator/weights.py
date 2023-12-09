@@ -29,11 +29,10 @@ def should_set_weights(self) -> bool:
     # Check if enough epoch blocks have elapsed since the last epoch.
     if self.config.neuron.disable_set_weights:
         return False
-    return True
-    # return (
-    #     ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
-    #     < self.prev_step_block % self.config.neuron.set_weights_epoch_length
-    # )
+    return (
+        ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
+        < self.prev_step_block % self.config.neuron.set_weights_epoch_length
+    )
 
 
 def set_weights(self):
