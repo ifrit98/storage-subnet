@@ -255,12 +255,12 @@ async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
     # Check if the hotkey is at capacity
     byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
     if byte_limit is None:
-        bt.logging.warning(f"Could not find storage limit for {hotkey}.")
+        bt.logging.trace(f"Could not find storage limit for {hotkey}.")
         return False
     try:
         limit = int(byte_limit)
     except Exception as e:
-        bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
+        bt.logging.trace(f"Could not parse storage limit for {hotkey} | {e}.")
         return False
     if total_storage >= limit:
         bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")

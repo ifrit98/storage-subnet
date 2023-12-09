@@ -860,53 +860,31 @@ class neuron:
 
         return event
 
-    async def select_new_miner_for_rebalance(
-        self, old_hotkey: str, excluded_uids: list
-    ) -> int:
-        """
-        Select a new miner for rebalancing, excluding certain miners.
-
-        Parameters:
-        - old_hotkey (str): The hotkey of the old miner to exclude.
-        - excluded_uids (list): List of UIDs to exclude from the selection.
-
-        Returns:
-        - int: UID of the new miner.
-        """
-        all_uids = list(range(len(self.metagraph.hotkeys)))
-        valid_uids = [
-            uid
-            for uid in all_uids
-            if uid not in excluded_uids and self.metagraph.hotkeys[uid] != old_hotkey
-        ]
-        return random_choice(valid_uids)
-
-    async def store_encrypted_data_on_specific_miner(
+    async def rebalance_store(
         self,
         encrypted_data: bytes,
-        encryption_payload: dict,
-        hotkey: str,
-        data_hash: str,
+        uid: str,
     ):
         """
         Store encrypted data on a specific miner identified by hotkey.
 
         Parameters:
         - encrypted_data (bytes): The encrypted data to store.
-        - encryption_payload (dict): The encryption payload.
-        - hotkey (str): The hotkey of the miner where the data is to be stored.
-        - data_hash (str): The hash of the data being stored.
+        - uid (str): The uid of the miner where the data is to be stored.
         """
         # Prepare the synapse protocol for storing data
+
+        g, h = setup_CRS()
+
         synapse = protocol.Store(
             encrypted_data=encrypted_data,
-            encryption_payload=encryption_payload,
-            data_hash=data_hash,
-            miner_hotkey=hotkey,
+            curve=self.config.neuron.curve,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            seed=get_random_bytes(32).hex(),  # 256-bit seed
         )
 
         # Retrieve the axon for the specified miner
-        uid = self.metagraph.hotkeys.index(hotkey)
         axon = self.metagraph.axons[uid]
 
         # Send the store request to the miner
@@ -916,6 +894,48 @@ class neuron:
             deserialize=False,
             timeout=self.config.neuron.store_timeout,
         )
+
+        # TODO: check if successful and error handle
+
+    async def rebalance_retrieve(self, hotkey, data_hash, metadata):
+        bt.logging.debug(
+            f"rebalance_retrieve data_hash: {data_hash[:10]} | {hotkey[:10]}"
+        )
+        uid = self.metagraph.hotkeys.index(hotkey)
+        axon = self.metagraph.axons[uid]
+
+        synapse = protocol.Retrieve(
+            data_hash=data_hash,
+            seed=get_random_bytes(32).hex(),
+        )
+
+        response = await self.dendrite(
+            [axon],
+            synapse,
+            deserialize=False,
+            timeout=self.config.neuron.retrieve_timeout,
+        )
+
+        verified = False
+        try:
+            verified = verify_retrieve_with_seed(response[0])
+            if verified:
+                metadata["prev_seed"] = synapse.seed
+                await update_metadata_for_data_hash(
+                    hotkey, data_hash, metadata, self.database
+                )
+
+                bt.logging.trace(
+                    f"Updated metadata for UID: {uid} with data: {pformat(metadata)}"
+                )
+
+            else:
+                bt.logging.error(f"Failed to verify rebalance retrieve from UID: {uid}")
+
+        except:
+            bt.logging.error(f"Failed to verify rebalance retrieve from UID: {uid}")
+
+        return response, verified
 
     async def rebalance_data(self, k: int):
         """
@@ -929,6 +949,7 @@ class neuron:
         """
         # Select k miners randomly
         source_uids = await get_available_query_miners(self, k=k)
+        bt.logging.debug(f"source_uids: {source_uids}")
 
         # Fetch data hashes from each selected miner
         data_to_migrate = {}
@@ -940,26 +961,30 @@ class neuron:
                 data_hash = random.choice(keys).decode("utf-8")
                 data_to_migrate[data_hash] = hotkey
 
+        bt.logging.debug(f"data_to_migrate: {data_to_migrate}")
+
+        # TODO: do these as coroutines
         # Find new miners for each data hash
         for data_hash, old_hotkey in data_to_migrate.items():
+            # TODO: retry with up to n miners (e.g. 3) if the miner fails to store
             # Get the encrypted data from the old miner
-            data_metadata = await get_metadata_for_hotkey_and_hash(
+            metadata = await get_metadata_for_hotkey_and_hash(
                 old_hotkey, data_hash, self.database
             )
-            encrypted_data = data_metadata["encrypted_data"]
-            encryption_payload = data_metadata["encryption_payload"]
-
-            # Select a new miner
-            new_uid = await self.select_new_miner_for_rebalance(old_hotkey, source_uids)
-            new_hotkey = self.metagraph.hotkeys[new_uid]
-
-            # Store data to the new miner
-            await self.store_encrypted_data_on_specific_miner(
-                encrypted_data, encryption_payload, new_hotkey, data_hash
+            # Retrieve the data from each axon
+            response, verified = await self.rebalance_retrieve(
+                hotkey, data_hash, metadata
             )
+            # TODO: calculate rewards for MA scores
+            rewards[idx] = 0.0 if verified else -0.1
 
-            # Delete the old data
-            await self.database.delete(f"{old_hotkey}:{data_hash}")
+            if response.encrypted_data == None:
+                continue
+
+            if verified:
+                # Store the data on a new miner
+                new_uid = await get_available_query_miners(self, k=1)
+                await self.rebalance_store(response.encrypted_data, new_uid[0])
 
         return f"Rebalanced {len(data_to_migrate)} data items."
 
@@ -974,12 +999,13 @@ class neuron:
 
                 # --- Wait until next step epoch.
                 current_block = self.subtensor.get_current_block()
-                while self.my_subnet_uid != get_current_validtor_uid_round_robin(
-                    self
-                ) or (
-                    current_block - self.prev_step_block
-                    < self.config.neuron.blocks_per_step
-                ):
+                while False:
+                    # while self.my_subnet_uid != get_current_validtor_uid_round_robin(
+                    #     self
+                    # ) or (
+                    #     current_block - self.prev_step_block
+                    #     < self.config.neuron.blocks_per_step
+                    # ):
                     bt.logging.trace(
                         f"my uid: {self.my_subnet_uid} - selected uid: {get_current_validtor_uid_round_robin(self)} - block: {ttl_get_block(self)}"
                     )
@@ -987,6 +1013,7 @@ class neuron:
                     time.sleep(1)
                     current_block = self.subtensor.get_current_block()
 
+                time.sleep(2)
                 if not self.wallet.hotkey.ss58_address in self.metagraph.hotkeys:
                     raise Exception(
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
@@ -1032,10 +1059,9 @@ class neuron:
             bt.logging.error("Error in training loop", str(err))
             bt.logging.debug(print_exception(type(err), err, err.__traceback__))
 
-    async def forward(self) -> torch.Tensor:
+    async def forward(self):
         bt.logging.info(f"forward step: {self.step}")
 
-        # Only store so often, say every 10 steps
         try:
             # Store some random data
             bt.logging.info("initiating store random")
@@ -1078,6 +1104,12 @@ class neuron:
 
         except Exception as e:
             bt.logging.error(f"Failed to retrieve data: {e}")
+
+        try:
+            await self.rebalance_data(k=3)  # self.config.neuron.rebalance_k)
+
+        except Exception as e:
+            bt.logging.error(f"Failed to rebalance data {e}")
 
         try:
             # Update miner tiers
