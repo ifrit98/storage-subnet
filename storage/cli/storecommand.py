@@ -39,6 +39,8 @@ from rich.prompt import Prompt
 from tqdm import tqdm
 from storage.validator.utils import get_all_validators
 
+bittensor.trace()
+
 from .default_values import defaults
 
 # Create a console instance for CLI display.
@@ -153,12 +155,12 @@ class StoreData:
         else:
             encrypted_data = raw_data
             encryption_payload = "{}"
-        decoded_data = base64.b64encode(encrypted_data)
+        encoded_data = base64.b64encode(encrypted_data)
         bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:100]}")
         bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
-        bittensor.logging.trace(f"CLI B64ENCODED DATA: {decoded_data[:100]}")
+        bittensor.logging.trace(f"CLI B64ENCODED DATA: {encoded_data[:100]}")
         synapse = storage.protocol.StoreUser(
-            encrypted_data=decoded_data,
+            encrypted_data=encoded_data,
             encryption_payload=encryption_payload,
         )
         bittensor.logging.debug(f"sending synapse: {synapse.dendrite.dict()}")
