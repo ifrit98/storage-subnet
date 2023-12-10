@@ -58,7 +58,7 @@ from storage.validator.verify import (
 )
 from storage.validator.encryption import decrypt_data_with_private_key
 from storage.validator.config import config, check_config, add_args
-from storage.validator.state import ttl_get_block
+from storage.validator.state import ttl_get_block, should_checkpoint
 from storage.validator.reward import apply_reward_scores
 from storage.validator.database import (
     add_metadata_to_hotkey,
@@ -284,7 +284,6 @@ class neuron:
         """
         bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
 
-
         decoded_data = base64.b64decode(synapse.encrypted_data)
         decoded_data = (
             decoded_data.encode("utf-8")
@@ -295,16 +294,20 @@ class neuron:
             decoded_data, self.wallet
         )
 
+        # Hash the original data to avoid data confusion
+        data_hash = hash_data(decoded_data)
+
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)
-            await database.set(
-                f"validator:payload:{full_hash}", validator_encryption_payload
-            )
 
-        data_hash = hash_data(decoded_data) # Hash the original data to avoid data confusion
+        await self.database.set(
+            f"payload:validator:{data_hash}", validator_encryption_payload
+        )
+
         _ = await self.store_broadband(
             encrypted_data=validator_encrypted_data,
             encryption_payload=synapse.encryption_payload,
+            data_hash=data_hash,
         )
         synapse.data_hash = data_hash
         return synapse
@@ -359,7 +362,7 @@ class neuron:
         data, payload = await self.retrieve_broadband(synapse.data_hash)
         bt.logging.debug(f"returning user data: {data[:100]}")
         bt.logging.debug(f"returning user payload: {payload}")
-        synapse.encrypted_data = data
+        synapse.encrypted_data = base64.b64encode(data)
         synapse.encryption_payload = (
             json.dumps(payload) if isinstance(payload, dict) else payload
         )
@@ -437,20 +440,26 @@ class neuron:
             - Logs the new set of UIDs and distributions for traceability.
         """
         max_retries = 3  # Define the maximum number of retries
-        target_number_of_uids = len(distributions[0]['uids'])  # Assuming k is the length of the uids in the first distribution
+        target_number_of_uids = len(
+            distributions[0]["uids"]
+        )  # Assuming k is the length of the uids in the first distribution
 
         for dist in distributions:
             retries = 0
             successful_uids = set()
 
-            while len(successful_uids) < target_number_of_uids and retries < max_retries:
+            while (
+                len(successful_uids) < target_number_of_uids and retries < max_retries
+            ):
                 # Ping all UIDs
                 current_successful_uids, _ = await self.ping_uids(dist["uids"])
                 successful_uids.update(current_successful_uids)
 
                 # If enough UIDs are successful, select the first k items
                 if len(successful_uids) >= target_number_of_uids:
-                    dist["uids"] = tuple(sorted(successful_uids)[:target_number_of_uids])
+                    dist["uids"] = tuple(
+                        sorted(successful_uids)[:target_number_of_uids]
+                    )
                     break
 
                 # Reroll for k UIDs excluding the successful ones
@@ -465,7 +474,9 @@ class neuron:
 
             # Log if the maximum retries are reached without enough successful UIDs
             if len(successful_uids) < target_number_of_uids:
-                bt.logging.warning(f"Insufficient successful UIDs for distribution: {dist}")
+                bt.logging.warning(
+                    f"Insufficient successful UIDs for distribution: {dist}"
+                )
 
         # Continue with your logic using the updated distributions
         bt.logging.trace("new distributions:", distributions)
@@ -494,7 +505,9 @@ class neuron:
         distribution["uids"] = new_uids
         return distribution
 
-    async def store_broadband(self, encrypted_data, encryption_payload, R=3, k=10, data_hash=None):
+    async def store_broadband(
+        self, encrypted_data, encryption_payload, R=3, k=10, data_hash=None
+    ):
         """
         Asynchronously stores encrypted data across a distributed network by splitting it into chunks and
         assigning these chunks to various miners for storage. This method ensures redundancy and efficient
@@ -864,15 +877,19 @@ class neuron:
         )
         # Reconstruct the data
         data = b"".join(chunks.values())
+        bt.logging.trace(f"retrieved data: {data[:100]}")
         validator_encryption_payload = await retrieve_encryption_payload(
             "validator:" + full_hash, self.database
         )
+        bt.logging.debug(
+            f"validator_encryption_payload: {validator_encryption_payload}"
+        )
         decrypted_data = decrypt_data_with_private_key(
             data,
-            encryption_payload,
+            bytes(json.dumps(validator_encryption_payload), "utf-8"),
             bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
         )
-
+        bt.logging.debug(f"decrypted_data: {decrypted_data[:100]}")
         encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
         bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
         return decrypted_data, encryption_payload
