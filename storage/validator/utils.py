@@ -705,7 +705,7 @@ def calculate_chunk_indices_from_num_chunks(data_size, num_chunks):
 
 
 async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
-    self, data_size, R, k, chunk_size=None
+    self, data_size, R, k, chunk_size=None, exclude=None
 ):
     """
     Asynchronously computes a distribution of data chunks across a set of unique identifiers (UIDs),
@@ -734,7 +734,7 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
           the redundancy requirements are met.
     """
 
-    available_uids = await get_available_query_miners(self, k=k)
+    available_uids = await get_available_query_miners(self, k=k, exclude=exclude)
     chunk_size = chunk_size or optimal_chunk_size(data_size, len(available_uids), R)
     available_uids = adjust_uids_to_multiple(available_uids, R)
     chunk_indices = calculate_chunk_indices(data_size, chunk_size)

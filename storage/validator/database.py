@@ -190,30 +190,39 @@ async def get_all_full_hashes(database: aioredis.Redis) -> List[str]:
 
 
 async def get_all_hotkeys_for_data_hash(
-    data_hash: str, database: aioredis.Redis
+    data_hash: str, database: aioredis.Redis, is_full_hash: bool = False
 ) -> List[str]:
     """
-    Retrieves all hotkeys associated with a specific data hash.
+    Fetch all hotkeys associated with a given hash, which can be a full file hash or a chunk hash.
 
     Parameters:
-        data_hash (str): The data hash to look up.
-        database (aioredis.Redis): The Redis client instance.
+    - data_hash (str): The hash value of the file or chunk.
+    - database (aioredis.Redis): An instance of the Redis database.
+    - is_full_hash (bool): A flag indicating if the hash_value is a full file hash.
 
     Returns:
-        A list of hotkeys associated with the data hash.
+    - List[str]: A list of hotkeys associated with the hash.
+      Returns None if no hotkeys are found.
     """
-    # Initialize an empty list to store the hotkeys
-    hotkeys = []
+    all_hotkeys = set()
 
-    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
-    keys = await database.scan_iter("*")
-    for hotkey in keys:
-        # Check if the data hash exists within the hash of the hotkey
-        if await database.hexists(hotkey, data_hash):
-            hotkey = hotkey.decode("utf-8") if isinstance(hotkey, bytes) else hotkey
-            hotkeys.append(hotkey)
+    if is_full_hash:
+        # Get all chunks for the full hash
+        chunks_info = await get_all_chunks_for_file(data_hash, database)
+        if chunks_info is None:
+            return None
+        # Aggregate hotkeys from all chunks
+        for chunk_info in chunks_info.values():
+            all_hotkeys.update(chunk_info["hotkeys"])
+    else:
+        # Fetch hotkeys for a single chunk hash
+        chunk_metadata = await database.hgetall(f"chunk:{data_hash}")
+        if chunk_metadata:
+            hotkeys = chunk_metadata.get(b"hotkeys")
+            if hotkeys:
+                all_hotkeys.update(hotkeys.decode().split(","))
 
-    return hotkeys
+    return list(all_hotkeys)
 
 
 async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:

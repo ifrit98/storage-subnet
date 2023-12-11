@@ -1,0 +1,612 @@
+# The MIT License (MIT)
+# Copyright © 2023 Yuma Rao
+# Copyright © 2023 philanthrope
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+# documentation files (the “Software”), to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+# the Software.
+
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+# THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+
+import os
+import sys
+import copy
+import json
+import time
+import torch
+import base64
+import typing
+import asyncio
+import aioredis
+import argparse
+import traceback
+import bittensor as bt
+
+from loguru import logger
+from pprint import pformat
+from functools import partial
+from pyinstrument import Profiler
+from traceback import print_exception
+from random import choice as random_choice
+from Crypto.Random import get_random_bytes, random
+from dataclasses import asdict
+
+from storage.validator.event import EventSchema
+from storage import protocol
+from storage.shared.ecc import (
+    hash_data,
+    setup_CRS,
+    ECCommitment,
+    ecc_point_to_hex,
+    hex_to_ecc_point,
+)
+from storage.shared.merkle import (
+    MerkleTree,
+)
+from storage.shared.utils import (
+    b64_encode,
+    b64_decode,
+    chunk_data,
+    safe_key_search,
+)
+from storage.validator.utils import (
+    make_random_file,
+    get_random_chunksize,
+    check_uid_availability,
+    get_random_uids,
+    get_query_miners,
+    get_query_validators,
+    get_available_query_miners,
+    get_current_validtor_uid_round_robin,
+)
+from storage.validator.encryption import (
+    decrypt_data,
+    encrypt_data,
+)
+from storage.validator.verify import (
+    verify_store_with_seed,
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+)
+from storage.validator.config import config, check_config, add_args
+from storage.validator.state import (
+    should_checkpoint,
+    checkpoint,
+    should_reinit_wandb,
+    reinit_wandb,
+    load_state,
+    save_state,
+    init_wandb,
+    ttl_get_block,
+    log_event,
+)
+from storage.validator.reward import apply_reward_scores
+from storage.validator.weights import (
+    should_set_weights,
+    set_weights,
+)
+from storage.validator.database import (
+    add_metadata_to_hotkey,
+    get_miner_statistics,
+    get_metadata_for_hotkey,
+    total_network_storage,
+    store_chunk_metadata,
+    store_file_chunk_mapping_ordered,
+    get_metadata_for_hotkey_and_hash,
+    update_metadata_for_data_hash,
+    get_all_chunk_hashes,
+    get_ordered_metadata,
+    hotkey_at_capacity,
+    get_miner_statistics,
+)
+from storage.validator.bonding import (
+    miner_is_registered,
+    update_statistics,
+    get_tier_factor,
+    compute_all_tiers,
+)
+
+
+async def store_encrypted_data(
+    self,
+    encrypted_data: typing.Union[bytes, str],
+    encryption_payload: dict,
+    ttl: int = 0,
+) -> bool:
+    event = EventSchema(
+        task_name="Store",
+        successful=[],
+        completion_times=[],
+        task_status_messages=[],
+        task_status_codes=[],
+        block=self.subtensor.get_current_block(),
+        uids=[],
+        step_length=0.0,
+        best_uid="",
+        best_hotkey="",
+        rewards=[],
+        moving_averaged_scores=[],
+    )
+
+    start_time = time.time()
+
+    encrypted_data = (
+        encrypted_data.encode("utf-8")
+        if isinstance(encrypted_data, str)
+        else encrypted_data
+    )
+
+    # Setup CRS for this round of validation
+    g, h = setup_CRS(curve=self.config.neuron.curve)
+
+    # Hash the data
+    data_hash = hash_data(encrypted_data)
+
+    # Convert to base64 for compactness
+    # TODO: Don't do this if it's already b64 encoded. (Check first)
+    b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
+
+    if self.config.neuron.verbose:
+        bt.logging.debug(f"storing user data: {encrypted_data[:200]}...")
+        bt.logging.debug(f"storing user hash: {data_hash}")
+        bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:200]}...")
+
+    synapse = protocol.Store(
+        encrypted_data=b64_encrypted_data,
+        curve=self.config.neuron.curve,
+        g=ecc_point_to_hex(g),
+        h=ecc_point_to_hex(h),
+        seed=get_random_bytes(32).hex(),  # 256-bit seed
+    )
+
+    # Select subset of miners to query (e.g. redunancy factor of N)
+    uids = await get_available_query_miners(self, k=self.config.neuron.store_redundancy)
+    bt.logging.debug(f"store uids: {uids}")
+    # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
+    # before sending another storage request (do not allow higher than tier allow)
+    # TODO: keep selecting UIDs until we get N that are not at capacity
+    avaialble_uids = [
+        uid
+        for uid in uids
+        if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+    ]
+
+    axons = [self.metagraph.axons[uid] for uid in avaialble_uids]
+    failed_uids = [None]
+
+    retries = 0
+    while len(failed_uids) and retries < 3:
+        if failed_uids == [None]:
+            # initial loop
+            failed_uids = []
+
+        # Broadcast the query to selected miners on the network.
+        responses = await self.dendrite(
+            axons,
+            synapse,
+            deserialize=False,
+            timeout=self.config.neuron.store_timeout,
+        )
+
+        # Log the results for monitoring purposes.
+        if self.config.neuron.verbose and self.config.neuron.log_responses:
+            bt.logging.debug(f"Initial store round 1.")
+            [
+                bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                for response in responses
+            ]
+
+        # Compute the rewards for the responses given proc time.
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
+
+        # TODO: Add proper error logging, e.g. if we timeout, raise/show timeout error instead of
+        # uniform "failed to verify" error (it doesn't give any context for what may have happened)
+        for idx, (uid, response) in enumerate(zip(uids, responses)):
+            # Verify the commitment
+            hotkey = self.metagraph.hotkeys[uid]
+            success = verify_store_with_seed(response)
+            if success:
+                bt.logging.debug(
+                    f"Successfully verified store commitment from UID: {uid}"
+                )
+
+                # Prepare storage for the data for particular miner
+                response_storage = {
+                    "prev_seed": synapse.seed,
+                    "size": sys.getsizeof(encrypted_data),  # in bytes, not len(data)
+                    "encryption_payload": encryption_payload,
+                }
+                bt.logging.trace(f"Storing UID {uid} data {pformat(response_storage)}")
+
+                # Store in the database according to the data hash and the miner hotkey
+                await add_metadata_to_hotkey(
+                    hotkey,
+                    data_hash,
+                    response_storage,
+                    self.database,
+                )
+                if ttl > 0:
+                    await self.database.expire(
+                        f"{hotkey}:{data_hash}",
+                        ttl,
+                    )
+                bt.logging.debug(
+                    f"Stored data in database with key: {hotkey} | {data_hash}"
+                )
+
+            else:
+                bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+                failed_uids.append(uid)
+
+            # Update the storage statistics
+            await update_statistics(
+                ss58_address=hotkey,
+                success=success,
+                task_type="store",
+                database=self.database,
+            )
+
+            # Apply reward for this store
+            tier_factor = await get_tier_factor(hotkey, self.database)
+            rewards[idx] = 1.0 * tier_factor if success else 0.0
+
+            event.successful.append(success)
+            event.uids.append(uid)
+            event.completion_times.append(response.dendrite.process_time)
+            event.task_status_messages.append(response.dendrite.status_message)
+            event.task_status_codes.append(response.dendrite.status_code)
+
+        event.rewards.extend(rewards.tolist())
+
+        if self.config.neuron.verbose and self.config.neuron.log_responses:
+            bt.logging.debug(f"Store responses round: {retries}")
+            [
+                bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                for response in responses
+            ]
+
+        bt.logging.trace(f"Applying store rewards for retry: {retries}")
+        apply_reward_scores(
+            self,
+            uids,
+            responses,
+            rewards,
+            timeout=self.config.neuron.store_timeout,
+            mode="minmax",
+        )
+
+        # Get a new set of UIDs to query for those left behind
+        if failed_uids != []:
+            bt.logging.trace(f"Failed to store on uids: {failed_uids}")
+            uids = await get_available_query_miners(self, k=len(failed_uids))
+            bt.logging.trace(f"Retrying with new uids: {uids}")
+            axons = [self.metagraph.axons[uid] for uid in uids]
+            failed_uids = []  # reset failed uids for next round
+            retries += 1
+
+    # Calculate step length
+    end_time = time.time()
+    event.step_length = end_time - start_time
+
+    # Determine the best UID based on rewards
+    if event.rewards:
+        best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+        event.best_uid = event.uids[best_index]
+        event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
+
+    # Update event log with moving averaged scores
+    event.moving_averaged_scores = self.moving_averaged_scores.tolist()
+
+    return event
+
+
+async def store_random_data(self):
+    """
+    Stores data on the network and ensures it is correctly committed by the miners.
+
+    Parameters:
+    - data (bytes, optional): The data to be stored.
+    - wallet (bt.wallet, optional): The wallet to be used for encrypting the data.
+
+    Returns:
+    - The status of the data storage operation.
+    """
+
+    # Setup CRS for this round of validation
+    g, h = setup_CRS(curve=self.config.neuron.curve)
+
+    # Make a random bytes file to test the miner if none provided
+    data = make_random_file(maxsize=self.config.neuron.maxsize)
+    bt.logging.debug(f"Random store data size: {sys.getsizeof(data)}")
+
+    # Encrypt the data
+    # TODO: create and use a throwaway wallet (never decrypable)
+    encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
+
+    return await store_encrypted_data(
+        self, encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl
+    )
+
+
+async def store_broadband(
+    self,
+    encrypted_data,
+    encryption_payload,
+    R=3,
+    k=10,
+    data_hash=None,
+    exclude_uids=None,
+):
+    """
+    Asynchronously stores encrypted data across a distributed network by splitting it into chunks and
+    assigning these chunks to various miners for storage. This method ensures redundancy and efficient
+    data distribution while handling network requests concurrently.
+
+    The process includes chunking the data, selecting miners for storage, and verifying the integrity
+    of stored data through response validation.
+
+    Parameters:
+        encrypted_data (bytes): The encrypted data to be stored across the network.
+        encryption_payload (dict): Additional payload information required for encryption.
+        R (int, optional): The redundancy factor, denoting how many times each chunk is replicated. Default is 3.
+        k (int, optional): The number of miners to query for each chunk. Default is 10.
+        data_hash (str, optional): The hash of the data to be stored. If not provided, compute it. Default is None.
+        exclude_uids: (list of int, optional): A list of UIDs to exclude from the storage process. Default is None.
+
+    Returns:
+        str: The hash of the full data, representing its unique identifier in the network.
+
+    Raises:
+        Exception: If the process of creating initial distributions fails after multiple retries.
+
+    Note:
+        - Uses a semaphore to limit the number of concurrent network requests.
+        - Employs a retry mechanism for handling network and miner availability issues.
+        - Logs various stages of the process for debugging and monitoring purposes.
+    """
+    if self.config.neuron.profile:
+        # Create a profiler instance
+        profiler = Profiler()
+        profiler.start()
+
+    semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
+
+    async def store_chunk_group(chunk_hash, chunk, uids):
+        g, h = setup_CRS(curve=self.config.neuron.curve)
+
+        bt.logging.debug(f"type(chunk): {type(chunk)}")
+        bt.logging.debug(f"chunk: {chunk[:100]}")
+        chunk = chunk.encode("utf-8") if isinstance(chunk, str) else chunk
+        b64_encoded_chunk = await asyncio.to_thread(base64.b64encode, chunk)
+        b64_encoded_chunk = b64_encoded_chunk.decode("utf-8")
+        bt.logging.debug(f"b64_encoded_chunk: {b64_encoded_chunk[:100]}")
+
+        synapse = protocol.Store(
+            encrypted_data=b64_encoded_chunk,
+            curve=self.config.neuron.curve,
+            g=ecc_point_to_hex(g),
+            h=ecc_point_to_hex(h),
+            seed=get_random_bytes(32).hex(),
+        )
+
+        uids = [
+            uid
+            for uid in uids
+            if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+        ]
+
+        axons = [self.metagraph.axons[uid] for uid in uids]
+        responses = await self.dendrite(
+            axons,
+            synapse,
+            deserialize=False,
+            timeout=self.config.neuron.store_timeout,
+        )
+
+        chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
+        bt.logging.debug(f"chunk size: {chunk_size}")
+
+        start = time.time()
+        await store_chunk_metadata(
+            full_hash,
+            chunk_hash,
+            [self.metagraph.hotkeys[uid] for uid in uids],
+            chunk_size,  # this should be len(chunk) but we need to fix the chunking
+            self.database,
+        )
+        end = time.time()
+        bt.logging.debug(f"store_chunk_metadata time for uids {uids} : {end-start}")
+
+        return responses
+
+    async def handle_uid_operations(uid, response, chunk_hash, chunk_size):
+        ss = time.time()
+        start = time.time()
+
+        # Offload the CPU-intensive verification to a separate thread
+        verified = await asyncio.to_thread(verify_store_with_seed, response)
+
+        end = time.time()
+        bt.logging.debug(f"verify_store_with_seed time for uid {uid} : {end-start}")
+        if verified:
+            # Prepare storage for the data for particular miner
+            response_storage = {
+                "prev_seed": response.seed,
+                "size": chunk_size,
+                "encryption_payload": encryption_payload,
+            }
+            start = time.time()
+            # Store in the database according to the data hash and the miner hotkey
+            await add_metadata_to_hotkey(
+                self.metagraph.hotkeys[uid],
+                chunk_hash,
+                response_storage,  # seed + size + encryption keys
+                self.database,
+            )
+            end = time.time()
+            bt.logging.debug(
+                f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
+            )
+        else:
+            bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+
+        # Update the storage statistics
+        await update_statistics(
+            ss58_address=self.metagraph.hotkeys[uid],
+            success=verified,
+            task_type="store",
+            database=self.database,
+        )
+        bt.logging.debug(f"handle_uid_operations time for uid {uid} : {time.time()-ss}")
+
+        return {"chunk_hash": chunk_hash, "uid": uid, "verified": verified}
+
+    async def semaphore_query_miners(distributions):
+        tasks = []
+        async with semaphore:
+            for i, dist in enumerate(distributions):
+                bt.logging.trace(
+                    f"Start index: {dist['start_idx']}, End index: {dist['end_idx']}"
+                )
+                chunk = encrypted_data[dist["start_idx"] : dist["end_idx"]]
+                bt.logging.trace(f"chunk: {chunk[:100]}")
+                dist["chunk_hash"] = hash_data(chunk)
+                bt.logging.debug(
+                    f"Chunk {i} | uid distribution: {dist['uids']} | size: {dist['chunk_size']}"
+                )
+
+                # Create an asyncio task for each chunk processing
+                task = asyncio.create_task(
+                    store_chunk_group(dist["chunk_hash"], chunk, dist["uids"])
+                )
+                tasks.append(task)
+
+        bt.logging.debug(f"gathering broadband tasks: {pformat(tasks)}")
+        responses_nested = await asyncio.gather(*tasks)
+
+        # Update the distributions with respones
+        for i, responses in enumerate(responses_nested):
+            distributions[i]["responses"] = responses
+        return distributions
+
+    async def semaphore_query_uid_operations(distributions):
+        tasks = []
+        for dist in distributions:
+            chunk_hash = dist["chunk_hash"]
+            chunk_size = dist["chunk_size"]
+            for uid, response in zip(dist["uids"], dist["responses"]):
+                task = asyncio.create_task(
+                    handle_uid_operations(uid, response, chunk_hash, chunk_size)
+                )
+                tasks.append(task)
+        uid_verified_dict_list = await asyncio.gather(*tasks)
+        return uid_verified_dict_list
+
+    async def create_initial_distributions(encrypted_data, R, k):
+        dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
+            self, data_size=sys.getsizeof(encrypted_data), R=R, k=k, exclude=exclude
+        )
+        # Ping first to see if we need to reroll instead of waiting for the timeout
+        distributions = [dist async for dist in dist_gen]
+        distributions = await self.compute_and_ping_chunks(distributions)
+        return distributions
+
+    bt.logging.debug(f"store_broadband() {encrypted_data[:100]}")
+
+    full_hash = data_hash or hash_data(encrypted_data)
+    bt.logging.debug(f"full hash: {full_hash}")
+
+    # Check and see if hash already exists, reject if so.
+    if await get_ordered_metadata(full_hash, self.database):
+        bt.logging.warning(f"Hash {full_hash} already exists on the network.")
+        return full_hash
+
+    exclude_uids = copy.deepcopy(exlude_uids)
+
+    full_size = sys.getsizeof(encrypted_data)
+    bt.logging.debug(f"full size: {full_size}")
+
+    # Sometimes this can fail, try/catch and retry for starters...
+    # Compute the chunk distribution
+    retries = 0
+    while retries < 3:
+        try:
+            distributions = await create_initial_distributions(encrypted_data, R, k)
+            break
+        except websocket._exceptions.WebSocketConnectionClosedException:
+            bt.logging.warning(f"Failed to create initial distributions, retrying...")
+            retries += 1
+        except Exception as e:
+            bt.logging.warning(
+                f"Failed to create initial distributions: {e}, retrying..."
+            )
+            retries += 1
+
+    bt.logging.trace(f"computed distributions: {pformat(distributions)}")
+
+    chunk_hashes = []
+    retry_dists = [None]  # sentinel for first iteration
+    retries = 0
+    while len(distributions) > 0 and retries < 3:
+        async with semaphore:
+            # Store on the network: query miners for each chunk
+            # Updated distributions now contain responses from the network
+            updated_distributions = await semaphore_query_miners(distributions)
+            # Verify the responses and store the metadata for each verified response
+            verifications = await semaphore_query_uid_operations(updated_distributions)
+            if (
+                chunk_hashes == []
+            ):  # First time only. Grab all hashes in order after processed.
+                chunk_hashes.extend(
+                    [dist["chunk_hash"] for dist in updated_distributions]
+                )
+
+            # Process verification results and reroll failed distributions in a single loop
+            distributions = (
+                []
+            )  # reset original distributions to populate for next round
+            for i, dist in enumerate(updated_distributions):
+                # Get verification status for the current distribution
+                bt.logging.trace(f"verifications: {pformat(verifications)}")
+
+                # Check if any UID in the distribution failed verification
+                if any(not v["verified"] for v in verifications):
+                    # Extract failed UIDs
+                    failed_uids = [v["uid"] for v in verifications if not v["verified"]]
+                    bt.logging.trace(f"failed uids: {pformat(failed_uids)}")
+                    # Reroll distribution with failed UIDs
+                    rerolled_dist = await self.reroll_distribution(dist, failed_uids)
+                    bt.logging.trace(f"rerolled uids: {pformat(rerolled_dist['uids'])}")
+                    # Replace the original distribution with the rerolled one
+                    distributions.append(rerolled_dist)
+
+        retries += 1
+
+    # Update the chunk hash mapping for this entire file
+    # TODO: change this to store_file_chunk_mapping_ordered
+    # to append rather than overwrite
+    await store_file_chunk_mapping_ordered(
+        full_hash=full_hash,
+        chunk_hashes=chunk_hashes,
+        chunk_indices=list(range(len(chunk_hashes))),
+        encryption_payload=encryption_payload,
+        database=self.database,
+    )
+
+    if self.config.neuron.profile:
+        # Stop the profiler
+        profiler.stop()
+        # Print the results
+        print(profiler.output_text(unicode=True, color=True))
+
+    return full_hash
