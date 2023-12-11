@@ -123,8 +123,8 @@ class cli:
         """
         # Define the basic argument parser.
         parser = argparse.ArgumentParser(
-            description=f"storage cli v{storage.__version__}",
-            usage="stcli <command> <command args>",
+            description=f"FileTAO cli v{storage.__version__}",
+            usage="ftcli <command> <command args>",
             add_help=True,
         )
         # Add arguments for each sub-command.

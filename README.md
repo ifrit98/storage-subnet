@@ -64,7 +64,7 @@ This command encrypts and stores data on the Bittensor network.
 
 #### Usage
 ```bash
-stcli store put --filepath <path-to-data> [options]
+ftcli store put --filepath <path-to-data> [options]
 ```
 
 #### Options
@@ -83,7 +83,7 @@ This command retrieves previously stored data from the Bittensor network.
 
 #### Usage
 ```bash
-stcli retrieve get --data_hash <hash> [options]
+ftcli retrieve get --data_hash <hash> [options]
 ```
 
 #### Options
@@ -99,7 +99,7 @@ Lists all data hashes stored on the network associated with the specified coldke
 
 #### Usage
 ```bash
-stcli retrieve list [options]
+ftcli retrieve list [options]
 ```
 
 #### Options
@@ -110,17 +110,17 @@ stcli retrieve list [options]
 
 ### Storing Data
 ```bash
-stcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
+ftcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
 ### Retrieving Data
 ```bash
-stcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
+ftcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
 ### Listing Data
 ```bash
-stcli retrieve list --wallet.name mywallet
+ftcli retrieve list --wallet.name mywallet
 ```
 
 ![list](assets/list.png)

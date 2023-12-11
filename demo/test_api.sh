@@ -14,17 +14,17 @@ python neurons/api.py --subtensor.network test --netuid 22 --wallet.name default
 
 ## Start with a simple text file
 # Store precomputed text
-stcli store put --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --filepath test.txt --noencrypt
+ftcli store put --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --filepath test.txt --noencrypt
 
 # Retrieve the file from the network
-stcli retrieve get --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --data_hash 38866360490337421968271411759171270733697519958661904670309117221177014022402
+ftcli retrieve get --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --data_hash 38866360490337421968271411759171270733697519958661904670309117221177014022402
 
 ## Now do a 100mb file
 # Store precomputed file 100mb of random data
-stcli store put --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --filepath test100mb --noencrypt
+ftcli store put --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --filepath test100mb --noencrypt
 
 # Retrieve the file from the network
-stcli retrieve get --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --data_hash 15772073926083259344852907111708835015326625089316697045050481472999350095520
+ftcli retrieve get --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --data_hash 15772073926083259344852907111708835015326625089316697045050481472999350095520
 
 # Verify the storage using a python script
 python verify_storage.py

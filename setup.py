@@ -74,7 +74,7 @@ setup(
     author_email="ifrit98@gmail.com",
     license="MIT",
     python_requires=">=3.8",
-    scripts=["bin/stcli"],
+    scripts=["bin/ftcli"],
     install_requires=requirements,
     classifiers=[
         "Development Status :: 3 - Alpha",
