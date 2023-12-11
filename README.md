@@ -242,6 +242,20 @@ Nov 16 22:35:42 user systemd[1]: Starting Advanced key-value store...
 Nov 16 22:35:42 user systemd[1]: Started Advanced key-value store.
 ```
 
+### Install PM2
+This will allow you to use the process manager `pm2` for easily setting up your miner or validator.
+
+Install nodejs and npm
+```bash
+sudo apt install nodejs npm
+```
+
+Once this compeltes, install pm2 globally
+```bash
+sudo npm install pm2 -g
+```
+
+
 ### Running a miner
 ```bash
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
