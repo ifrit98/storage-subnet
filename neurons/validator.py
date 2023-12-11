@@ -168,20 +168,28 @@ class neuron:
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
+        bt.logging.debug(f"starting event handler")
+        self.start_neuron_event_subscription()
+        bt.logging.debug(f"started event handler")
+
     def neuron_registered_subscription_handler(self, obj, update_nr, subscription_id):
         bt.logging.debug(f"New block #{obj['header']['number']}")
+        bt.logging.debug(obj)
 
-        block_hash = obj["header"]["hash"]
-        block = self.subtensor.substrate.get_block(hash=block_hash)
+        block_no = obj["header"]["number"]
+        block_hash = self.subtensor.get_block_hash(block_no)
+        bt.logging.debug(block_hash)
+        events = self.subtensor.substrate.get_events(block_hash)
+        for event in events:
+            event_dict = event["event"].decode()
+            if event_dict["event_id"] == "NeuronRegistered":
+                netuid, uid, hotkey = event_dict["attributes"]
+                if int(netuid) == 21:
+                    bt.logging.info(f"NeuronRegistered Event {uid}!")
+                    # TODO: Trigger rebalance() here with UID/hotkey to rebalance
 
-        for event in block["events"]:
-            if event["event"]["method"] == "NeuronRegistered":
-                neuron_event_data = event["event"]["data"]
-                bt.logging.info(f"NeuronRegistered Event: {neuron_event_data}")
-                # TODO: Trigger rebalance() here with UID/hotkey to rebalance
-
-    async def start_neuron_event_subscription(self):
-        await self.subtensor.substrate.subscribe_block_headers(
+    def start_neuron_event_subscription(self):
+        self.subtensor.substrate.subscribe_block_headers(
             self.neuron_registered_subscription_handler
         )
 
