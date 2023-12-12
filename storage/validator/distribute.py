@@ -16,116 +16,29 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import sys
-import copy
-import json
-import time
-import torch
 import base64
 import typing
 import asyncio
-import aioredis
-import argparse
-import traceback
 import bittensor as bt
 
-from loguru import logger
 from pprint import pformat
-from functools import partial
-from pyinstrument import Profiler
-from traceback import print_exception
-from random import choice as random_choice
 from Crypto.Random import get_random_bytes, random
 
-from dataclasses import asdict
-from storage.validator.event import EventSchema
-
 from storage import protocol
-
-from storage.shared.ecc import (
-    hash_data,
-    setup_CRS,
-    ECCommitment,
-    ecc_point_to_hex,
-    hex_to_ecc_point,
-)
-
-from storage.shared.merkle import (
-    MerkleTree,
-)
-
-from storage.shared.utils import (
-    b64_encode,
-    b64_decode,
-    chunk_data,
-    safe_key_search,
-)
-
-from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
-)
-
 from storage.validator.verify import (
     verify_store_with_seed,
     verify_challenge_with_seed,
     verify_retrieve_with_seed,
 )
-
-from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
-from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
-
 from storage.validator.database import (
-    add_metadata_to_hotkey,
-    get_miner_statistics,
-    get_metadata_for_hotkey,
-    total_network_storage,
-    store_chunk_metadata,
-    store_file_chunk_mapping_ordered,
-    get_metadata_for_hotkey_and_hash,
     update_metadata_for_data_hash,
-    get_all_chunk_hashes,
     get_ordered_metadata,
-    hotkey_at_capacity,
-    get_miner_statistics,
 )
 
-from storage.validator.bonding import (
-    miner_is_registered,
-    update_statistics,
-    get_tier_factor,
-    compute_all_tiers,
-)
+from .network import ping_and_retry_uids
+from .store import store_encrypted_data, store_broadband
+from .retrieve import retrieve_data, retreive_user_data
 
 
 async def distribute_store(
@@ -205,7 +118,7 @@ async def distribute_retrieve(self, hotkey, data_hash, metadata):
     return response, verified
 
 
-async def distribute_data(self, k: int, dropped_hotkeys=[]):
+async def distribute_data(self, k: int):
     """
     Distribute data storage among miners by migrating data from a set of miners to others.
 
@@ -219,9 +132,8 @@ async def distribute_data(self, k: int, dropped_hotkeys=[]):
 
     full_hashes = [key async for key in self.database.scan_iter("file:*")]
     full_hash = random.choice(full_hashes).decode("utf-8").split(":")[1]
-    encryption_payload = await database.get(f"payload:{full_hash}")
+    encryption_payload = await self.database.get(f"payload:{full_hash}")
     ordered_metadata = await get_ordered_metadata(full_hash, self.database)
-    bt.logging.debug(f"distribute ordered metadata: {ordered_metadata}")
 
     # Get the hotkeys/uids to query
     tasks = []
@@ -233,6 +145,8 @@ async def distribute_data(self, k: int, dropped_hotkeys=[]):
     semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
     async with semaphore:
+        # This is to get the hotkeys that already contain chunks for file
+        # Such that we can exclude them from the subsequent call to store_broadband
         exclude_uids = set()
         for chunk_metadata in ordered_metadata:
             bt.logging.debug(f"chunk metadata: {chunk_metadata}")
@@ -245,12 +159,6 @@ async def distribute_data(self, k: int, dropped_hotkeys=[]):
             exclude_uids.update(uids)
 
             total_size += chunk_metadata["size"]
-            tasks.append(
-                asyncio.create_task(
-                    retrieve_chunk_group(chunk_metadata["chunk_hash"], uids)
-                )
-            )
-        responses = await asyncio.gather(*tasks)
 
         # Get the chunks from the responses
         chunks = {}

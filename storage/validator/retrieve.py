@@ -16,116 +16,36 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
-import copy
-import json
 import time
 import torch
 import base64
 import typing
 import asyncio
-import aioredis
-import argparse
-import traceback
 import bittensor as bt
 
-from loguru import logger
 from pprint import pformat
-from functools import partial
-from pyinstrument import Profiler
-from traceback import print_exception
-from random import choice as random_choice
 from Crypto.Random import get_random_bytes, random
 
-from dataclasses import asdict
-from storage.validator.event import EventSchema
-
 from storage import protocol
-
-from storage.shared.ecc import (
-    hash_data,
-    setup_CRS,
-    ECCommitment,
-    ecc_point_to_hex,
-    hex_to_ecc_point,
-)
-
-from storage.shared.merkle import (
-    MerkleTree,
-)
-
+from storage.validator.event import EventSchema
+from storage.shared.ecc import hash_data
 from storage.shared.utils import (
     b64_encode,
     b64_decode,
     chunk_data,
     safe_key_search,
 )
-
-from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
-)
-
-from storage.validator.verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-
-from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
+from storage.validator.verify import verify_retrieve_with_seed
 from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
-
+from storage.validator.weights import should_set_weights, set_weights
 from storage.validator.database import (
-    add_metadata_to_hotkey,
-    get_miner_statistics,
     get_metadata_for_hotkey,
-    total_network_storage,
-    store_chunk_metadata,
-    store_file_chunk_mapping_ordered,
     get_metadata_for_hotkey_and_hash,
     update_metadata_for_data_hash,
-    get_all_chunk_hashes,
-    get_ordered_metadata,
-    hotkey_at_capacity,
-    get_miner_statistics,
 )
+from storage.validator.bonding import update_statistics, get_tier_factor
 
-from storage.validator.bonding import (
-    miner_is_registered,
-    update_statistics,
-    get_tier_factor,
-    compute_all_tiers,
-)
+from .network import ping_and_retry_uids
 
 
 async def handle_retrieve(self, uid):
@@ -204,9 +124,7 @@ async def retrieve_data(
 
     start_time = time.time()
 
-    uids = await get_available_query_miners(
-        self, k=self.config.neuron.challenge_sample_size
-    )
+    uids = await ping_and_retry_uids(self, k=self.config.neuron.challenge_sample_size)
 
     # Ensure that each UID has data to retreive. If not, skip it.
     uids = [
@@ -319,3 +237,111 @@ async def retrieve_data(
         event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
     return decoded_data, event
+
+
+# TODO: Apply rewards here (punish for failed retrieval)
+async def retrieve_broadband(self, full_hash: str):
+    """
+    Asynchronously retrieves and verifies data from the network based on a given hash, ensuring
+    the integrity and correctness of the data. This method orchestrates the retrieval process across
+    multiple miners, reconstructs the data from chunks, and verifies its integrity.
+
+    Parameters:
+        full_hash (str): The hash of the data to be retrieved, representing its unique identifier on the network.
+
+    Returns:
+        tuple: A tuple containing the reconstructed data and its associated encryption payload.
+
+    Raises:
+        Exception: If no metadata is found for the given hash or if there are issues during the retrieval process.
+
+    Note:
+        - This function is a critical component of data retrieval in a distributed storage system.
+        - It handles concurrent requests to multiple miners and assembles the data chunks based on
+        ordered metadata.
+        - In case of discrepancies in data size, the function logs a warning for potential data integrity issues.
+    """
+    semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
+
+    async def retrieve_chunk_group(chunk_hash, uids):
+        synapse = protocol.Retrieve(
+            data_hash=chunk_hash,
+            seed=get_random_bytes(32).hex(),
+        )
+
+        axons = [self.metagraph.axons[uid] for uid in uids]
+        responses = await self.dendrite(
+            axons,
+            synapse,
+            deserialize=False,
+            timeout=self.config.api.retrieve_timeout,
+        )
+
+        return responses
+
+    # Get the chunks you need to reconstruct IN order
+    ordered_metadata = await get_ordered_metadata(full_hash, self.database)
+    if ordered_metadata == []:
+        bt.logging.error(f"No metadata found for full hash: {full_hash}")
+        return None
+
+    # Get the hotkeys/uids to query
+    tasks = []
+    total_size = 0
+    bt.logging.debug(f"ordered metadata: {pformat(ordered_metadata)}")
+    # TODO: change this to use retrieve_mutually_exclusive_hotkeys_full_hash
+    # to avoid possibly double querying miners for greater retrieval efficiency
+
+    async with semaphore:
+        for chunk_metadata in ordered_metadata:
+            bt.logging.debug(f"chunk metadata: {chunk_metadata}")
+            uids = [
+                self.metagraph.hotkeys.index(hotkey)
+                for hotkey in chunk_metadata["hotkeys"]
+            ]
+            total_size += chunk_metadata["size"]
+            tasks.append(
+                asyncio.create_task(
+                    retrieve_chunk_group(chunk_metadata["chunk_hash"], uids)
+                )
+            )
+        responses = await asyncio.gather(*tasks)
+
+        chunks = {}
+        for i, response_group in enumerate(responses):
+            for response in response_group:
+                if response.dendrite.status_code != 200:
+                    bt.logging.debug(f"failed response: {response.dendrite.dict()}")
+                    continue
+                verified = verify_retrieve_with_seed(response)
+                if verified:
+                    # Add to final chunks dict
+                    if i not in list(chunks.keys()):
+                        bt.logging.debug(
+                            f"Adding chunk {i} to chunks, size: {sys.getsizeof(response.data)}"
+                        )
+                        chunks[i] = base64.b64decode(response.data)
+                        bt.logging.debug(f"chunk {i} | {chunks[i][:100]}")
+                else:
+                    bt.logging.error(
+                        f"Failed to verify store commitment from UID: {uid}"
+                    )
+
+    bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
+    bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
+    # Reconstruct the data
+    data = b"".join(chunks.values())
+    bt.logging.trace(f"retrieved data: {data[:100]}")
+    validator_encryption_payload = await retrieve_encryption_payload(
+        "validator:" + full_hash, self.database
+    )
+    bt.logging.debug(f"validator_encryption_payload: {validator_encryption_payload}")
+    decrypted_data = decrypt_data_with_private_key(
+        data,
+        bytes(json.dumps(validator_encryption_payload), "utf-8"),
+        bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
+    )
+    bt.logging.debug(f"decrypted_data: {decrypted_data[:100]}")
+    encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
+    bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
+    return decrypted_data, encryption_payload

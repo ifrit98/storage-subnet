@@ -346,6 +346,11 @@ def add_args(cls, parser):
         help="List of whitelisted hotkeys.",
         default=[],
     )
+    parser.add_argument(
+        "--api.debug",
+        action="store_true",
+        help="If set, we whitelist by default to test easily.",
+    )
 
 
 def config(cls):

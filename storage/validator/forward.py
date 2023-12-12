@@ -32,6 +32,7 @@ from .challenge import challenge_data
 from .retrieve import retrieve_data
 from .store import store_random_data
 from .distribute import distribute_data
+from .network import monitor
 
 
 async def forward(self):
@@ -83,14 +84,14 @@ async def forward(self):
     if self.step % self.config.neuron.distribute_step_length == 0:
         bt.logging.info("initiating distribute")
         try:
-            await distribute_data(self, self.config.neuron.redundancy)
+            await distribute_data(self, self.config.neuron.store_redundancy)
 
         except Exception as e:
             bt.logging.error(f"Failed to distribute data {e}")
 
     if self.step % self.config.neuron.monitor_step_length == 0:
         # Monitor all miner UIDs to see if they are still online.
-        # After n failed pings consecutively, we rebalance
+        # After n failed pings consecutively, we rebalance the data.
         down_uids = await monitor(self)
         if len(down_uids) > 0:
             await rebalance_data(

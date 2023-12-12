@@ -16,116 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
-import copy
-import json
-import time
-import torch
-import base64
-import typing
-import asyncio
-import aioredis
-import argparse
-import traceback
+
 import bittensor as bt
-
-from loguru import logger
-from pprint import pformat
-from functools import partial
-from pyinstrument import Profiler
-from traceback import print_exception
-from random import choice as random_choice
-from Crypto.Random import get_random_bytes, random
-
-from dataclasses import asdict
-from storage.validator.event import EventSchema
-
-from storage import protocol
-
-from storage.shared.ecc import (
-    hash_data,
-    setup_CRS,
-    ECCommitment,
-    ecc_point_to_hex,
-    hex_to_ecc_point,
-)
-
-from storage.shared.merkle import (
-    MerkleTree,
-)
-
-from storage.shared.utils import (
-    b64_encode,
-    b64_decode,
-    chunk_data,
-    safe_key_search,
-)
-
-from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
-)
-
-from storage.validator.verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-
-from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
-from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
-
-from storage.validator.database import (
-    add_metadata_to_hotkey,
-    get_miner_statistics,
-    get_metadata_for_hotkey,
-    total_network_storage,
-    store_chunk_metadata,
-    store_file_chunk_mapping_ordered,
-    get_metadata_for_hotkey_and_hash,
-    update_metadata_for_data_hash,
-    get_all_chunk_hashes,
-    get_ordered_metadata,
-    hotkey_at_capacity,
-    get_miner_statistics,
-)
-
-from storage.validator.bonding import (
-    miner_is_registered,
-    update_statistics,
-    get_tier_factor,
-    compute_all_tiers,
-)
 
 
 async def ping_uids(self, uids):
@@ -271,3 +163,25 @@ async def ping_and_retry_uids(
         bt.logging.warning(f"Insufficient successful UIDs for k: {uids}")
 
     return list(successful_uids)[:k], failed_uids
+
+
+# Monitor all UIDs by ping and keep track of how many failures
+async def monitor(self):
+    """
+    Monitor all UIDs by ping and keep track of how many failures
+    occur. If a UID fails too many times, remove it from the
+    list of UIDs to ping.
+    """
+    # Ping all UIDs
+    try:
+        _, failed_uids = await ping_uids(self.metagraph.uids)
+    except:
+        bt.logging.error("Failed to ping all uids for monitor step.")
+
+    down_uids = []
+    for uid in failed_uids:
+        self.monitor_lookup[uid] += 1
+        if self.monitor_lookup[uid] > self.config.validator.max_failed_pings:
+            self.monitor_lookup[uid] = 0
+            down_uids.append(uid)
+    return down_uids
