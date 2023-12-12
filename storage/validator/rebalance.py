@@ -118,6 +118,7 @@ from storage.validator.database import (
     get_ordered_metadata,
     hotkey_at_capacity,
     get_miner_statistics,
+    is_file_chunk,
 )
 
 from storage.validator.bonding import (
@@ -128,7 +129,11 @@ from storage.validator.bonding import (
 )
 
 
-async def rebalance_data(self, source_hotkey: str, k: int = 3):
+from .retrieve import retrieve_data
+from .store import store_encrypted_data
+
+
+async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     """
     TODO: This might take a while, would be better to run in a separate process/thread
     rather than block other validator duties?
@@ -141,13 +146,34 @@ async def rebalance_data(self, source_hotkey: str, k: int = 3):
 
     """
 
+    source_uid = self.metagraph.uids.index(source_hotkey)
+
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 
-    hashes = list(metadata)
+    miner_hashes = list(metadata)
+    bt.logging.debug(f"miner hashes {miner_hashes[:5]}")
 
     rebalance_hashes = []
-    for _hash in hashes:
-        if await is_part_of_full_file(_hash, self.database):
+    for _hash in miner_hashes:
+        if await is_file_chunk(_hash, self.database):
             rebalance_hashes.append(_hash)
 
-    # TODO: actually rebalance these mfers, one at a time
+    bt.logging.debug(f"rebalance hashes: {rebalance_hashes[:5]}")
+
+    for _hash in rebalance_hashes:
+        await rebalance_data_for_hash(
+            self, data_hash=_hash, dropped_uid=source_uid, k=k
+        )
+
+
+async def rebalance_data_for_hash(self, data_hash: str, dropped_uid: int, k: int):
+    data, _ = await retrieve_data(self, data_hash)
+    await store_encrypted_data(self, data, k=k, exclude_uids=[dropped_uid])
+
+
+async def rebalance_data(self, k: int = 2, dropped_hotkeys: typing.List[str] = []):
+    if isinstance(dropped_hotkeys, str):
+        dropped_hotkeys = [dropped_hotkeys]
+
+    for hotkey in dropped_hotkeys:
+        await rebalance_data_for_hotkey(self, k, hotkey)

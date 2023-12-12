@@ -16,114 +16,16 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
-import copy
-import json
-import time
-import torch
-import base64
-import typing
-import asyncio
-import aioredis
-import argparse
-import traceback
 import bittensor as bt
 
-from loguru import logger
-from pprint import pformat
-from functools import partial
-from pyinstrument import Profiler
-from traceback import print_exception
-from random import choice as random_choice
-from Crypto.Random import get_random_bytes, random
-
-from dataclasses import asdict
-from storage.validator.event import EventSchema
-
-from storage import protocol
-
-from storage.shared.ecc import (
-    hash_data,
-    setup_CRS,
-    ECCommitment,
-    ecc_point_to_hex,
-    hex_to_ecc_point,
-)
-
-from storage.shared.merkle import (
-    MerkleTree,
-)
-
-from storage.shared.utils import (
-    b64_encode,
-    b64_decode,
-    chunk_data,
-    safe_key_search,
-)
-
-from storage.validator.utils import (
-    make_random_file,
-    get_random_chunksize,
-    check_uid_availability,
-    get_random_uids,
-    get_query_miners,
-    get_query_validators,
-    get_available_query_miners,
-    get_current_validtor_uid_round_robin,
-)
-
-from storage.validator.encryption import (
-    decrypt_data,
-    encrypt_data,
-)
-
-from storage.validator.verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-
 from storage.validator.config import config, check_config, add_args
-
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-    ttl_get_block,
-    log_event,
-)
-
+from storage.validator.state import log_event
+from storage.validator.bonding import compute_all_tiers
 from storage.validator.reward import apply_reward_scores
-
-from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
-)
-
 from storage.validator.database import (
-    add_metadata_to_hotkey,
-    get_metadata_for_hotkey,
     total_network_storage,
-    store_chunk_metadata,
-    store_file_chunk_mapping_ordered,
-    get_metadata_for_hotkey_and_hash,
-    update_metadata_for_data_hash,
     get_all_chunk_hashes,
-    get_ordered_metadata,
-    hotkey_at_capacity,
     get_miner_statistics,
-)
-
-from storage.validator.bonding import (
-    miner_is_registered,
-    update_statistics,
-    get_tier_factor,
-    compute_all_tiers,
 )
 
 from .challenge import challenge_data
@@ -167,7 +69,7 @@ async def forward(self):
     try:
         # Retrieve some data
         bt.logging.info("initiating retrieve")
-        event = await retrieve_data(self)
+        _, event = await retrieve_data(self)
 
         if self.config.neuron.verbose:
             bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
@@ -194,7 +96,7 @@ async def forward(self):
             await rebalance_data(
                 self,
                 k=2,  # increase redundancy
-                dropped_hotkeys=[self.metagraph.axons[uid] for uid in down_uids],
+                dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
             )
 
     try:

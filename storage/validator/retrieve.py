@@ -174,7 +174,7 @@ async def handle_retrieve(self, uid):
 
 
 async def retrieve_data(
-    self, data_hash: str = None, yield_event: bool = True
+    self, data_hash: str = None
 ) -> typing.Tuple[bytes, typing.Callable]:
     """
     Retrieves and verifies data from the network, ensuring integrity and correctness of the data associated with the given hash.
@@ -318,4 +318,4 @@ async def retrieve_data(
         event.best_uid = event.uids[best_index]
         event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
-    return event
+    return decoded_data, event

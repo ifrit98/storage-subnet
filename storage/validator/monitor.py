@@ -11,7 +11,7 @@ async def monitor(self):
     """
     # Ping all UIDs
     try:
-        successful_uids, failed_uids = await ping_uids(self.metagraph.uids)
+        _, failed_uids = await ping_uids(self.metagraph.uids)
     except:
         bt.logging.error("Failed to ping all uids for monitor step.")
 

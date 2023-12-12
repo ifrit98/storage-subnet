@@ -693,36 +693,18 @@ async def check_hash_type(data_hash: str, database: aioredis.Redis) -> str:
     return "standalone_challenge"
 
 
-async def find_full_file_for_chunk(chunk_hash: str, database: aioredis.Redis) -> str:
+async def is_file_chunk(chunk_hash: str, database: aioredis.Redis) -> str:
     """
-    Determines if the given chunk_hash is part of a full file hash.
+    Determines if the given chunk_hash is part of a full file.
 
     Parameters:
     - chunk_hash (str): The hash of the chunk to check.
     - database (aioredis.Redis): The Redis database client.
 
     Returns:
-    - str: The full file hash if the chunk is part of a full file, else 'Not part of a full file'.
+    - bool: True if the hash belongs to a full file, false otherwise (challenge data)
     """
-    # TODO: This seems broken,,,
-    async for full_file_key in database.scan_iter(match="file:*"):
-        full_file_hash = full_file_key.decode().split(":")[1]
-        chunks = await database.zrange(full_file_key, 0, -1)
-        if chunk_hash.encode() in chunks:
-            return full_file_hash
-
-    return "Not part of a full file"
-
-
-async def is_part_of_full_file(data_hash: str, database: aioredis.Redis) -> bool:
-    """
-    Determines if the given data_hash is part of a full file hash.
-
-    Parameters:
-    - data_hash (str): The hash of the data to check.
-    - database (aioredis.Redis): The Redis database client.
-
-    Returns:
-    - bool: True if the data_hash is part of a full file, else False.
-    """
-    return find_full_file_for_chunk(data_hash, database) != "Not part of a full file"
+    async for key in database.scan_iter(match="chunk:*"):
+        if chunk_hash in key.decode():
+            return True
+    return False

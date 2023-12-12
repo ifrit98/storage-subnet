@@ -232,3 +232,42 @@ async def reroll_distribution(self, distribution, failed_uids):
     )
     distribution["uids"] = new_uids
     return distribution
+
+
+async def ping_and_retry_uids(
+    self, k: int = None, max_retries: int = 3, exclude_uids: typing.List[int] = []
+):
+    """
+    Fetch available uids to minimize waiting for timeouts if they're going to fail anyways...
+    """
+    # Select initial subset of miners to query
+    uids = await get_available_query_miners(
+        self, k=k or self.config.neuron.store_redundancy, exclude=exclude_uids
+    )
+
+    retries = 0
+    successful_uids = set()
+    failed_uids = set()
+    while len(successful_uids) < k and retries < max_retries:
+        # Ping all UIDs
+        current_successful_uids, current_failed_uids = await ping_uids(self, uids)
+        successful_uids.update(current_successful_uids)
+        failed_uids.update(current_failed_uids)
+
+        # If enough UIDs are successful, select the first k items
+        if len(successful_uids) >= k:
+            uids = list(successful_uids)[:k]
+            break
+
+        # Reroll for k UIDs excluding the successful ones
+        new_uids = await get_available_query_miners(
+            self, k=k, exclude=list(successful_uids.union(failed_uids))
+        )
+        bt.logging.trace("new uids:", new_uids)
+        retries += 1
+
+    # Log if the maximum retries are reached without enough successful UIDs
+    if len(successful_uids) < k:
+        bt.logging.warning(f"Insufficient successful UIDs for k: {uids}")
+
+    return list(successful_uids)[:k], failed_uids

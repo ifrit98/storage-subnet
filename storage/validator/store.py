@@ -119,7 +119,10 @@ async def store_encrypted_data(
     self,
     encrypted_data: typing.Union[bytes, str],
     encryption_payload: dict,
+    exclude_uids: typing.List[str] = [],
     ttl: int = 0,
+    k: int = None,
+    max_retries: int = 3,
 ) -> bool:
     event = EventSchema(
         task_name="Store",
@@ -168,22 +171,19 @@ async def store_encrypted_data(
     )
 
     # Select subset of miners to query (e.g. redunancy factor of N)
-    uids = await get_available_query_miners(self, k=self.config.neuron.store_redundancy)
+    uids, _ = await ping_and_retry_uids(
+        self,
+        k=k or self.config.neuron.store_redundancy,
+        max_retries=max_retries,
+        exclude_uids=exclude_uids,
+    )
     bt.logging.debug(f"store uids: {uids}")
-    # Check each UID/axon to ensure it's not at it's storage capacity (e.g. 1TB)
-    # before sending another storage request (do not allow higher than tier allow)
-    # TODO: keep selecting UIDs until we get N that are not at capacity
-    avaialble_uids = [
-        uid
-        for uid in uids
-        if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
-    ]
 
-    axons = [self.metagraph.axons[uid] for uid in avaialble_uids]
+    axons = [self.metagraph.axons[uid] for uid in uids]
     failed_uids = [None]
 
     retries = 0
-    while len(failed_uids) and retries < 3:
+    while len(failed_uids) and retries < max_retries:
         if failed_uids == [None]:
             # initial loop
             failed_uids = []
@@ -288,7 +288,9 @@ async def store_encrypted_data(
         # Get a new set of UIDs to query for those left behind
         if failed_uids != []:
             bt.logging.trace(f"Failed to store on uids: {failed_uids}")
-            uids = await get_available_query_miners(self, k=len(failed_uids))
+            uids, _ = await ping_and_retry_uids(
+                self, k=len(failed_uids), exclude_uids=exclude_uids
+            )
             bt.logging.trace(f"Retrying with new uids: {uids}")
             axons = [self.metagraph.axons[uid] for uid in uids]
             failed_uids = []  # reset failed uids for next round

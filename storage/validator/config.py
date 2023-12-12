@@ -201,6 +201,12 @@ def add_args(cls, parser):
         default=3,
     )
     parser.add_argument(
+        "--neuron.monitor_step_length",
+        type=int,
+        help="Number of steps before calling monitor for down uids.",
+        default=5,
+    )
+    parser.add_argument(
         "--neuron.events_retention_size",
         type=str,
         help="Events retention size.",
