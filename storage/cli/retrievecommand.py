@@ -94,7 +94,7 @@ class RetrieveData:
     - Location where the retrieved data is saved (if successful).
 
     Example usage:
-    >>> stcli retrieve get --data_hash "123abc"
+    >>> ftcli retrieve get --data_hash "123abc"
 
     Note:
     This command is essential for individuals and applications that require access to specific data from the Bittensor network.

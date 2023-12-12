@@ -135,6 +135,12 @@ def add_args(cls, parser):
         help="Number of failed periodic pings before a miner is considered offline.",
     )
     parser.add_argument(
+        "--neuron.set_weights_epoch_length",
+        type=int,
+        help="Blocks until the miner sets weights on chain",
+        default=200,
+    )
+    parser.add_argument(
         "--neuron.disable_log_rewards",
         action="store_true",
         help="Disable all reward logging, suppresses reward functions and their values from being logged to wandb.",

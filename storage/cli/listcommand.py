@@ -123,7 +123,7 @@ class ListLocalHashes:
     - Data Hash: The hash corresponding to the stored data.
 
     Example usage:
-    >>> stcli retrieve list --hash_basepath ~/.bittensor/hashes
+    >>> ftcli retrieve list --hash_basepath ~/.bittensor/hashes
 
     Note:
     This command is an essential tool for users who interact with data on the Bittensor network,

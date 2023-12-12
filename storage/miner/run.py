@@ -84,7 +84,7 @@ def run(self):
             current_block = self.subtensor.get_current_block()
             while (
                 current_block - self.last_epoch_block
-                < self.config.miner.blocks_per_epoch
+                < self.config.miner.set_weights_epoch_length
             ):
                 # --- Wait for next bloc.
                 time.sleep(1)
@@ -118,6 +118,7 @@ def run(self):
 
             # --- Set weights.
             if not self.config.miner.no_set_weights:
+                bt.logging.info(f"Setting weights on chain.")
                 set_weights(
                     self.subtensor,
                     self.config.netuid,

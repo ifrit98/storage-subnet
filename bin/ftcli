@@ -6,7 +6,6 @@ import storage
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    print("initial args:", args)
     storage.cli.cli(args=args).run()
 
 # The MIT License (MIT)

@@ -10,7 +10,7 @@ We consider this system to be an important stepping stone so that bittensor can 
 
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
-# Table of Contents for Subnet 21 Documentation
+# Table of Contents for Subnet 21 (FileTAO)
 
 1. [Overview](#overview)
 2. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
@@ -27,12 +27,15 @@ We consider this system to be an important stepping stone so that bittensor can 
    - [Storage Phase](#storage-phase)
    - [Challenge Phase](#challenge-phase)
    - [Retrieval Phase](#retrieval-phase)
-5. [Installation](#installation)
+5. [Epoch UID Selection](#epoch-uid-selection)
+6. [Installation](#installation)
+   - [Install Redis](#install-redis)
+   - [Install PM2](#install-pm2)
    - [Running a Miner](#running-a-miner)
    - [Running a Validator](#running-a-validator)
-6. [Documentation for Storage CLI Interface](#documentation-for-storage-cli-interface)
+   - [Running the API](#running-the-api)
+7. [Storage CLI Interface](#storage-cli-interface)
    - [Prerequisites](#prerequisites)
-   - [Installation](#installation-1)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
      - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
@@ -40,8 +43,97 @@ We consider this system to be an important stepping stone so that bittensor can 
    - [Examples](#examples)
    - [General Options](#general-options)
    - [Notes](#notes)
+8. [(Optional) Setup WandB](#optional-setup-wandb)
 
 
+# Storage CLI Interface
+
+## Overview
+The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+
+## Prerequisites
+Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+
+## Commands
+
+### 1. Store: Storing Data on the Network
+This command encrypts and stores data on the Bittensor network.
+
+#### Subcommands
+- `put`: Encrypt and store data.
+
+#### Usage
+```bash
+ftcli store put --filepath <path-to-data> [options]
+```
+
+#### Options
+- `--filepath <path-to-data>`: Path to the data file to be stored.
+- `--hash_basepath <path>`: (Optional) Path to store the data hashes.
+- `--stake_limit <float>`: (Optional) Stake limit to filter validator axons.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+
+### 2. Retrieve: Retrieving Data from the Network
+This command retrieves previously stored data from the Bittensor network.
+
+#### Subcommands
+- `list`: Lists all data associated with a specific coldkey.
+- `get`: Retrieve and decrypt data.
+
+#### Usage
+```bash
+ftcli retrieve get --data_hash <hash> [options]
+```
+
+#### Options
+- `--data_hash <hash>`: Hash of the data to retrieve.
+- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
+- `--stake_limit <float>`: (Optional) Stake limit for validator axons.
+- `--storage_basepath <path>`: (Optional) Path to store retrieved data.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+
+### Listing Stored Data
+Lists all data hashes stored on the network associated with the specified coldkey.
+
+#### Usage
+```bash
+ftcli retrieve list [options]
+```
+
+#### Options
+- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
+- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+
+## Examples
+
+### Storing Data
+```bash
+ftcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
+```
+
+### Retrieving Data
+```bash
+ftcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
+```
+
+### Listing Data
+```bash
+ftcli retrieve list --wallet.name mywallet
+```
+
+![list](assets/list.png)
+
+## General Options
+- `--help`: Displays help information about CLI commands and options.
+
+## Notes
+- Ensure your wallet is configured and accessible.
+- File paths should be absolute or relative to your current directory.
+- Data hashes are unique identifiers for your stored data on the Bittensor network.
+
+For detailed instructions and more information, visit the [Bittensor Documentation](https://bittensor.com/docs).
 
 
 ## What is a Decentralized Storage Network (DSN)?
@@ -242,6 +334,20 @@ Nov 16 22:35:42 user systemd[1]: Starting Advanced key-value store...
 Nov 16 22:35:42 user systemd[1]: Started Advanced key-value store.
 ```
 
+### Install PM2
+This will allow you to use the process manager `pm2` for easily setting up your miner or validator.
+
+Install nodejs and npm
+```bash
+sudo apt install nodejs npm
+```
+
+Once this compeltes, install pm2 globally
+```bash
+sudo npm install pm2 -g
+```
+
+
 ### Running a miner
 ```bash
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
@@ -270,91 +376,59 @@ Similar to running a validator, however this exposes two axon endpoints to `stor
 python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
 
-# Documentation for Storage CLI Interface
+### (Optional) Setup WandB:
 
-## Overview
-The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+Weights & Biases (WANDB) is a popular tool for tracking and visualizing machine learning experiments. To use it effectively, you need to log into your WANDB account and set your API key on your system. Here's a step-by-step guide on how to do this on Ubuntu:
 
-## Prerequisites
-Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+#### Step 1: Installation of WANDB
 
-## Commands
+Before logging in, make sure you have the WANDB Python package installed. If you haven't installed it yet, you can do so using pip:
 
-### 1. Store: Storing Data on the Network
-This command encrypts and stores data on the Bittensor network.
-
-#### Subcommands
-- `put`: Encrypt and store data.
-
-#### Usage
 ```bash
-stcli store put --filepath <path-to-data> [options]
+# Should already be installed with storage repo
+pip install wandb
 ```
 
-#### Options
-- `--filepath <path-to-data>`: Path to the data file to be stored.
-- `--hash_basepath <path>`: (Optional) Path to store the data hashes.
-- `--stake_limit <float>`: (Optional) Stake limit to filter validator axons.
-- `--wallet.name <name>`: (Optional) Wallet coldkey name.
-- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+#### Step 2: Obtain Your API Key
 
-### 2. Retrieve: Retrieving Data from the Network
-This command retrieves previously stored data from the Bittensor network.
+1. Log in to your Weights & Biases account through your web browser.
+2. Go to your account settings, usually accessible from the top right corner under your profile.
+3. Find the section labeled "API keys".
+4. Copy your API key. It's a long string of characters unique to your account.
 
-#### Subcommands
-- `list`: Lists all data associated with a specific coldkey.
-- `get`: Retrieve and decrypt data.
+#### Step 3: Setting Up the API Key in Ubuntu
 
-#### Usage
-```bash
-stcli retrieve get --data_hash <hash> [options]
-```
+To configure your WANDB API key on your Ubuntu machine, follow these steps:
 
-#### Options
-- `--data_hash <hash>`: Hash of the data to retrieve.
-- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
-- `--stake_limit <float>`: (Optional) Stake limit for validator axons.
-- `--storage_basepath <path>`: (Optional) Path to store retrieved data.
-- `--wallet.name <name>`: (Optional) Wallet coldkey name.
-- `--wallet.hotkey <name>`: (Optional) Hotkey name.
+1. **Open Terminal**: You can do this by searching for 'Terminal' in your applications menu, or by using the keyboard shortcut `Ctrl + Alt + T`.
 
-### Listing Stored Data
-Lists all data hashes stored on the network associated with the specified coldkey.
+2. **Log into WANDB**: Run the following command in the terminal:
 
-#### Usage
-```bash
-stcli retrieve list [options]
-```
+   ```bash
+   wandb login
+   ```
 
-#### Options
-- `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
-- `--wallet.name <name>`: (Optional) Wallet coldkey name.
+3. **Enter Your API Key**: When prompted, paste the API key you copied from your WANDB account settings. 
 
-## Examples
+   - After pasting your API key, press `Enter`.
+   - WANDB should display a message confirming that you are logged in.
 
-### Storing Data
-```bash
-stcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
-```
+4. **Verifying the Login**: To verify that the API key was set correctly, you can start a small test script in Python that uses WANDB. If everything is set up correctly, the script should run without any authentication errors.
 
-### Retrieving Data
-```bash
-stcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
-```
+5. **Setting API Key Environment Variable (Optional)**: If you prefer not to log in every time, you can set your API key as an environment variable in your `~/.bashrc` or `~/.bash_profile` file:
 
-### Listing Data
-```bash
-stcli retrieve list --wallet.name mywallet
-```
+   ```bash
+   echo 'export WANDB_API_KEY=your_api_key' >> ~/.bashrc
+   source ~/.bashrc
+   ```
 
-![list](assets/list.png)
+   Replace `your_api_key` with the actual API key. This method automatically authenticates you with wandb every time you open a new terminal session.
 
-## General Options
-- `--help`: Displays help information about CLI commands and options.
+#### Tips and Best Practices
 
-## Notes
-- Ensure your wallet is configured and accessible.
-- File paths should be absolute or relative to your current directory.
-- Data hashes are unique identifiers for your stored data on the Bittensor network.
+- **Security**: Keep your API key confidential. Do not share it or commit it to public repositories.
+- **Troubleshooting**: If you encounter issues, check for common problems like incorrect API key entry or network issues.
+- **Usage in Scripts**: For using WANDB in your Python scripts, refer to the WANDB documentation for proper initialization and usage patterns.
 
-For detailed instructions and more information, visit the [Bittensor Documentation](https://bittensor.com/docs).
+Following these steps, you should be able to successfully log into WANDB and set up your API key on your Ubuntu machine, enabling seamless integration of WANDB in your machine learning workflows.
+

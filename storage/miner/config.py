@@ -98,7 +98,7 @@ def add_args(cls, parser):
 
     # Run config.
     parser.add_argument(
-        "--miner.blocks_per_epoch",
+        "--miner.set_weights_epoch_length",
         type=str,
         help="Blocks until the miner sets weights on chain",
         default=100,
