@@ -669,3 +669,60 @@ async def retrieve_mutually_exclusive_hotkeys_full_hash(
                 mutually_exclusive_hotkeys[chunk_info["chunk_hash"]].append(hotkey)
 
     return mutually_exclusive_hotkeys
+
+
+async def check_hash_type(data_hash: str, database: aioredis.Redis) -> str:
+    """
+    Determine if the data_hash is a full file hash, a chunk hash, or a standalone challenge hash.
+
+    Parameters:
+    - data_hash (str): The data hash to check.
+    - database (aioredis.Redis): The Redis database client.
+
+    Returns:
+    - str: A string indicating the type of hash ('full_file', 'chunk', or 'standalone_challenge').
+    """
+    is_full_file = await database.exists(f"file:{data_hash}")
+    if is_full_file:
+        return "full_file"
+
+    is_chunk = await database.exists(f"chunk:{data_hash}")
+    if is_chunk:
+        return "chunk"
+
+    return "standalone_challenge"
+
+
+async def find_full_file_for_chunk(chunk_hash: str, database: aioredis.Redis) -> str:
+    """
+    Determines if the given chunk_hash is part of a full file hash.
+
+    Parameters:
+    - chunk_hash (str): The hash of the chunk to check.
+    - database (aioredis.Redis): The Redis database client.
+
+    Returns:
+    - str: The full file hash if the chunk is part of a full file, else 'Not part of a full file'.
+    """
+    # TODO: This seems broken,,,
+    async for full_file_key in database.scan_iter(match="file:*"):
+        full_file_hash = full_file_key.decode().split(":")[1]
+        chunks = await database.zrange(full_file_key, 0, -1)
+        if chunk_hash.encode() in chunks:
+            return full_file_hash
+
+    return "Not part of a full file"
+
+
+async def is_part_of_full_file(data_hash: str, database: aioredis.Redis) -> bool:
+    """
+    Determines if the given data_hash is part of a full file hash.
+
+    Parameters:
+    - data_hash (str): The hash of the data to check.
+    - database (aioredis.Redis): The Redis database client.
+
+    Returns:
+    - bool: True if the data_hash is part of a full file, else False.
+    """
+    return find_full_file_for_chunk(data_hash, database) != "Not part of a full file"

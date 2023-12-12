@@ -129,6 +129,12 @@ def add_args(cls, parser):
         help="Number of steps before tier update epoch is complete.",
     )
     parser.add_argument(
+        "--neuron.max_failed_pings",
+        type=int,
+        default=3,
+        help="Number of failed periodic pings before a miner is considered offline.",
+    )
+    parser.add_argument(
         "--neuron.disable_log_rewards",
         action="store_true",
         help="Disable all reward logging, suppresses reward functions and their values from being logged to wandb.",

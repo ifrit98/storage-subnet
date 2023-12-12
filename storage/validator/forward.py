@@ -178,11 +178,24 @@ async def forward(self):
     except Exception as e:
         bt.logging.error(f"Failed to retrieve data: {e}")
 
-    try:
-        await distribute_data(self, self.config.neuron.redundancy)
+    if self.step % self.config.neuron.distribute_step_length == 0:
+        bt.logging.info("initiating distribute")
+        try:
+            await distribute_data(self, self.config.neuron.redundancy)
 
-    except Exception as e:
-        bt.logging.error(f"Failed to rebalance data {e}")
+        except Exception as e:
+            bt.logging.error(f"Failed to distribute data {e}")
+
+    if self.step % self.config.neuron.monitor_step_length == 0:
+        # Monitor all miner UIDs to see if they are still online.
+        # After n failed pings consecutively, we rebalance
+        down_uids = await monitor(self)
+        if len(down_uids) > 0:
+            await rebalance_data(
+                self,
+                k=2,  # increase redundancy
+                dropped_hotkeys=[self.metagraph.axons[uid] for uid in down_uids],
+            )
 
     try:
         # Update miner tiers

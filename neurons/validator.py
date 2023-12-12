@@ -49,6 +49,7 @@ from storage.validator.weights import (
 )
 
 from storage.validator.forward import forward
+from storage.validator.monitor import monitor
 
 
 class neuron:
@@ -172,6 +173,10 @@ class neuron:
         self.start_neuron_event_subscription()
         bt.logging.debug(f"started event handler")
 
+        # Start with 0 monitor pings
+        # TODO: load this from disk instead of reset on restart
+        self.monitor_lookup = {hotkey: 0 for hotkey in self.metagraph.hotkeys}
+
     def neuron_registered_subscription_handler(self, obj, update_nr, subscription_id):
         bt.logging.debug(f"New block #{obj['header']['number']}")
         bt.logging.debug(obj)
@@ -186,7 +191,7 @@ class neuron:
                 netuid, uid, hotkey = event_dict["attributes"]
                 if int(netuid) == 21:
                     bt.logging.info(f"NeuronRegistered Event {uid}!")
-                    # TODO: Trigger rebalance() here with UID/hotkey to rebalance
+                    await rebalance_data(self, k=2, dropped_hotkeys=[hotkey])
 
     def start_neuron_event_subscription(self):
         self.subtensor.substrate.subscribe_block_headers(
