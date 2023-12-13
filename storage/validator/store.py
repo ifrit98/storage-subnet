@@ -313,6 +313,8 @@ async def store_random_data(self):
         self, encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl
     )
 
+from .utils import compute_chunk_distribution_mut_exclusive_numpy_reuse_uids
+import websocket
 
 async def store_broadband(
     self,
@@ -530,7 +532,7 @@ async def store_broadband(
 
     async def create_initial_distributions(encrypted_data, R, k):
         dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
-            self, data_size=sys.getsizeof(encrypted_data), R=R, k=k, exclude=exclude
+            self, data_size=sys.getsizeof(encrypted_data), R=R, k=k, exclude=exclude_uids
         )
         # Ping first to see if we need to reroll instead of waiting for the timeout
         distributions = [dist async for dist in dist_gen]
