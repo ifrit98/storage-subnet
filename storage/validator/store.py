@@ -420,6 +420,15 @@ async def store_broadband(
         await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
         event.rewards.extend(rewards.tolist())
 
+        apply_reward_scores(
+            self,
+            uids,
+            responses,
+            rewards,
+            timeout=self.config.neuron.store_timeout,
+            mode="minmax",
+        )
+
         chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
         bt.logging.debug(f"chunk size: {chunk_size}")
 
