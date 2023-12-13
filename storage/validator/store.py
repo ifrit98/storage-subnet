@@ -114,6 +114,8 @@ from storage.validator.bonding import (
     compute_all_tiers,
 )
 
+from .reward import create_reward_vector
+from .network import ping_and_retry_uids
 
 async def store_encrypted_data(
     self,
@@ -209,63 +211,35 @@ async def store_encrypted_data(
             len(responses), dtype=torch.float32
         ).to(self.device)
 
-        # TODO: Add proper error logging, e.g. if we timeout, raise/show timeout error instead of
-        # uniform "failed to verify" error (it doesn't give any context for what may have happened)
-        for idx, (uid, response) in enumerate(zip(uids, responses)):
-            # Verify the commitment
-            hotkey = self.metagraph.hotkeys[uid]
-            success = verify_store_with_seed(response)
-            if success:
-                bt.logging.debug(
-                    f"Successfully verified store commitment from UID: {uid}"
-                )
+        async def success(hotkey, idx, uid, response):
+            # Prepare storage for the data for particular miner
+            response_storage = {
+                "prev_seed": synapse.seed,
+                "size": sys.getsizeof(encrypted_data),  # in bytes, not len(data)
+                "encryption_payload": encryption_payload,
+            }
+            bt.logging.trace(f"Storing UID {uid} data {pformat(response_storage)}")
 
-                # Prepare storage for the data for particular miner
-                response_storage = {
-                    "prev_seed": synapse.seed,
-                    "size": sys.getsizeof(encrypted_data),  # in bytes, not len(data)
-                    "encryption_payload": encryption_payload,
-                }
-                bt.logging.trace(f"Storing UID {uid} data {pformat(response_storage)}")
-
-                # Store in the database according to the data hash and the miner hotkey
-                await add_metadata_to_hotkey(
-                    hotkey,
-                    data_hash,
-                    response_storage,
-                    self.database,
-                )
-                if ttl > 0:
-                    await self.database.expire(
-                        f"{hotkey}:{data_hash}",
-                        ttl,
-                    )
-                bt.logging.debug(
-                    f"Stored data in database with key: {hotkey} | {data_hash}"
-                )
-
-            else:
-                bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
-                failed_uids.append(uid)
-
-            # Update the storage statistics
-            await update_statistics(
-                ss58_address=hotkey,
-                success=success,
-                task_type="store",
-                database=self.database,
+            # Store in the database according to the data hash and the miner hotkey
+            await add_metadata_to_hotkey(
+                hotkey,
+                data_hash,
+                response_storage,
+                self.database,
             )
+            if ttl > 0:
+                await self.database.expire(
+                    f"{hotkey}:{data_hash}",
+                    ttl,
+                )
+            bt.logging.debug(
+                f"Stored data in database with key: {hotkey} | {data_hash}"
+            )
+        
+        def failure(uid):
+            failed_uids.push(uid)
 
-            # Apply reward for this store
-            tier_factor = await get_tier_factor(hotkey, self.database)
-            rewards[idx] = 1.0 * tier_factor if success else 0.0
-
-            event.successful.append(success)
-            event.uids.append(uid)
-            event.completion_times.append(response.dendrite.process_time)
-            event.task_status_messages.append(response.dendrite.status_message)
-            event.task_status_codes.append(response.dendrite.status_code)
-
+        await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
         event.rewards.extend(rewards.tolist())
 
         if self.config.neuron.verbose and self.config.neuron.log_responses:

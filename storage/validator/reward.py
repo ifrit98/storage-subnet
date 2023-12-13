@@ -246,3 +246,57 @@ def apply_reward_scores(
         1 - alpha
     ) * self.moving_averaged_scores.to(self.device)
     bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
+
+from bittensor import Synapse
+from ...neurons.validator import neuron
+
+from .verify import verify_store_with_seed
+from .database import add_metadata_to_hotkey
+from .bonding import update_statistics, get_tier_factor
+from .event import EventSchema
+from ..protocol import Store
+
+import sys
+from pprint import pformat
+
+async def create_reward_vector(
+    self: neuron,
+    synapse: Store,
+    rewards: torch.FloatTensor,
+    uids: list[int], 
+    responses: list[Synapse],
+    event: EventSchema,
+    callback: function,
+    fail_callback: function
+):
+    for idx, (uid, response) in enumerate(zip(uids, responses)):
+        # Verify the commitment
+        hotkey = self.metagraph.hotkeys[uid]
+        success = verify_store_with_seed(response)
+        if success:
+            bt.logging.debug(
+                f"Successfully verified store commitment from UID: {uid}"
+            )
+
+            callback(hotkey, idx, uid, response)
+        else:
+            bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+            fail_callback(uid)
+
+        # Update the storage statistics
+        await update_statistics(
+            ss58_address=hotkey,
+            success=success,
+            task_type="store",
+            database=self.database,
+        )
+
+        # Apply reward for this store
+        tier_factor = await get_tier_factor(hotkey, self.database)
+        rewards[idx] = 1.0 * tier_factor if success else 0.0
+
+        event.successful.append(success)
+        event.uids.append(uid)
+        event.completion_times.append(response.dendrite.process_time)
+        event.task_status_messages.append(response.dendrite.status_message)
+        event.task_status_codes.append(response.dendrite.status_code)
