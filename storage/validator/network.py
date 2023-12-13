@@ -16,8 +16,10 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-
+import typing
 import bittensor as bt
+
+from storage.validator.utils import get_available_query_miners
 
 
 async def ping_uids(self, uids):
@@ -26,22 +28,27 @@ async def ping_uids(self, uids):
     Returns a tuple with a list of successful UIDs and a list of failed UIDs.
     """
     axons = [self.metagraph.axons[uid] for uid in uids]
-    responses = await self.dendrite(
-        axons,
-        bt.Synapse(),
-        deserialize=False,
-        timeout=self.config.neuron.ping_timeout,
-    )
-    successful_uids = [
-        uid
-        for uid, response in zip(uids, responses)
-        if response.dendrite.status_code == 200
-    ]
-    failed_uids = [
-        uid
-        for uid, response in zip(uids, responses)
-        if response.dendrite.status_code != 200
-    ]
+    try:
+        responses = await self.dendrite(
+            axons,
+            bt.Synapse(),
+            deserialize=False,
+            timeout=self.config.api.ping_timeout,
+        )
+        successful_uids = [
+            uid
+            for uid, response in zip(uids, responses)
+            if response.dendrite.status_code == 200
+        ]
+        failed_uids = [
+            uid
+            for uid, response in zip(uids, responses)
+            if response.dendrite.status_code != 200
+        ]
+    except Exception as e:
+        bt.logging.error(f"Dendrite ping failed: {e}")
+        successful_uids = []
+        failed_uids = uids
     bt.logging.trace("successful uids:", successful_uids)
     bt.logging.trace("failed uids    :", failed_uids)
     return successful_uids, failed_uids
@@ -173,15 +180,14 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping all UIDs
-    try:
-        _, failed_uids = await ping_uids(self.metagraph.uids)
-    except:
-        bt.logging.error("Failed to ping all uids for monitor step.")
+    _, failed_uids = await ping_uids(self, self.metagraph.uids)
 
     down_uids = []
     for uid in failed_uids:
+        uid = uid.item()
         self.monitor_lookup[uid] += 1
-        if self.monitor_lookup[uid] > self.config.validator.max_failed_pings:
+        if self.monitor_lookup[uid] > self.config.neuron.max_failed_pings:
             self.monitor_lookup[uid] = 0
             down_uids.append(uid)
+    bt.logging.trace(f"down uids: {down_uids}")
     return down_uids

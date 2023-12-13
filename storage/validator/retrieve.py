@@ -124,7 +124,7 @@ async def retrieve_data(
 
     start_time = time.time()
 
-    uids = await ping_and_retry_uids(self, k=self.config.neuron.challenge_sample_size)
+    uids, _ = await ping_and_retry_uids(self, k=self.config.neuron.challenge_sample_size)
 
     # Ensure that each UID has data to retreive. If not, skip it.
     uids = [

@@ -30,6 +30,7 @@ from storage.validator.database import (
 
 from .challenge import challenge_data
 from .retrieve import retrieve_data
+from .rebalance import rebalance_data
 from .store import store_random_data
 from .distribute import distribute_data
 from .network import monitor
@@ -38,95 +39,67 @@ from .network import monitor
 async def forward(self):
     bt.logging.info(f"forward step: {self.step}")
 
-    try:
-        # Store some random data
-        bt.logging.info("initiating store random")
-        event = await store_random_data(self)
+    # # Store some random data
+    # bt.logging.info("initiating store random")
+    # event = await store_random_data(self)
 
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"STORE EVENT LOG: {event}")
+    # if self.config.neuron.verbose:
+    #     bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-        # Log event
-        log_event(self, event)
+    # # Log event
+    # log_event(self, event)
 
-    except Exception as e:
-        bt.logging.error(f"Failed to store random data: {e}")
+    # # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
+    # # Challenge some data
+    # bt.logging.info("initiating challenge")
+    # event = await challenge_data(self)
 
-    # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
-    try:
-        # Challenge some data
-        bt.logging.info("initiating challenge")
-        event = await challenge_data(self)
+    # if self.config.neuron.verbose:
+    #     bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
 
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
+    # # Log event
+    # log_event(self, event)
 
-        # Log event
-        log_event(self, event)
+    # # Retrieve some data
+    # bt.logging.info("initiating retrieve")
+    # _, event = await retrieve_data(self)
 
-    except Exception as e:
-        bt.logging.error(f"Failed to challenge data: {e}")
+    # if self.config.neuron.verbose:
+    #     bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-    try:
-        # Retrieve some data
-        bt.logging.info("initiating retrieve")
-        _, event = await retrieve_data(self)
+    # # Log event
+    # log_event(self, event)
 
-        if self.config.neuron.verbose:
-            bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+    await distribute_data(self, self.config.neuron.store_redundancy)
 
-        # Log event
-        log_event(self, event)
+    # down_uids = await monitor(self)
+    down_uids = [224, 249]
+    bt.logging.debug(f"downed uids marked for rebalance: {down_uids}")
+    if len(down_uids) > 0:
+        await rebalance_data(
+            self,
+            k=2,  # increase redundancy
+            dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
+        )
 
-    except Exception as e:
-        bt.logging.error(f"Failed to retrieve data: {e}")
+    # await compute_all_tiers(self.database)
 
-    if self.step % self.config.neuron.distribute_step_length == 0:
-        bt.logging.info("initiating distribute")
-        try:
-            await distribute_data(self, self.config.neuron.store_redundancy)
+    # # Fetch miner statistics and usage data.
+    # stats = await get_miner_statistics(self.database)
 
-        except Exception as e:
-            bt.logging.error(f"Failed to distribute data {e}")
+    # # Log all chunk hash <> hotkey pairs
+    # chunk_hash_map = await get_all_chunk_hashes(self.database)
 
-    if self.step % self.config.neuron.monitor_step_length == 0:
-        # Monitor all miner UIDs to see if they are still online.
-        # After n failed pings consecutively, we rebalance the data.
-        down_uids = await monitor(self)
-        if len(down_uids) > 0:
-            await rebalance_data(
-                self,
-                k=2,  # increase redundancy
-                dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
-            )
+    # # Log the statistics and hashmap to wandb.
+    # if not self.config.wandb.off:
+    #     self.wandb.log(stats)
+    #     self.wandb.log(chunk_hash_map)
 
-    try:
-        # Update miner tiers
-        bt.logging.info("Computing tiers")
-        await compute_all_tiers(self.database)
+    # # Update the total network storage
+    # total_storage = await total_network_storage(self.database)
+    # bt.logging.info(f"Total network storage: {total_storage}")
 
-        # Fetch miner statistics and usage data.
-        stats = await get_miner_statistics(self.database)
+    # # Log the total storage to wandb.
+    # if not self.config.wandb.off:
+    #     self.wandb.log({"total_storage": total_storage})
 
-        # Log all chunk hash <> hotkey pairs
-        chunk_hash_map = await get_all_chunk_hashes(self.database)
-
-        # Log the statistics and hashmap to wandb.
-        if not self.config.wandb.off:
-            self.wandb.log(stats)
-            self.wandb.log(chunk_hash_map)
-
-    except Exception as e:
-        bt.logging.error(f"Failed to compute tiers: {e}")
-
-    try:
-        # Update the total network storage
-        total_storage = await total_network_storage(self.database)
-        bt.logging.info(f"Total network storage: {total_storage}")
-
-        # Log the total storage to wandb.
-        if not self.config.wandb.off:
-            self.wandb.log({"total_storage": total_storage})
-
-    except Exception as e:
-        bt.logging.error(f"Failed to calculate total network storage: {e}")

@@ -46,13 +46,16 @@ async def distribute_data(self, k: int):
 
     Parameters:
     - k (int): The number of miners to query and distribute data from.
-    - dropped_hotkeys (list of str): A list of hotkeys to re-add to the rebalancing process.
 
     Returns:
     - A report of the rebalancing process.
     """
 
     full_hashes = [key async for key in self.database.scan_iter("file:*")]
+    if full_hashes == []:
+        bt.logging.warning("No full hashes found, skipping distribute step.")
+        return
+
     full_hash = random.choice(full_hashes).decode("utf-8").split(":")[1]
     encryption_payload = await self.database.get(f"payload:{full_hash}")
     ordered_metadata = await get_ordered_metadata(full_hash, self.database)
@@ -69,7 +72,6 @@ async def distribute_data(self, k: int):
         uids = [
             self.metagraph.hotkeys.index(hotkey)
             for hotkey in chunk_metadata["hotkeys"]
-            if hotkey not in dropped_hotkeys  # ensure we use new miners
         ]
         # Collect all uids for later exclusion
         exclude_uids.update(uids)

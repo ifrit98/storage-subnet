@@ -66,6 +66,7 @@ from storage.validator.utils import (
     get_query_validators,
     get_available_query_miners,
     get_current_validtor_uid_round_robin,
+    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
 )
 from storage.validator.encryption import (
     decrypt_data,
@@ -115,7 +116,7 @@ from storage.validator.bonding import (
 )
 
 from .reward import create_reward_vector
-from .network import ping_and_retry_uids
+from .network import ping_and_retry_uids, compute_and_ping_chunks
 
 async def store_encrypted_data(
     self,
@@ -237,7 +238,7 @@ async def store_encrypted_data(
             )
         
         def failure(uid):
-            failed_uids.push(uid)
+            failed_uids.append(uid)
 
         await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
         event.rewards.extend(rewards.tolist())
@@ -417,10 +418,12 @@ async def store_broadband(
             )
         
         def failure(uid):
-            failed_uids.push(uid)
+            failed_uids.append(uid)
 
         await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
         event.rewards.extend(rewards.tolist())
+
+        bt.logging.debug(f"Updated reward scores: {self.reward_scores.tolist()}")
 
         apply_reward_scores(
             self,
@@ -536,7 +539,7 @@ async def store_broadband(
         )
         # Ping first to see if we need to reroll instead of waiting for the timeout
         distributions = [dist async for dist in dist_gen]
-        distributions = await self.compute_and_ping_chunks(distributions)
+        distributions = await compute_and_ping_chunks(self, distributions)
         return distributions
 
     bt.logging.debug(f"store_broadband() {encrypted_data[:100]}")

@@ -201,6 +201,12 @@ def add_args(cls, parser):
         default=100,
     )
     parser.add_argument(
+        "--neuron.distribute_step_length",
+        type=int,
+        help="Blocks before a distribute step is taken.",
+        default=10,
+    )
+    parser.add_argument(
         "--neuron.blocks_per_step",
         type=int,
         help="Blocks before a step is taken.",
@@ -228,7 +234,7 @@ def add_args(cls, parser):
         "--neuron.vpermit_tao_limit",
         type=int,
         help="The maximum number of TAO allowed to query a validator with a vpermit.",
-        default=4096,
+        default=2000,
     )
     parser.add_argument(
         "--neuron.verbose",

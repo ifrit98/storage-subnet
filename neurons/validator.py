@@ -49,7 +49,6 @@ from storage.validator.weights import (
 )
 
 from storage.validator.forward import forward
-from storage.validator.monitor import monitor
 
 
 class neuron:
@@ -175,9 +174,9 @@ class neuron:
 
         # Start with 0 monitor pings
         # TODO: load this from disk instead of reset on restart
-        self.monitor_lookup = {hotkey: 0 for hotkey in self.metagraph.hotkeys}
+        self.monitor_lookup = {uid.item(): 0 for uid in self.metagraph.uids}
 
-    def neuron_registered_subscription_handler(self, obj, update_nr, subscription_id):
+    async def neuron_registered_subscription_handler(self, obj, update_nr, subscription_id):
         bt.logging.debug(f"New block #{obj['header']['number']}")
         bt.logging.debug(obj)
 

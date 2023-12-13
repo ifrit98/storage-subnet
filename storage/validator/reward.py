@@ -248,7 +248,6 @@ def apply_reward_scores(
     bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
 from bittensor import Synapse
-from ...neurons.validator import neuron
 
 from .verify import verify_store_with_seed
 from .database import add_metadata_to_hotkey
@@ -260,14 +259,14 @@ import sys
 from pprint import pformat
 
 async def create_reward_vector(
-    self: neuron,
+    self,
     synapse: Store,
     rewards: torch.FloatTensor,
     uids: list[int], 
     responses: list[Synapse],
     event: EventSchema,
-    callback: function,
-    fail_callback: function
+    callback: callable,
+    fail_callback: callable,
 ):
     for idx, (uid, response) in enumerate(zip(uids, responses)):
         # Verify the commitment

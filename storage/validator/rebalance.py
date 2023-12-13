@@ -20,7 +20,7 @@ import typing
 import bittensor as bt
 
 from pprint import pformat
-from storage.validator.database import is_file_chunk
+from storage.validator.database import is_file_chunk, get_metadata_for_hotkey
 
 from .retrieve import retrieve_data
 from .store import store_encrypted_data
@@ -38,8 +38,7 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     (3) Distribute the data that belongs to full files to other miners.
 
     """
-
-    source_uid = self.metagraph.uids.index(source_hotkey)
+    source_uid = self.metagraph.hotkeys.index(source_hotkey)
 
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 

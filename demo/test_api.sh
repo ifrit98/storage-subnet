@@ -15,6 +15,7 @@ python neurons/api.py --subtensor.network test --netuid 22 --wallet.name default
 ## Start with a simple text file
 # Store precomputed text
 ftcli store put --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --filepath test.txt --noencrypt
+ftcli store put --subtensor.network finney --netuid 21 --wallet.name default --wallet.hotkey default --filepath test.txt --noencrypt
 
 # Retrieve the file from the network
 ftcli retrieve get --subtensor.network test --netuid 22 --wallet.name default --wallet.hotkey default --data_hash 38866360490337421968271411759171270733697519958661904670309117221177014022402
