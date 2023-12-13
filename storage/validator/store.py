@@ -533,7 +533,7 @@ async def store_broadband(
         bt.logging.warning(f"Hash {full_hash} already exists on the network.")
         return full_hash
 
-    exclude_uids = copy.deepcopy(exlude_uids)
+    exclude_uids = copy.deepcopy(exclude_uids)
 
     full_size = sys.getsizeof(encrypted_data)
     bt.logging.debug(f"full size: {full_size}")
