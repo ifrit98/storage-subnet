@@ -36,86 +36,8 @@ from storage.validator.database import (
     get_ordered_metadata,
 )
 
-from .network import ping_and_retry_uids
-from .store import store_encrypted_data, store_broadband
-from .retrieve import retrieve_data, retreive_user_data
-
-
-async def distribute_store(
-    self,
-    encrypted_data: bytes,
-    uid: str,
-):
-    """
-    Store encrypted data on a specific miner identified by hotkey.
-
-    Parameters:
-    - encrypted_data (bytes): The encrypted data to store.
-    - uid (str): The uid of the miner where the data is to be stored.
-    """
-    # Prepare the synapse protocol for storing data
-
-    g, h = setup_CRS()
-
-    synapse = protocol.Store(
-        encrypted_data=encrypted_data,
-        curve=self.config.neuron.curve,
-        g=ecc_point_to_hex(g),
-        h=ecc_point_to_hex(h),
-        seed=get_random_bytes(32).hex(),  # 256-bit seed
-    )
-
-    # Retrieve the axon for the specified miner
-    axon = self.metagraph.axons[uid]
-
-    # Send the store request to the miner
-    response = await self.dendrite(
-        [axon],
-        synapse,
-        deserialize=False,
-        timeout=self.config.neuron.store_timeout,
-    )
-
-    # TODO: check if successful and error handle
-
-
-async def distribute_retrieve(self, hotkey, data_hash, metadata):
-    bt.logging.debug(f"distribute_retrieve data_hash: {data_hash[:10]} | {hotkey[:10]}")
-    uid = self.metagraph.hotkeys.index(hotkey)
-    axon = self.metagraph.axons[uid]
-
-    synapse = protocol.Retrieve(
-        data_hash=data_hash,
-        seed=get_random_bytes(32).hex(),
-    )
-
-    response = await self.dendrite(
-        [axon],
-        synapse,
-        deserialize=False,
-        timeout=self.config.neuron.retrieve_timeout,
-    )
-
-    verified = False
-    try:
-        verified = verify_retrieve_with_seed(response[0])
-        if verified:
-            metadata["prev_seed"] = synapse.seed
-            await update_metadata_for_data_hash(
-                hotkey, data_hash, metadata, self.database
-            )
-
-            bt.logging.trace(
-                f"Updated metadata for UID: {uid} with data: {pformat(metadata)}"
-            )
-
-        else:
-            bt.logging.error(f"Failed to verify distribute retrieve from UID: {uid}")
-
-    except:
-        bt.logging.error(f"Failed to verify distribute retrieve from UID: {uid}")
-
-    return response, verified
+from .store import store_broadband
+from .retrieve import retrieve_broadband
 
 
 async def distribute_data(self, k: int):
@@ -136,58 +58,29 @@ async def distribute_data(self, k: int):
     ordered_metadata = await get_ordered_metadata(full_hash, self.database)
 
     # Get the hotkeys/uids to query
-    tasks = []
-    total_size = 0
     bt.logging.debug(f"ordered metadata: {pformat(ordered_metadata)}")
-    # TODO: change this to use retrieve_mutually_exclusive_hotkeys_full_hash
-    # to avoid possibly double querying miners for greater retrieval efficiency
 
-    semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
+    # TODO: Add proper error handling, try/excepts here
+    # This is to get the hotkeys that already contain chunks for file
+    # Such that we can exclude them from the subsequent call to store_broadband
+    exclude_uids = set()
+    for chunk_metadata in ordered_metadata:
+        bt.logging.debug(f"chunk metadata: {chunk_metadata}")
+        uids = [
+            self.metagraph.hotkeys.index(hotkey)
+            for hotkey in chunk_metadata["hotkeys"]
+            if hotkey not in dropped_hotkeys  # ensure we use new miners
+        ]
+        # Collect all uids for later exclusion
+        exclude_uids.update(uids)
 
-    async with semaphore:
-        # This is to get the hotkeys that already contain chunks for file
-        # Such that we can exclude them from the subsequent call to store_broadband
-        exclude_uids = set()
-        for chunk_metadata in ordered_metadata:
-            bt.logging.debug(f"chunk metadata: {chunk_metadata}")
-            uids = [
-                self.metagraph.hotkeys.index(hotkey)
-                for hotkey in chunk_metadata["hotkeys"]
-                if hotkey not in dropped_hotkeys  # ensure we use new miners
-            ]
-            # Collect all uids for later exclusion
-            exclude_uids.update(uids)
-
-            total_size += chunk_metadata["size"]
-
-        # Get the chunks from the responses
-        chunks = {}
-        for i, response_group in enumerate(responses):
-            for response in response_group:
-                if response.dendrite.status_code != 200:
-                    bt.logging.debug(f"failed response: {response.dendrite.dict()}")
-                    continue  # TODO: punish miners for failed responses
-                if i not in list(chunks.keys()):
-                    verified = verify_retrieve_with_seed(response)
-                    if verified:
-                        # Add to final chunks dict
-                        bt.logging.debug(
-                            f"Adding chunk {i} to chunks, size: {sys.getsizeof(response.data)}"
-                        )
-                        chunks[i] = base64.b64decode(response.data)
-                        bt.logging.debug(f"chunk {i} | {chunks[i][:100]}")
-                    else:
-                        bt.logging.warning(
-                            f"Failed to verify store commitment from UID: {uid}"
-                        )
-                        # TODO: punish failed verification
-
-    bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
-    bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
+    # Use primitives to retrieve and store all the chunks:
+    retrieved_data, retrieved_payload = retrieve_broadband(self, full_hash)
 
     # Pick random new UIDs
-    self.store_broadband(
-        b"".join(chunks.values()),
-        encryption_payload=encryption_payload,
-        exclude_uids=exclude_uids,
+    store_broadband(
+        self,
+        retrieved_data,
+        encryption_payload=retrieved_payload,
+        exclude_uids=list(exclude_uids),
     )
