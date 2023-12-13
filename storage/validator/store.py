@@ -358,6 +358,21 @@ async def store_broadband(
     semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
     async def store_chunk_group(chunk_hash, chunk, uids):
+        event = EventSchema(
+            task_name="Store",
+            successful=[],
+            completion_times=[],
+            task_status_messages=[],
+            task_status_codes=[],
+            block=self.subtensor.get_current_block(),
+            uids=[],
+            step_length=0.0,
+            best_uid="",
+            best_hotkey="",
+            rewards=[],
+            moving_averaged_scores=[],
+        )
+
         g, h = setup_CRS(curve=self.config.neuron.curve)
 
         bt.logging.debug(f"type(chunk): {type(chunk)}")
@@ -388,6 +403,22 @@ async def store_broadband(
             deserialize=False,
             timeout=self.config.neuron.store_timeout,
         )
+
+        # Compute the rewards for the responses given proc time.
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
+
+        async def success(hotkey, idx, uid, response):
+            bt.logging.debug(
+                f"Stored data in database with key: {hotkey}"
+            )
+        
+        def failure(uid):
+            failed_uids.push(uid)
+
+        await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
+        event.rewards.extend(rewards.tolist())
 
         chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
         bt.logging.debug(f"chunk size: {chunk_size}")
