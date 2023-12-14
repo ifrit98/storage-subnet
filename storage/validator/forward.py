@@ -88,7 +88,9 @@ async def forward(self):
 
         # Update the total network storage
         total_storage = await total_network_storage(self.database)
-        bt.logging.info(f"Total network storage (GB): {int(total_storage) // (1024**3)}")
+        bt.logging.info(
+            f"Total network storage (GB): {int(total_storage) // (1024**3)}"
+        )
 
         # Log the statistics, storage, and hashmap to wandb.
         if not self.config.wandb.off:

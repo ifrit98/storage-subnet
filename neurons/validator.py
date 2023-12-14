@@ -51,6 +51,7 @@ from storage.validator.weights import (
 from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
 
+
 class neuron:
     """
     A Neuron instance represents a node in the Bittensor network that performs validation tasks.
@@ -206,8 +207,10 @@ class neuron:
                     await rebalance_data(self, k=2, dropped_hotkeys=[hotkey])
 
     def start_neuron_event_subscription(self):
-        self.subtensor.substrate.subscribe_block_headers(
-            self.neuron_registered_subscription_handler
+        asyncio.run(
+            self.subtensor.substrate.subscribe_block_headers(
+                self.neuron_registered_subscription_handler
+            )
         )
 
     def run(self):

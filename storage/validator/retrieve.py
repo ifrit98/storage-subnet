@@ -55,7 +55,7 @@ from .reward import create_reward_vector
 
 
 async def handle_retrieve(self, uid):
-    bt.logging.debug(f"handle_retrieve uid: {uid}")
+    bt.logging.trace(f"handle_retrieve uid: {uid}")
     hotkey = self.metagraph.hotkeys[uid]
     keys = await self.database.hkeys(f"hotkey:{hotkey}")
 
@@ -65,7 +65,7 @@ async def handle_retrieve(self, uid):
         return None, ""
 
     data_hash = random.choice(keys).decode("utf-8")
-    bt.logging.debug(f"handle_retrieve data_hash: {data_hash}")
+    bt.logging.trace(f"handle_retrieve data_hash: {data_hash}")
 
     data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
     axon = self.metagraph.axons[uid]

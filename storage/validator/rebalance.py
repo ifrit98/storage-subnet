@@ -62,8 +62,8 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
 
 
 async def rebalance_data_for_hash(self, data_hash: str, k: int):
-    data, _ = await retrieve_data(self, data_hash)
-    await store_encrypted_data(self, data, k=k)
+    data, payload = await retrieve_data(self, data_hash)
+    await store_encrypted_data(self, data, payload, k=k)
 
 
 async def rebalance_data(self, k: int = 2, dropped_hotkeys: typing.List[str] = []):

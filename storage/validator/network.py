@@ -21,6 +21,7 @@ import typing
 import bittensor as bt
 
 from storage.validator.utils import get_available_query_miners
+from storage.validator.bonding import update_statistics
 
 
 async def ping_uids(self, uids):
@@ -206,7 +207,7 @@ async def monitor(self):
             rewards[i] = -0.1
 
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, torch.tensor(uids).to(self.device), rewards
+            0, torch.tensor(down_uids).to(self.device), rewards
         ).to(self.device)
 
         alpha: float = self.config.neuron.moving_average_alpha
