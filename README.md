@@ -425,6 +425,8 @@ The tier-based reward system is designed to promote optimal behavior among miner
 python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
 
+> Note: If you are running a validator, you should also be running an API node. This increases resilience and allows greater volumes of data to be stored efficiently on the network.
+
 Ensure that your wallet password is set as an environment variable with prefix `BT_COLD_PW_` so bittensor can autmatically inject this to unlock the coldkey for proper operation.
 
 ```bash

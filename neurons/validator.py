@@ -270,7 +270,7 @@ class neuron:
                 bt.logging.info(
                     "KeyboardInterrupt caught, gracefully closing the wandb run..."
                 )
-                self.wandb_run.finish()
+                self.wandb.finish()
 
 
 def main():
