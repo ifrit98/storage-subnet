@@ -49,7 +49,7 @@ from storage.validator.weights import (
 )
 
 from storage.validator.forward import forward
-
+from storage.validator.rebalance import rebalance_data
 
 class neuron:
     """
@@ -152,9 +152,12 @@ class neuron:
         bt.logging.debug(str(self.dendrite))
 
         # Init the event loop.
-        self.event_queue = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
-        self.loop.create_task(self.process_events())
+
+        # Start the subscription handler
+        bt.logging.debug(f"starting event handler")
+        self.start_neuron_event_subscription()
+        bt.logging.debug(f"started event handler")
 
         # Init wandb.
         if not self.config.wandb.off:
@@ -184,13 +187,6 @@ class neuron:
                 obj, update_nr, subscription_id
             )
 
-    def neuron_registered_subscription_handler_wrapper(
-        self, obj, update_nr, subscription_id
-    ):
-        asyncio.run_coroutine_threadsafe(
-            self.event_queue.put((obj, update_nr, subscription_id)), self.loop
-        )
-
     async def neuron_registered_subscription_handler(
         self, obj, update_nr, subscription_id
     ):
@@ -210,9 +206,8 @@ class neuron:
                     await rebalance_data(self, k=2, dropped_hotkeys=[hotkey])
 
     def start_neuron_event_subscription(self):
-        # Subscribe to block headers using the wrapper function
         self.subtensor.substrate.subscribe_block_headers(
-            self.neuron_registered_subscription_handler_wrapper
+            self.neuron_registered_subscription_handler
         )
 
     def run(self):
