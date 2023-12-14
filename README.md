@@ -374,7 +374,7 @@ Failing to pass either challenge or retrieval verifications incur negative rewar
 **Graphical Representation:**
 - The graph below illustrates how rewards increase as miners advance through the tiers. It visually represents the potential growth in earnings as miners optimize their operations and maintain high standards of performance.
 
-[bond-curve](assets/bonding.jpg)
+![bond-curve](assets/bonding.jpg)
 
 The tier-based reward system is designed to promote optimal behavior among miners, ensuring the health and efficiency of the decentralized storage network. By aligning miners' interests with those of the network, we create a robust, trustworthy, and efficient storage solution.
 
