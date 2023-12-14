@@ -121,9 +121,6 @@ async def update_statistics(
         await database.hincrby(stats_key, "retrieval_attempts", 1)
         if success:
             await database.hincrby(stats_key, "retrieval_successes", 1)
-    else:
-        bt.logging.error(f"Invalid task type {task_type}.")
-
 
 async def compute_tier(stats_key: str, database: aioredis.Redis):
     """
