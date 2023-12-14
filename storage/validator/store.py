@@ -441,9 +441,7 @@ async def store_broadband(
             mode="minmax",
         )
 
-        bt.logging.debug(
-            f"Updated reward scores: {self.moving_averaged_scores.tolist()}"
-        )
+        bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
 
         chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
         bt.logging.debug(f"chunk size: {chunk_size}")

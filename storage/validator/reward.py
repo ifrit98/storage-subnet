@@ -18,6 +18,7 @@
 
 
 import torch
+import typing
 import numpy as np
 import bittensor as bt
 
@@ -250,11 +251,15 @@ def apply_reward_scores(
 
 from bittensor import Synapse
 
-from .verify import verify_store_with_seed
+from .verify import (
+    verify_store_with_seed,
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+)
 from .database import add_metadata_to_hotkey
 from .bonding import update_statistics, get_tier_factor
 from .event import EventSchema
-from ..protocol import Store
+from storage.protocol import Store, Retrieve
 
 import sys
 from pprint import pformat
@@ -262,7 +267,7 @@ from pprint import pformat
 
 async def create_reward_vector(
     self,
-    synapse: Store,
+    synapse: typing.Union[Store, Retrieve],
     rewards: torch.FloatTensor,
     uids: list[int],
     responses: list[Synapse],
@@ -270,10 +275,19 @@ async def create_reward_vector(
     callback: callable,
     fail_callback: callable,
 ):
+    if isinstance(synapse, Store):
+        verify_fn = verify_store_with_seed
+    elif isinstance(synapse, Retrieve):
+        verify_fn = verify_retrieve_with_seed
+    elif isinstance(synapse, Challenge):
+        verify_fn = verify_challenge_with_seed
+    else:
+        raise ValueError(f"Invalid synapse type: {type(synapse)}")
+
     for idx, (uid, response) in enumerate(zip(uids, responses)):
         # Verify the commitment
         hotkey = self.metagraph.hotkeys[uid]
-        success = verify_store_with_seed(response)
+        success = verify_fn(response)
         if success:
             bt.logging.debug(f"Successfully verified store commitment from UID: {uid}")
 

@@ -49,6 +49,11 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
     Returns:
         bool: True if the commitment is verified successfully, False otherwise.
     """
+    if proof == None or seed == None or commitment == None:
+        bt.logging.error(
+            f"Missing proof, seed, or commitment for chained commitment verification."
+        )
+        return False
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
     if verbose:
         bt.logging.debug("recieved proof      :", proof)

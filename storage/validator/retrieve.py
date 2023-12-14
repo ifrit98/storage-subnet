@@ -51,6 +51,7 @@ from storage.validator.encryption import decrypt_data_with_private_key
 from storage.validator.bonding import update_statistics, get_tier_factor
 
 from .network import ping_and_retry_uids
+from .reward import create_reward_vector
 
 
 async def handle_retrieve(self, uid):
@@ -246,7 +247,6 @@ async def retrieve_data(
     return decoded_data, event
 
 
-# TODO: Apply rewards here (punish for failed retrieval)
 async def retrieve_broadband(self, full_hash: str):
     """
     Asynchronously retrieves and verifies data from the network based on a given hash, ensuring
@@ -271,6 +271,21 @@ async def retrieve_broadband(self, full_hash: str):
     semaphore = asyncio.Semaphore(self.config.neuron.semaphore_size)
 
     async def retrieve_chunk_group(chunk_hash, uids):
+        event = EventSchema(
+            task_name="Store",
+            successful=[],
+            completion_times=[],
+            task_status_messages=[],
+            task_status_codes=[],
+            block=self.subtensor.get_current_block(),
+            uids=[],
+            step_length=0.0,
+            best_uid="",
+            best_hotkey="",
+            rewards=[],
+            moving_averaged_scores=[],
+        )
+
         synapse = protocol.Retrieve(
             data_hash=chunk_hash,
             seed=get_random_bytes(32).hex(),
@@ -282,6 +297,34 @@ async def retrieve_broadband(self, full_hash: str):
             synapse,
             deserialize=False,
             timeout=self.config.api.retrieve_timeout,
+        )
+
+        # Compute the rewards for the responses given proc time.
+        rewards: torch.FloatTensor = torch.zeros(
+            len(responses), dtype=torch.float32
+        ).to(self.device)
+
+        async def success(hotkey, idx, uid, response):
+            bt.logging.debug(f"Stored data in database with key: {hotkey}")
+
+        failed_uids = []
+
+        def failure(uid):
+            failed_uids.append(uid)
+
+        await create_reward_vector(
+            self, synapse, rewards, uids, responses, event, success, failure
+        )
+        event.rewards.extend(rewards.tolist())
+        bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
+
+        apply_reward_scores(
+            self,
+            uids,
+            responses,
+            rewards,
+            timeout=self.config.neuron.retrieve_timeout,
+            mode="minmax",
         )
 
         return responses
@@ -315,6 +358,7 @@ async def retrieve_broadband(self, full_hash: str):
         responses = await asyncio.gather(*tasks)
 
         chunks = {}
+        # TODO: make these asyncio tasks and use .to_thread() to avoid blocking
         for i, response_group in enumerate(responses):
             for response in response_group:
                 if response.dendrite.status_code != 200:
