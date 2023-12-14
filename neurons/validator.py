@@ -176,7 +176,9 @@ class neuron:
         # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid.item(): 0 for uid in self.metagraph.uids}
 
-    async def neuron_registered_subscription_handler(self, obj, update_nr, subscription_id):
+    async def neuron_registered_subscription_handler(
+        self, obj, update_nr, subscription_id
+    ):
         bt.logging.debug(f"New block #{obj['header']['number']}")
         bt.logging.debug(obj)
 

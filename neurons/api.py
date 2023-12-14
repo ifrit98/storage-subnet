@@ -39,7 +39,11 @@ from storage.validator.encryption import encrypt_data
 
 from storage.validator.store import store_broadband
 from storage.validator.retrieve import retrieve_broadband
-from storage.validator.network import reroll_distribution, compute_and_ping_chunks, ping_uids
+from storage.validator.network import (
+    reroll_distribution,
+    compute_and_ping_chunks,
+    ping_uids,
+)
 
 
 class neuron:
@@ -275,7 +279,9 @@ class neuron:
         synapse.data_hash = data_hash
         return synapse
 
-    async def store_blacklist(self, synapse: protocol.StoreUser) -> typing.Tuple[bool, str]:
+    async def store_blacklist(
+        self, synapse: protocol.StoreUser
+    ) -> typing.Tuple[bool, str]:
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
             return False, f"Hotkey {synapse.dendrite.hotkey} whitelisted."
@@ -400,13 +406,13 @@ class neuron:
                     block=self.prev_step_block,
                 )
 
-        # If someone intentionally stops the miner, it'll safely terminate operations.
+        # If someone intentionally stops the API, it'll safely terminate operations.
         except KeyboardInterrupt:
             self.axon.stop()
-            bt.logging.success("Miner killed by keyboard interrupt.")
+            bt.logging.success("API killed by keyboard interrupt.")
             exit()
 
-        # In case of unforeseen errors, the miner will log the error and continue operations.
+        # In case of unforeseen errors, the API will log the error and continue operations.
         except Exception as e:
             bt.logging.error(traceback.format_exc())
 

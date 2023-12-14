@@ -180,7 +180,7 @@ def add_args(cls, parser):
         "--neuron.store_timeout",
         type=float,
         help="Store data query timeout.",
-        default=6,
+        default=30,
     )
     parser.add_argument(
         "--neuron.challenge_timeout",
@@ -192,7 +192,7 @@ def add_args(cls, parser):
         "--neuron.retrieve_timeout",
         type=float,
         help="Retreive data query timeout.",
-        default=6,
+        default=30,
     )
     parser.add_argument(
         "--neuron.checkpoint_block_length",

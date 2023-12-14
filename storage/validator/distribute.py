@@ -70,8 +70,7 @@ async def distribute_data(self, k: int):
     for chunk_metadata in ordered_metadata:
         bt.logging.debug(f"chunk metadata: {chunk_metadata}")
         uids = [
-            self.metagraph.hotkeys.index(hotkey)
-            for hotkey in chunk_metadata["hotkeys"]
+            self.metagraph.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]
         ]
         # Collect all uids for later exclusion
         exclude_uids.update(uids)

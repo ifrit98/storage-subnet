@@ -16,6 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import sys
+import json
 import time
 import torch
 import base64
@@ -42,7 +44,10 @@ from storage.validator.database import (
     get_metadata_for_hotkey,
     get_metadata_for_hotkey_and_hash,
     update_metadata_for_data_hash,
+    get_ordered_metadata,
+    retrieve_encryption_payload,
 )
+from storage.validator.encryption import decrypt_data_with_private_key
 from storage.validator.bonding import update_statistics, get_tier_factor
 
 from .network import ping_and_retry_uids
@@ -124,7 +129,9 @@ async def retrieve_data(
 
     start_time = time.time()
 
-    uids, _ = await ping_and_retry_uids(self, k=self.config.neuron.challenge_sample_size)
+    uids, _ = await ping_and_retry_uids(
+        self, k=self.config.neuron.challenge_sample_size
+    )
 
     # Ensure that each UID has data to retreive. If not, skip it.
     uids = [

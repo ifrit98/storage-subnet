@@ -247,6 +247,7 @@ def apply_reward_scores(
     ) * self.moving_averaged_scores.to(self.device)
     bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
+
 from bittensor import Synapse
 
 from .verify import verify_store_with_seed
@@ -258,11 +259,12 @@ from ..protocol import Store
 import sys
 from pprint import pformat
 
+
 async def create_reward_vector(
     self,
     synapse: Store,
     rewards: torch.FloatTensor,
-    uids: list[int], 
+    uids: list[int],
     responses: list[Synapse],
     event: EventSchema,
     callback: callable,
@@ -273,9 +275,7 @@ async def create_reward_vector(
         hotkey = self.metagraph.hotkeys[uid]
         success = verify_store_with_seed(response)
         if success:
-            bt.logging.debug(
-                f"Successfully verified store commitment from UID: {uid}"
-            )
+            bt.logging.debug(f"Successfully verified store commitment from UID: {uid}")
 
             callback(hotkey, idx, uid, response)
         else:

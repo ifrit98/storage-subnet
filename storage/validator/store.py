@@ -116,7 +116,8 @@ from storage.validator.bonding import (
 )
 
 from .reward import create_reward_vector
-from .network import ping_and_retry_uids, compute_and_ping_chunks
+from .network import ping_and_retry_uids, compute_and_ping_chunks, reroll_distribution
+
 
 async def store_encrypted_data(
     self,
@@ -236,11 +237,13 @@ async def store_encrypted_data(
             bt.logging.debug(
                 f"Stored data in database with key: {hotkey} | {data_hash}"
             )
-        
+
         def failure(uid):
             failed_uids.append(uid)
 
-        await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
+        await create_reward_vector(
+            self, synapse, rewards, uids, responses, event, success, failure
+        )
         event.rewards.extend(rewards.tolist())
 
         if self.config.neuron.verbose and self.config.neuron.log_responses:
@@ -314,8 +317,10 @@ async def store_random_data(self):
         self, encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl
     )
 
+
 from .utils import compute_chunk_distribution_mut_exclusive_numpy_reuse_uids
 import websocket
+
 
 async def store_broadband(
     self,
@@ -413,17 +418,19 @@ async def store_broadband(
         ).to(self.device)
 
         async def success(hotkey, idx, uid, response):
-            bt.logging.debug(
-                f"Stored data in database with key: {hotkey}"
-            )
-        
+            bt.logging.debug(f"Stored data in database with key: {hotkey}")
+
+        failed_uids = []
+
         def failure(uid):
             failed_uids.append(uid)
 
-        await create_reward_vector(self, synapse, rewards, uids, responses, event, success, failure)
+        await create_reward_vector(
+            self, synapse, rewards, uids, responses, event, success, failure
+        )
         event.rewards.extend(rewards.tolist())
 
-        bt.logging.debug(f"Updated reward scores: {self.reward_scores.tolist()}")
+        bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
 
         apply_reward_scores(
             self,
@@ -432,6 +439,10 @@ async def store_broadband(
             rewards,
             timeout=self.config.neuron.store_timeout,
             mode="minmax",
+        )
+
+        bt.logging.debug(
+            f"Updated reward scores: {self.moving_averaged_scores.tolist()}"
         )
 
         chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
@@ -535,7 +546,11 @@ async def store_broadband(
 
     async def create_initial_distributions(encrypted_data, R, k):
         dist_gen = compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
-            self, data_size=sys.getsizeof(encrypted_data), R=R, k=k, exclude=exclude_uids
+            self,
+            data_size=sys.getsizeof(encrypted_data),
+            R=R,
+            k=k,
+            exclude=exclude_uids,
         )
         # Ping first to see if we need to reroll instead of waiting for the timeout
         distributions = [dist async for dist in dist_gen]
@@ -606,7 +621,7 @@ async def store_broadband(
                     failed_uids = [v["uid"] for v in verifications if not v["verified"]]
                     bt.logging.trace(f"failed uids: {pformat(failed_uids)}")
                     # Reroll distribution with failed UIDs
-                    rerolled_dist = await self.reroll_distribution(dist, failed_uids)
+                    rerolled_dist = await reroll_distribution(self, dist, failed_uids)
                     bt.logging.trace(f"rerolled uids: {pformat(rerolled_dist['uids'])}")
                     # Replace the original distribution with the rerolled one
                     distributions.append(rerolled_dist)

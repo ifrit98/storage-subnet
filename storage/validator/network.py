@@ -82,7 +82,7 @@ async def compute_and_ping_chunks(self, distributions):
 
         while len(successful_uids) < target_number_of_uids and retries < max_retries:
             # Ping all UIDs
-            current_successful_uids, _ = await self.ping_uids(dist["uids"])
+            current_successful_uids, _ = await ping_uids(self, dist["uids"])
             successful_uids.update(current_successful_uids)
 
             # If enough UIDs are successful, select the first k items

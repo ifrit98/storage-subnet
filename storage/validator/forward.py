@@ -102,4 +102,3 @@ async def forward(self):
     # # Log the total storage to wandb.
     # if not self.config.wandb.off:
     #     self.wandb.log({"total_storage": total_storage})
-
