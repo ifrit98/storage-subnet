@@ -175,16 +175,6 @@ class neuron:
         # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
 
-        # Create placeholder for miner statistics calculated in forward.
-        self.stats = {}
-
-    async def process_events(self):
-        while True:
-            obj, update_nr, subscription_id = await self.event_queue.get()
-            await self.neuron_registered_subscription_handler(
-                obj, update_nr, subscription_id
-            )
-
     async def neuron_registered_subscription_handler(
         self, obj, update_nr, subscription_id
     ):

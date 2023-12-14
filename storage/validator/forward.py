@@ -81,7 +81,7 @@ async def forward(self):
         await compute_all_tiers(self.database)
 
         # Update miner statistics and usage data.
-        self.stats = await get_miner_statistics(self.database)
+        stats = await get_miner_statistics(self.database)
 
         # Log all chunk hash <> hotkey pairs
         chunk_hash_map = await get_all_chunk_hashes(self.database)
@@ -94,6 +94,18 @@ async def forward(self):
 
         # Log the statistics, storage, and hashmap to wandb.
         if not self.config.wandb.off:
-            self.wandb.log(stats)
-            self.wandb.log(chunk_hash_map)
+            with open(self.config.neuron.miner_stats_path, "w") as file:
+                json.dump(stats, file)
+
+            self.wandb.save(self.config.neuron.miner_stats_path)
+
+            with open(self.config.neuron.hash_map_path, "w") as file:
+                json.dump(chunk_hash_map, file)
+
+            self.wandb.save(self.config.neuron.hash_map_path)
+            
+            with open(self.config.neuron.total_storage_path, "w") as file:
+                json.dump(total_storage, file)
+
             self.wandb.log({"total_storage": total_storage})
+            self.wandb.save(self.config.neuron.total_storage_path)
