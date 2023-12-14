@@ -332,10 +332,27 @@ class neuron:
             verification based on the provided data hash.
             - The method logs the retrieval process and the resulting data for monitoring and debugging.
         """
-        data, payload = await retrieve_broadband(self, synapse.data_hash)
-        bt.logging.debug(f"returning user data: {data[:100]}")
-        bt.logging.debug(f"returning user payload: {payload}")
-        synapse.encrypted_data = base64.b64encode(data)
+        validator_encrypted_data, user_encryption_payload = await retrieve_broadband(
+            self, synapse.data_hash
+        )
+
+        validator_encryption_payload = await retrieve_encryption_payload(
+            "validator:" + synapse.data_hash, self.database
+        )
+
+        bt.logging.debug(
+            f"validator_encryption_payload: {validator_encryption_payload}"
+        )
+        decrypted_data = decrypt_data_with_private_key(
+            data,
+            bytes(json.dumps(validator_encryption_payload), "utf-8"),
+            bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
+        )
+        bt.logging.debug(f"decrypted_data: {decrypted_data[:100]}")
+
+        bt.logging.debug(f"returning user data: {encrypted_data[:100]}")
+        bt.logging.debug(f"returning user payload: {encryption_payload}")
+        synapse.encrypted_data = base64.b64encode(encrypted_data)
         synapse.encryption_payload = (
             json.dumps(payload) if isinstance(payload, dict) else payload
         )
