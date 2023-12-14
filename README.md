@@ -350,6 +350,47 @@ sudo npm install pm2 -g
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
 
+#### Options
+
+- `--netuid`: Specifies the chain subnet uid. Default: 21.
+- `--miner.name`: Name of the miner, used for organizing logs and data. Default: "core_storage_miner".
+- `--miner.device`: Device to run the miner on, e.g., "cuda" for GPUs or "cpu" for CPU. Default depends on CUDA availability.
+- `--miner.verbose`: Enables verbose logging. Default: False.
+
+- `--database.host`: Hostname of the redis database. Default: "localhost".
+- `--database.port`: Port for the redis database. Default: 6379.
+- `--database.index`: Redis database index. Default: 0.
+- `--database.directory`: Directory to store local data. Default: "~/.data".
+
+- `--miner.set_weights_epoch_length`: Number of blocks until the miner updates weights on chain. Default: 100.
+
+- `--miner.blacklist.blacklist`: List of hotkeys to blacklist. Default: [].
+- `--miner.blacklist.whitelist`: List of hotkeys to whitelist. Default: [].
+- `--miner.blacklist.force_validator_permit`: If True, only allows requests from validators. Default: False.
+- `--miner.blacklist.allow_non_registered`: If True, allows non-registered hotkeys to mine. Default: False.
+- `--miner.blacklist.minimum_stake_requirement`: Minimum stake requirement for participating hotkeys. Default: 0.0.
+- `--miner.blacklist.min_request_period`: Time period (in minutes) to serve a maximum number of requests per hotkey. Default: 5.
+
+- `--miner.priority.default`: Default priority for non-registered requests. Default: 0.0.
+- `--miner.priority.time_stake_multiplicate`: Time (in minutes) to double the importance of stake in the priority queue. Default: 10.
+- `--miner.priority.len_request_timestamps`: Number of historical request timestamps to record. Default: 50.
+
+- `--miner.no_set_weights`: If True, the miner does not set weights on the chain. Default: False.
+- `--miner.no_serve`: If True, the miner does not serve requests. Default: False.
+- `--miner.no_start_axon`: If True, the miner does not start the axon server. Default: False.
+
+- `--miner.mock_subtensor`: If True, uses a mock subtensor for testing. Default: False.
+
+- `--wandb.off`: Disables Weight and Biases logging. Default: False.
+- `--wandb.project_name`: Project name for WandB logging. Default: "philanthropic-thunder".
+- `--wandb.entity`: WandB entity (username or team name) for the run. Default: "philanthrope".
+- `--wandb.offline`: Runs WandB in offline mode. Default: False.
+- `--wandb.weights_step_length`: Steps interval for logging weights to WandB. Default: 10.
+- `--wandb.run_step_length`: Steps interval for a new run rollover in WandB. Default: 1500.
+- `--wandb.notes`: Notes to add to the WandB run. Default: "".
+
+These options allow you to configure the miner's behavior, database connections, blacklist/whitelist settings, priority handling, and integration with monitoring tools like WandB. Adjust these settings based on your mining setup and requirements.
+
 
 #### Optimal Behavior and Reward System in Decentralized Storage Mining
 
@@ -395,12 +436,65 @@ export BT_COLD_PW_DEFAULT=xxxyyy
 
 This allows for restarting your process without having to input the wallet password each time.
 
+#### Options
+
+- `--neuron.name`: Specifies the name of the validator neuron. Default: "core_storage_validator".
+- `--neuron.device`: The device to run the validator on (e.g., "cuda" for GPU, "cpu" for CPU). Default: "cuda" if CUDA is available, else "cpu".
+- `--neuron.curve`: The elliptic curve used for cryptography. Only "P-256" is currently available.
+- `--neuron.maxsize`: The maximum size of random data to store. If `None`, a lognormal random Gaussian distribution is used (default: `None`).
+- `--neuron.min_chunk_size`: The minimum chunk size of random data for challenges. Default: 256.
+- `--neuron.override_chunk_size`: Overrides the random chunk size for splitting data into challenges. Default: 0 (no override).
+- `--neuron.store_redundancy`: The number of miners to store each piece of data on. Default: 3.
+- `--neuron.store_step_length`: Steps before a random store epoch is complete. Default: 5.
+- `--neuron.challenge_sample_size`: The number of miners to challenge at a time, targeting ~90 miners per epoch. Default: 20.
+- `--neuron.retrieve_step_length`: Steps before a random retrieve epoch is complete. Default: 5.
+- `--neuron.tier_update_step_length`: Steps before a tier update epoch is complete. Default: 100.
+- `--neuron.set_weights_epoch_length`: Blocks until the miner sets weights on chain. Default: 200.
+- `--neuron.disable_log_rewards`: If set, disables all reward logging to suppress function values from being logged (e.g., to WandB). Default: False.
+- `--neuron.chunk_factor`: The factor to divide data into chunks. Default: 4.
+- `--neuron.num_concurrent_forwards`: The number of concurrent forward requests running at any time. Default: 1.
+- `--neuron.disable_set_weights`: If set, disables setting weights on the chain. Default: False.
+- `--neuron.moving_average_alpha`: The alpha parameter for the moving average, indicating new observation weight. Default: 0.05.
+- `--neuron.semaphore_size`: The limit on concurrent asynchronous calls. Default: 256.
+- `--neuron.store_timeout`: Timeout for store data queries. Default: 60 seconds.
+- `--neuron.challenge_timeout`: Timeout for challenge data queries. Default: 30 seconds.
+- `--neuron.retrieve_timeout`: Timeout for retrieve data queries. Default: 60 seconds.
+- `--neuron.checkpoint_block_length`: Blocks before a checkpoint is saved. Default: 100.
+- `--neuron.blocks_per_step`: Blocks before a step is taken in the mining process. Default: 3.
+- `--neuron.events_retention_size`: File size for retaining event logs (e.g., "2 GB"). Default: "2 GB".
+- `--neuron.dont_save_events`: If set, event logs will not be saved to a file. Default: False.
+- `--neuron.vpermit_tao_limit`: The maximum TAO allowed for querying a validator with a vpermit. Default: 4096.
+- `--neuron.verbose`: If set, detailed verbose logs will be printed. Default: False.
+- `--neuron.log_responses`: If set, all responses will be logged. Note: These logs can be extensive. Default: False.
+- `--neuron.data_ttl`: The number of blocks before stored data expires. Default: 50000 (approximately 7 days).
+- `--neuron.profile`: If set, network and I/O actions will be profiled. Default: False.
+
+- `--database.host`: Hostname of the Redis database. Default: "localhost".
+- `--database.port`: Port of the Redis database. Default: 6379.
+- `--database.index`: The database number for the Redis instance. Default: 1.
+
+These options allow you to fine-tune the behavior, storage, and network interaction of the validator neuron. Adjust these settings based on your specific requirements and infrastructure.
+
+
 ### Running the API
 Similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered hotkey on SN21. You can gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
 
 ```bash
 python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
+
+#### Options
+
+- `--api.store_timeout`: The timeout (in seconds) for store data queries. This is the time allowed for a store operation before it times out. Default: 60 seconds.
+
+- `--api.retrieve_timeout`: The timeout (in seconds) for retrieve data queries. This is the time allowed for a retrieve operation before it times out. Default: 60 seconds.
+
+- `--api.ping_timeout`: The timeout (in seconds) for ping data queries. This is the time allowed for a ping operation before it times out. Useful for checking network latency and availability. Default: 2 seconds.
+
+- `--api.whitelisted_hotkeys`: A list of whitelisted hotkeys. Only these hotkeys will be allowed to interact with the API. Default: [] (empty list, meaning no restrictions unless specified).
+
+These options are crucial for managing the behavior and security of your API interactions. The timeouts ensure that operations do not hang indefinitely, while the whitelisted hotkeys provide a mechanism to restrict access to trusted entities. Adjust these settings based on your operational requirements and security considerations.
+
 
 ### Setup WandB:
 
