@@ -180,11 +180,11 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping all UIDs
-    _, failed_uids = await ping_uids(self, self.metagraph.uids)
+    _, failed_uids = await ping_uids(self, self.metagraph.uids.tolist())
 
     down_uids = []
     for uid in failed_uids:
-        uid = uid.item()
+        uid = uid
         self.monitor_lookup[uid] += 1
         if self.monitor_lookup[uid] > self.config.neuron.max_failed_pings:
             self.monitor_lookup[uid] = 0

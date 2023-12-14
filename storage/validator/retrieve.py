@@ -348,6 +348,8 @@ async def retrieve_broadband(self, full_hash: str):
             uids = [
                 self.metagraph.hotkeys.index(hotkey)
                 for hotkey in chunk_metadata["hotkeys"]
+                if hotkey
+                in self.metagraph.hotkeys  # TODO: more efficient check for this
             ]
             total_size += chunk_metadata["size"]
             tasks.append(
@@ -380,19 +382,13 @@ async def retrieve_broadband(self, full_hash: str):
 
     bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
     bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
+
     # Reconstruct the data
-    data = b"".join(chunks.values())
-    bt.logging.trace(f"retrieved data: {data[:100]}")
-    validator_encryption_payload = await retrieve_encryption_payload(
-        "validator:" + full_hash, self.database
-    )
-    bt.logging.debug(f"validator_encryption_payload: {validator_encryption_payload}")
-    decrypted_data = decrypt_data_with_private_key(
-        data,
-        bytes(json.dumps(validator_encryption_payload), "utf-8"),
-        bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
-    )
-    bt.logging.debug(f"decrypted_data: {decrypted_data[:100]}")
+    encrypted_data = b"".join(chunks.values())
+    bt.logging.trace(f"retrieved data: {encrypted_data[:100]}")
+
+    # Retrieve user encryption payload (if exists)
     encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
     bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
-    return decrypted_data, encryption_payload
+
+    return encrypted_data, encryption_payload

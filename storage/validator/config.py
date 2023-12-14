@@ -90,7 +90,7 @@ def add_args(cls, parser):
         "--neuron.min_chunk_size",
         default=256,
         type=int,
-        help="Minimum chunk size of random data to challenge.",
+        help="Minimum chunk size of random data to challenge (bytes).",
     )
     parser.add_argument(
         "--neuron.override_chunk_size",
@@ -101,7 +101,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.store_redundancy",
         type=int,
-        default=3,
+        default=4,
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
@@ -186,7 +186,7 @@ def add_args(cls, parser):
         "--neuron.challenge_timeout",
         type=float,
         help="Challenge data query timeout.",
-        default=3,
+        default=20,
     )
     parser.add_argument(
         "--neuron.retrieve_timeout",

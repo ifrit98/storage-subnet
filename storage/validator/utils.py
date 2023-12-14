@@ -296,12 +296,12 @@ def get_all_validators(self, return_hotkeys=False):
     query_idxs = torch.where(
         self.metagraph.S[vpermit_uids] > self.config.neuron.vpermit_tao_limit
     )[0]
-    query_uids = vpermit_uids[query_idxs]
+    query_uids = vpermit_uids[query_idxs].tolist()
 
     return (
         [self.metagraph.hotkeys[uid] for uid in query_uids]
         if return_hotkeys
-        else query_uids
+        else query_uids.tolist()
     )
 
 
@@ -314,7 +314,7 @@ def get_all_miners(self):
     """
     # Determine miner axons to query from metagraph
     vuids = get_all_validators(self)
-    return [uid.item() for uid in self.metagraph.uids if uid not in vuids]
+    return [uid for uid in self.metagraph.uids.tolist() if uid not in vuids]
 
 
 def get_query_miners(self, k=20, exlucde=None):
@@ -345,7 +345,7 @@ def get_query_validators(self, k=3):
         list: A list of pseudorandomly selected available validator UIDs
     """
     vuids = get_all_validators(self)
-    return get_pseudorandom_uids(self.subtensor, uids=vuids.tolist(), k=k)
+    return get_pseudorandom_uids(self.subtensor, uids=vuids, k=k)
 
 
 async def get_available_query_miners(self, k, exclude=None):
@@ -378,7 +378,7 @@ def get_current_validator_uid_pseudorandom(self):
     block_seed = get_block_seed(self.subtensor)
     pyrandom.seed(block_seed)
     vuids = get_query_validators(self)
-    return pyrandom.choice(vuids).item()
+    return pyrandom.choice(vuids)
 
 
 def get_current_validtor_uid_round_robin(self):
@@ -390,7 +390,7 @@ def get_current_validtor_uid_round_robin(self):
     """
     vuids = get_all_validators(self)
     vidx = self.subtensor.get_current_block() // 100 % len(vuids)
-    return vuids[vidx].item()
+    return vuids[vidx]
 
 
 def generate_efficient_combinations(available_uids, R):

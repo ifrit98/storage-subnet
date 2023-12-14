@@ -238,7 +238,7 @@ def apply_reward_scores(
     scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
         0, torch.tensor(uids).to(self.device), scaled_rewards
     ).to(self.device)
-    bt.logging.debug(f"Scattered rewards: {scattered_rewards}")
+    bt.logging.trace(f"Scattered rewards: {scattered_rewards}")
 
     # Update moving_averaged_scores with rewards produced by this step.
     # shape: [ metagraph.n ]
@@ -246,7 +246,7 @@ def apply_reward_scores(
     self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
         1 - alpha
     ) * self.moving_averaged_scores.to(self.device)
-    bt.logging.debug(f"Updated moving avg scores: {self.moving_averaged_scores}")
+    bt.logging.trace(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
 
 from bittensor import Synapse

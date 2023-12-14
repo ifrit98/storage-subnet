@@ -70,16 +70,19 @@ async def distribute_data(self, k: int):
     for chunk_metadata in ordered_metadata:
         bt.logging.debug(f"chunk metadata: {chunk_metadata}")
         uids = [
-            self.metagraph.hotkeys.index(hotkey) for hotkey in chunk_metadata["hotkeys"]
+            self.metagraph.hotkeys.index(hotkey)
+            for hotkey in chunk_metadata["hotkeys"]
+            if hotkey
+            in self.metagraph.hotkeys  # TODO: make a more efficient check for this
         ]
         # Collect all uids for later exclusion
         exclude_uids.update(uids)
 
     # Use primitives to retrieve and store all the chunks:
-    retrieved_data, retrieved_payload = retrieve_broadband(self, full_hash)
+    retrieved_data, retrieved_payload = await retrieve_broadband(self, full_hash)
 
     # Pick random new UIDs
-    store_broadband(
+    await store_broadband(
         self,
         retrieved_data,
         encryption_payload=retrieved_payload,

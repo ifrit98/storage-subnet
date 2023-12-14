@@ -39,41 +39,40 @@ from .network import monitor
 async def forward(self):
     bt.logging.info(f"forward step: {self.step}")
 
-    # # Store some random data
-    # bt.logging.info("initiating store random")
-    # event = await store_random_data(self)
+    # Store some random data
+    bt.logging.info("initiating store random")
+    event = await store_random_data(self)
 
-    # if self.config.neuron.verbose:
-    #     bt.logging.debug(f"STORE EVENT LOG: {event}")
+    if self.config.neuron.verbose:
+        bt.logging.debug(f"STORE EVENT LOG: {event}")
 
-    # # Log event
-    # log_event(self, event)
+    # Log event
+    log_event(self, event)
 
-    # # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
-    # # Challenge some data
-    # bt.logging.info("initiating challenge")
-    # event = await challenge_data(self)
+    # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
+    # Challenge some data
+    bt.logging.info("initiating challenge")
+    event = await challenge_data(self)
 
-    # if self.config.neuron.verbose:
-    #     bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
+    if self.config.neuron.verbose:
+        bt.logging.debug(f"CHALLENGE EVENT LOG: {event}")
 
-    # # Log event
-    # log_event(self, event)
+    # Log event
+    log_event(self, event)
 
-    # # Retrieve some data
-    # bt.logging.info("initiating retrieve")
-    # _, event = await retrieve_data(self)
+    # Retrieve some data
+    bt.logging.info("initiating retrieve")
+    _, event = await retrieve_data(self)
 
-    # if self.config.neuron.verbose:
-    #     bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
+    if self.config.neuron.verbose:
+        bt.logging.debug(f"RETRIEVE EVENT LOG: {event}")
 
-    # # Log event
-    # log_event(self, event)
+    # Log event
+    log_event(self, event)
 
     await distribute_data(self, self.config.neuron.store_redundancy)
 
-    # down_uids = await monitor(self)
-    down_uids = [224, 249]
+    down_uids = await monitor(self)  # [224, 249]
     bt.logging.debug(f"downed uids marked for rebalance: {down_uids}")
     if len(down_uids) > 0:
         await rebalance_data(
@@ -82,23 +81,23 @@ async def forward(self):
             dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
         )
 
-    # await compute_all_tiers(self.database)
+    await compute_all_tiers(self.database)
 
-    # # Fetch miner statistics and usage data.
-    # stats = await get_miner_statistics(self.database)
+    # Fetch miner statistics and usage data.
+    stats = await get_miner_statistics(self.database)
 
-    # # Log all chunk hash <> hotkey pairs
-    # chunk_hash_map = await get_all_chunk_hashes(self.database)
+    # Log all chunk hash <> hotkey pairs
+    chunk_hash_map = await get_all_chunk_hashes(self.database)
 
-    # # Log the statistics and hashmap to wandb.
-    # if not self.config.wandb.off:
-    #     self.wandb.log(stats)
-    #     self.wandb.log(chunk_hash_map)
+    # Log the statistics and hashmap to wandb.
+    if not self.config.wandb.off:
+        self.wandb.log(stats)
+        self.wandb.log(chunk_hash_map)
 
-    # # Update the total network storage
-    # total_storage = await total_network_storage(self.database)
-    # bt.logging.info(f"Total network storage: {total_storage}")
+    # Update the total network storage
+    total_storage = await total_network_storage(self.database)
+    bt.logging.info(f"Total network storage: {total_storage}")
 
-    # # Log the total storage to wandb.
-    # if not self.config.wandb.off:
-    #     self.wandb.log({"total_storage": total_storage})
+    # Log the total storage to wandb.
+    if not self.config.wandb.off:
+        self.wandb.log({"total_storage": total_storage})

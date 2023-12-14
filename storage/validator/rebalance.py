@@ -38,7 +38,14 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     (3) Distribute the data that belongs to full files to other miners.
 
     """
-    source_uid = self.metagraph.hotkeys.index(source_hotkey)
+    try:  # TODO: find a better solution to find the old uid of the dropped source hotkey
+        # in the event that the metagraph was just pulled and this was replaced by a new uid
+        source_uid = self.metagraph.hotkeys.index(source_hotkey)
+    except Exception as e:
+        bt.logging.error(
+            f"Could not find distribute source hotkey {source_hotkey} in metagraph."
+        )
+        return
 
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 
