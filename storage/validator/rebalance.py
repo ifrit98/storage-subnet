@@ -21,6 +21,7 @@ import bittensor as bt
 
 from pprint import pformat
 from storage.validator.database import is_file_chunk, get_metadata_for_hotkey
+from storage.validator.database import retrieve_encryption_payload
 
 from .retrieve import retrieve_data
 from .store import store_encrypted_data
@@ -62,7 +63,10 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
 
 
 async def rebalance_data_for_hash(self, data_hash: str, k: int):
-    data, payload = await retrieve_data(self, data_hash)
+    data, event = await retrieve_data(self, data_hash)
+
+    payload = await retrieve_encryption_payload(data_hash, self.database)
+
     await store_encrypted_data(self, data, payload, k=k)
 
 
