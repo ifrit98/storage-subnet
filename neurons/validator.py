@@ -165,9 +165,6 @@ class neuron:
             bt.logging.debug("loading wandb")
             init_wandb(self)
 
-        self.config.neuron.epoch_length = 100
-        bt.logging.debug(f"Set epoch_length {self.config.neuron.epoch_length}")
-
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
@@ -224,16 +221,10 @@ class neuron:
 
                 # --- Wait until next step epoch.
                 current_block = self.subtensor.get_current_block()
-                while False:
-                    # while self.my_subnet_uid != get_current_validtor_uid_round_robin(
-                    #     self
-                    # ) or (
-                    #     current_block - self.prev_step_block
-                    #     < self.config.neuron.blocks_per_step
-                    # ):
-                    bt.logging.trace(
-                        f"my uid: {self.my_subnet_uid} - selected uid: {get_current_validtor_uid_round_robin(self)} - block: {ttl_get_block(self)}"
-                    )
+                while (
+                    current_block - self.prev_step_block
+                    < self.config.neuron.blocks_per_step
+                ):
                     # --- Wait for next block.
                     time.sleep(1)
                     current_block = self.subtensor.get_current_block()

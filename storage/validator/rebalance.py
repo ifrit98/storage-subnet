@@ -49,7 +49,7 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 
     miner_hashes = list(metadata)
-    bt.logging.debug(f"miner hashes {miner_hashes[:5]}")
+    bt.logging.trace(f"miner hashes {miner_hashes[:5]}")
 
     rebalance_hashes = []
     for _hash in miner_hashes:
