@@ -152,7 +152,9 @@ class neuron:
         bt.logging.debug(str(self.dendrite))
 
         # Init the event loop.
+        self.event_queue = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
+        self.loop.create_task(self.process_events())
 
         # Init wandb.
         if not self.config.wandb.off:
@@ -168,13 +170,23 @@ class neuron:
         self.prev_step_block = ttl_get_block(self)
         self.step = 0
 
-        bt.logging.debug(f"starting event handler")
-        self.start_neuron_event_subscription()
-        bt.logging.debug(f"started event handler")
-
         # Start with 0 monitor pings
         # TODO: load this from disk instead of reset on restart
-        self.monitor_lookup = {uid.item(): 0 for uid in self.metagraph.uids}
+        self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
+
+    async def process_events(self):
+        while True:
+            obj, update_nr, subscription_id = await self.event_queue.get()
+            await self.neuron_registered_subscription_handler(
+                obj, update_nr, subscription_id
+            )
+
+    def neuron_registered_subscription_handler_wrapper(
+        self, obj, update_nr, subscription_id
+    ):
+        asyncio.run_coroutine_threadsafe(
+            self.event_queue.put((obj, update_nr, subscription_id)), self.loop
+        )
 
     async def neuron_registered_subscription_handler(
         self, obj, update_nr, subscription_id
@@ -195,8 +207,9 @@ class neuron:
                     await rebalance_data(self, k=2, dropped_hotkeys=[hotkey])
 
     def start_neuron_event_subscription(self):
+        # Subscribe to block headers using the wrapper function
         self.subtensor.substrate.subscribe_block_headers(
-            self.neuron_registered_subscription_handler
+            self.neuron_registered_subscription_handler_wrapper
         )
 
     def run(self):
