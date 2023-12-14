@@ -327,6 +327,12 @@ async def retrieve_broadband(self, full_hash: str):
             mode="minmax",
         )
 
+        # Determine the best UID based on rewards
+        if event.rewards:
+            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            event.best_uid = event.uids[best_index]
+            event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
+
         return responses
 
     # Get the chunks you need to reconstruct IN order

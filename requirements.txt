@@ -1,4 +1,4 @@
-bittensor==6.4.1
+bittensor==6.4.2
 torch==2.0.1
 redis==5.0.1
 aioredis==2.0.1

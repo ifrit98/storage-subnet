@@ -38,14 +38,12 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     (3) Distribute the data that belongs to full files to other miners.
 
     """
-    try:  # TODO: find a better solution to find the old uid of the dropped source hotkey
-        # in the event that the metagraph was just pulled and this was replaced by a new uid
+    try:
         source_uid = self.metagraph.hotkeys.index(source_hotkey)
     except Exception as e:
-        bt.logging.error(
-            f"Could not find distribute source hotkey {source_hotkey} in metagraph."
+        bt.logging.warning(
+            f"Distribute source hotkey {source_hotkey} already replaced in metagraph."
         )
-        return
 
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 
@@ -60,14 +58,12 @@ async def rebalance_data_for_hotkey(self, k: int, source_hotkey: str):
     bt.logging.debug(f"rebalance hashes: {rebalance_hashes[:5]}")
 
     for _hash in rebalance_hashes:
-        await rebalance_data_for_hash(
-            self, data_hash=_hash, dropped_uid=source_uid, k=k
-        )
+        await rebalance_data_for_hash(self, data_hash=_hash, k=k)
 
 
-async def rebalance_data_for_hash(self, data_hash: str, dropped_uid: int, k: int):
+async def rebalance_data_for_hash(self, data_hash: str, k: int):
     data, _ = await retrieve_data(self, data_hash)
-    await store_encrypted_data(self, data, k=k, exclude_uids=[dropped_uid])
+    await store_encrypted_data(self, data, k=k)
 
 
 async def rebalance_data(self, k: int = 2, dropped_hotkeys: typing.List[str] = []):

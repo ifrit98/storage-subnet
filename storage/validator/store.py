@@ -430,8 +430,6 @@ async def store_broadband(
         )
         event.rewards.extend(rewards.tolist())
 
-        bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
-
         apply_reward_scores(
             self,
             uids,
@@ -443,10 +441,15 @@ async def store_broadband(
 
         bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
 
+        # Determine the best UID based on rewards
+        if event.rewards:
+            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            event.best_uid = event.uids[best_index]
+            event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
+
         chunk_size = sys.getsizeof(chunk)  # chunk size in bytes
         bt.logging.debug(f"chunk size: {chunk_size}")
 
-        start = time.time()
         await store_chunk_metadata(
             full_hash,
             chunk_hash,
@@ -454,8 +457,6 @@ async def store_broadband(
             chunk_size,  # this should be len(chunk) but we need to fix the chunking
             self.database,
         )
-        end = time.time()
-        bt.logging.debug(f"store_chunk_metadata time for uids {uids} : {end-start}")
 
         return responses
 

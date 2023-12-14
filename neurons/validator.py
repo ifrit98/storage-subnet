@@ -237,7 +237,7 @@ class neuron:
                     time.sleep(1)
                     current_block = self.subtensor.get_current_block()
 
-                time.sleep(2)
+                time.sleep(5)
                 if not self.wallet.hotkey.ss58_address in self.metagraph.hotkeys:
                     raise Exception(
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
@@ -282,6 +282,13 @@ class neuron:
         except Exception as err:
             bt.logging.error("Error in training loop", str(err))
             bt.logging.debug(print_exception(type(err), err, err.__traceback__))
+
+        except KeyboardInterrupt:
+            bt.logging.info(
+                "KeyboardInterrupt caught, gracefully closing the wandb run..."
+            )
+            if not self.config.wandb.off:
+                self.wandb_run.finish()
 
 
 def main():
