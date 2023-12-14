@@ -63,11 +63,12 @@ def check_config(cls, config: "bt.Config"):
                 config.neuron.full_path + "/" + "miner_stats.json"
             )
         )
-        config.neuron.hash_map_path = os.path.expanduser(
+        config.neuron.miner_stats_path = os.path.expanduser(
             os.path.join(
-                config.neuron.full_path + "/" + "hash_map.json"
+                config.neuron.full_path + "/" + "miner_stats.json"
             )
         )
+
         config.neuron.total_storage_path = os.path.expanduser(
             os.path.join(
                 config.neuron.full_path + "/" + "total_storage.json"
@@ -147,7 +148,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.max_failed_pings",
         type=int,
-        default=3,
+        default=10,
         help="Number of failed periodic pings before a miner is considered offline.",
     )
     parser.add_argument(
