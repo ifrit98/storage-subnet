@@ -166,6 +166,7 @@ async def retrieve_data(
         hotkey = self.metagraph.hotkeys[uid]
 
         if response == None:
+            bt.logging.debug(f"No response: skipping retrieve for uid {uid}")
             continue  # We don't have any data for this hotkey, skip it.
 
         try:
@@ -208,7 +209,6 @@ async def retrieve_data(
             rewards[idx] = -0.1  # Losing use data is unacceptable, harsh punishment
 
             # Update the retrieve statistics
-            bt.logging.trace(f"Updating retrieve statistics for {hotkey}")
             await update_statistics(
                 ss58_address=hotkey,
                 success=False,
@@ -218,8 +218,17 @@ async def retrieve_data(
             continue  # skip trying to decode the data
         else:
             # Success. Reward based on miner tier
+            bt.logging.trace("Getting tier factor for hotkey {}".format(hotkey))
             tier_factor = await get_tier_factor(hotkey, self.database)
             rewards[idx] = 1.0 * tier_factor
+
+            bt.logging.trace("Updating success retreival for hotkey {}".format(hotkey))
+            await update_statistics(
+                ss58_address=hotkey,
+                success=True,
+                task_type="retrieve",
+                database=self.database,
+            )
 
         event.uids.append(uid)
         event.successful.append(success)

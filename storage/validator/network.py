@@ -16,6 +16,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import torch
 import typing
 import bittensor as bt
 
@@ -190,4 +191,27 @@ async def monitor(self):
             self.monitor_lookup[uid] = 0
             down_uids.append(uid)
     bt.logging.trace(f"down uids: {down_uids}")
+
+    if down_uids:
+        # Negatively reward
+        rewards = torch.zeros(len(down_uids), dtype=torch.float32).to(self.device)
+
+        for i, uid in enumerate(down_uids):
+            await update_statistics(
+                ss58_address=self.metagraph.hotkeys[uid],
+                success=False,
+                task_type="monitor",
+                database=self.database,
+            )
+            rewards[i] = -0.1
+
+        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
+            0, torch.tensor(uids).to(self.device), rewards
+        ).to(self.device)
+
+        alpha: float = self.config.neuron.moving_average_alpha
+        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
+            1 - alpha
+        ) * self.moving_averaged_scores.to(self.device)
+
     return down_uids

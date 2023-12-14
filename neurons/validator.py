@@ -174,6 +174,9 @@ class neuron:
         # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
 
+        # Create placeholder for miner statistics calculated in forward.
+        self.stats = {}
+
     async def process_events(self):
         while True:
             obj, update_nr, subscription_id = await self.event_queue.get()
@@ -284,10 +287,10 @@ class neuron:
             bt.logging.debug(print_exception(type(err), err, err.__traceback__))
 
         except KeyboardInterrupt:
-            bt.logging.info(
-                "KeyboardInterrupt caught, gracefully closing the wandb run..."
-            )
             if not self.config.wandb.off:
+                bt.logging.info(
+                    "KeyboardInterrupt caught, gracefully closing the wandb run..."
+                )
                 self.wandb_run.finish()
 
 

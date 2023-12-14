@@ -233,7 +233,7 @@ def apply_reward_scores(
     )
     bt.logging.debug(f"Scaled rewards: {scaled_rewards}")
 
-    # Compute forward pass rewards, assumes followup_uids and answer_uids are mutually exclusive.
+    # Compute forward pass rewards
     # shape: [ metagraph.n ]
     scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
         0, torch.tensor(uids).to(self.device), scaled_rewards
@@ -290,8 +290,7 @@ async def create_reward_vector(
         success = verify_fn(response)
         if success:
             bt.logging.debug(f"Successfully verified store commitment from UID: {uid}")
-
-            callback(hotkey, idx, uid, response)
+            await callback(hotkey, idx, uid, response)
         else:
             bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
             fail_callback(uid)

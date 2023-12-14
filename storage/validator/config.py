@@ -123,10 +123,10 @@ def add_args(cls, parser):
         help="Number of steps before random retrieve epoch is complete.",
     )
     parser.add_argument(
-        "--neuron.tier_update_step_length",
+        "--neuron.compute_stats_interval",
         type=int,
         default=100,
-        help="Number of steps before tier update epoch is complete.",
+        help="Number of steps before computing and logging all stats.",
     )
     parser.add_argument(
         "--neuron.max_failed_pings",
