@@ -582,6 +582,40 @@ async def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: aioredis.R
         print(f"UID {hotkey} set for new chunk {chunk_hash}.")
 
 
+async def remove_hotkey_from_chunk(
+    chunk_hash: str, hotkey: str, database: aioredis.Redis
+):
+    """
+    Remove a hotkey from the metadata of a specific chunk.
+
+    This function updates the chunk's metadata to remove the given hotkey. If the hotkey is not
+    associated with the chunk, no changes are made.
+
+    Parameters:
+    - chunk_hash (str): The hash of the chunk to which the hotkey is to be added.
+    - hotkey (str): The hotkey to add to the chunk's metadata.
+    - database (aioredis.Redis): An instance of the Redis database.
+    """
+    chunk_metadata_key = f"chunk:{chunk_hash}"
+
+    # Fetch existing UIDs for the chunk
+    existing_metadata = await database.hget(chunk_metadata_key, "hotkeys")
+    if existing_metadata:
+        existing_hotkeys = existing_metadata.decode().split(",")
+
+        # Remove UID if it's in the list
+        if hotkey in existing_hotkeys:
+            existing_hotkeys.remove(hotkey)
+            await database.hset(
+                chunk_metadata_key, "hotkeys", ",".join(existing_hotkeys)
+            )
+            bt.logging.trace(f"UID {hotkey} removed from chunk {chunk_hash}.")
+        else:
+            bt.logging.trace(f"UID {hotkey} does not exist for chunk {chunk_hash}.")
+    else:
+        bt.logging.trace(f"No UIDs associated with chunk {chunk_hash}.")
+
+
 async def store_chunk_metadata(
     full_hash: str,
     chunk_hash: str,

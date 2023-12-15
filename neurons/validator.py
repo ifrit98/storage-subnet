@@ -191,7 +191,9 @@ class neuron:
                 netuid, uid, hotkey = event_dict["attributes"]
                 if int(netuid) == 21:
                     bt.logging.info(f"NeuronRegistered Event {uid}!")
-                    await rebalance_data(self, k=2, dropped_hotkeys=[hotkey])
+                    await rebalance_data(
+                        self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
+                    )
 
     def start_neuron_event_subscription(self):
         asyncio.run(

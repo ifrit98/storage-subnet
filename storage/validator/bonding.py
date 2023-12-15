@@ -122,6 +122,7 @@ async def update_statistics(
         if success:
             await database.hincrby(stats_key, "retrieval_successes", 1)
 
+
 async def compute_tier(stats_key: str, database: aioredis.Redis):
     """
     Asynchronously computes the tier of a miner based on their performance statistics.

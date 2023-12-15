@@ -76,6 +76,7 @@ async def forward(self):
             self,
             k=2,  # increase redundancy
             dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
+            hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
         )
 
     if self.step % self.config.neuron.compute_stats_interval == 0:
@@ -104,7 +105,7 @@ async def forward(self):
                 json.dump(chunk_hash_map, file)
 
             self.wandb.save(self.config.neuron.hash_map_path)
-            
+
             with open(self.config.neuron.total_storage_path, "w") as file:
                 json.dump(total_storage, file)
 

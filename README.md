@@ -554,3 +554,7 @@ To configure your WANDB API key on your Ubuntu machine, follow these steps:
 
 Following these steps, you should be able to successfully log into WANDB and set up your API key on your Ubuntu machine, enabling seamless integration of WANDB in your machine learning workflows.
 
+#### Compute Requirements
+No GPU is currently required to run either a validator or miner. This may change in the future for accelerating the proof and/or verification system.
+
+See [`min_compute.yml`](min_compute.yml) for complete details on minimum and recommended requirements.
