@@ -111,5 +111,5 @@ async def forward(self):
         }
         self.wandb.log(total_storage_time)
         with open(self.config.neuron.total_storage_path, "w") as file:
-            json.dump(total_storage, file)
+            json.dump(total_storage_time, file)
         self.wandb.save(self.config.neuron.total_storage_path)
