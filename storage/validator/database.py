@@ -790,8 +790,8 @@ async def get_all_hashes_in_database(database: aioredis.Redis) -> List[str]:
     """
     all_hashes = set()
 
-    async for hotkey_key in db.scan_iter(match="hotkey:*"):
-        all_hashes.update(list(await db.hgetall(hotkey_hey)))
+    async for hotkey_key in database.scan_iter(match="hotkey:*"):
+        all_hashes.update(list(await database.hgetall(hotkey_hey)))
 
     return list(all_hashes)
 
@@ -810,7 +810,31 @@ async def get_all_challenge_hashes(database: aioredis.Redis) -> List[str]:
 
     challenge_hashes = []
     for h in all_hashes:
-        if await check_hash_type(h, db) == "challenge":
+        if await check_hash_type(h, database) == "challenge":
             challenge_hashes.append(h)
 
     return challenge_hashes
+
+
+async def get_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+    hashes = list(await database.hgetall(f"hotkey:{ss58_address}"))
+    challenges = []
+    for j, h in enumerate(hashes):
+        if await check_hash_type(h, database) == "challenge":
+            challenges.append(h)
+
+    return challenges
+
+
+async def purge_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+    challenge_hashes = await get_challenges_for_hotkey(ss58_address, database)
+    bt.logging.trace(f"purging challenges for {ss58_address}...")
+    for ch in challenge_hashes:
+        await database.delete(ch)
+
+
+async def purge_challenges_for_all_hotkeys(database: aioredis.Redis):
+    bt.logging.trace(f"purging challenges for ALL hotkeys...")
+    async for hotkey in database.scan_iter(match="hotkey:*"):
+        hotkey = hotkey.decode().split(":")[1]
+        await purge_challenges_for_hotkey(hotkey, database)

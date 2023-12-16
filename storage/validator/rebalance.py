@@ -20,10 +20,12 @@ import typing
 import bittensor as bt
 
 from pprint import pformat
-from storage.validator.database import is_file_chunk, get_metadata_for_hotkey
 from storage.validator.database import (
+    is_file_chunk,
+    get_metadata_for_hotkey,
     retrieve_encryption_payload,
     remove_hotkey_from_chunk,
+    purge_challenges_for_hotkey,
 )
 from storage.validator.bonding import register_miner
 
@@ -67,8 +69,6 @@ async def rebalance_data_for_hotkey(
     if hotkey_replaced:
         # Reset miner statistics
         await register_miner(source_hotkey, self.database)
-        # Delete all challenge data from the dropped miner
-        await self.database.delete(f"hotkey:{source_hotkey}")
         # Update index for full and chunk hashes for retrieve
         # Iterate through ordered metadata for all full hashses this miner had
         async for file_key in self.databse.scan_iter("file:*"):
@@ -81,6 +81,8 @@ async def rebalance_data_for_hotkey(
                 await remove_hotkey_from_chunk(
                     chunk_metadata, source_hotkey, self.database
                 )
+        # Purge challenge hashes so new miner doesn't get hosed
+        await purge_challenges_for_hotkey(source_hotkey, self.database)
 
     for _hash in rebalance_hashes:
         await rebalance_data_for_hash(self, data_hash=_hash, k=k)
