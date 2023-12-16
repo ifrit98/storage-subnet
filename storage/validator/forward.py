@@ -89,7 +89,6 @@ async def forward(self):
         # Log all chunk hash <> hotkey pairs
         chunk_hash_map = await get_all_chunk_hashes(self.database)
 
-
         # Log the statistics, storage, and hashmap to wandb.
         if not self.config.wandb.off:
             with open(self.config.neuron.miner_stats_path, "w") as file:
@@ -108,9 +107,11 @@ async def forward(self):
             f"Total network storage (GB): {int(total_storage) // (1024**3)}"
         )
         if not self.config.wandb.off:
-            total_storage_time = {"total_storage": total_storage, "timestamp": time.time()}
+            total_storage_time = {
+                "total_storage": total_storage,
+                "timestamp": time.time(),
+            }
             self.wandb.log(total_storage_time)
             with open(self.config.neuron.total_storage_path, "w") as file:
                 json.dump(total_storage, file)
             self.wandb.save(self.config.neuron.total_storage_path)
-

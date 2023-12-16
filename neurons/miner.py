@@ -547,7 +547,9 @@ class miner:
             bt.logging.trace(f"type(seed): {type(synapse.seed)}")
             bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")
 
-        bt.logging.info(f"stored data {data_hash} with commitment: {synapse.commitment}")
+        bt.logging.info(
+            f"stored data {data_hash} with commitment: {synapse.commitment}"
+        )
         return synapse
 
     async def challenge(

@@ -59,8 +59,7 @@ async def remove_metadata_from_hotkey(
     # Use HDEL to remove the data hash from the hotkey
     key = f"hotkey:{ss58_address}"
     await database.hdel(key, data_hash)
-    bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}."
-)
+    bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}.")
 
 
 async def get_metadata_for_hotkey(
@@ -106,6 +105,7 @@ async def get_hashes_for_hotkey(
     return [
         data_hash.decode("utf-8") for data_hash, metadata in all_data_hashes.items()
     ]
+
 
 async def remove_hashes_for_hotkey(
     ss58_address: str, hashes: list, database: aioredis.Redis
