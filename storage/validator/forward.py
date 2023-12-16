@@ -101,17 +101,15 @@ async def forward(self):
 
             self.wandb.save(self.config.neuron.hash_map_path)
 
-        # Update the total network storage
-        total_storage = await total_network_storage(self.database)
-        bt.logging.info(
-            f"Total network storage (GB): {int(total_storage) // (1024**3)}"
-        )
-        if not self.config.wandb.off:
-            total_storage_time = {
-                "total_storage": total_storage,
-                "timestamp": time.time(),
-            }
-            self.wandb.log(total_storage_time)
-            with open(self.config.neuron.total_storage_path, "w") as file:
-                json.dump(total_storage, file)
-            self.wandb.save(self.config.neuron.total_storage_path)
+    # Update the total network storage
+    total_storage = await total_network_storage(self.database)
+    bt.logging.info(f"Total network storage (GB): {int(total_storage) // (1024**3)}")
+    if not self.config.wandb.off:
+        total_storage_time = {
+            "total_storage": total_storage,
+            "timestamp": time.time(),
+        }
+        self.wandb.log(total_storage_time)
+        with open(self.config.neuron.total_storage_path, "w") as file:
+            json.dump(total_storage, file)
+        self.wandb.save(self.config.neuron.total_storage_path)
