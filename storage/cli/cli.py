@@ -162,7 +162,7 @@ class cli:
         parser = cli.__create_parser__()
 
         # If no arguments are passed, print help text and exit the program.
-        if len(args) == 0:
+        if args == None or len(args) == 0:
             parser.print_help()
             sys.exit()
 

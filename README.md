@@ -14,29 +14,9 @@ Currently supporting `python>=3.7,<3.11`.
 
 # Table of Contents for Subnet 21 (FileTAO)
 
-1. [Overview](#overview)
-2. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
-   - [Role of a Miner (Prover)](#role-of-a-miner-prover)
-   - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
-3. [Main Features of Subnet 21](#main-features-of-subnet-21)
-   - [Zero-Knowledge Proof of Space-Time System](#zero-knowledge-proof-of-space-time-system)
-   - [Chained Proof Challenges](#chained-proof-challenges)
-   - [Data Encryption and Zero-Knowledge Proofs for Privacy Preservation](#data-encryption-and-zero-knowledge-proofs-for-privacy-preservation)
-   - [Scalability and Reliability](#scalability-and-reliability)
-   - [Advanced Cryptographic Techniques](#advanced-cryptographic-techniques)
-   - [User-Centric Approach](#user-centric-approach)
-4. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
-   - [Storage Phase](#storage-phase)
-   - [Challenge Phase](#challenge-phase)
-   - [Retrieval Phase](#retrieval-phase)
-5. [Epoch UID Selection](#epoch-uid-selection)
-6. [Installation](#installation)
-   - [Install Redis](#install-redis)
-   - [Install PM2](#install-pm2)
-   - [Running a Miner](#running-a-miner)
-   - [Running a Validator](#running-a-validator)
-   - [Running the API](#running-the-api)
-7. [Storage CLI Interface](#storage-cli-interface)
+1. [FileTAO](#FileTAO)
+1. [Storage CLI Interface](#storage-cli-interface)
+   - [Overview](#overview)
    - [Prerequisites](#prerequisites)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
@@ -45,7 +25,28 @@ Currently supporting `python>=3.7,<3.11`.
    - [Examples](#examples)
    - [General Options](#general-options)
    - [Notes](#notes)
-8. [(Optional) Setup WandB](#optional-setup-wandb)
+1. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
+   - [Role of a Miner (Prover)](#role-of-a-miner-prover)
+   - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
+1. [Main Features of Subnet 21](#main-features-of-subnet-21)
+   - [Zero-Knowledge Proof of Space-Time System](#zero-knowledge-proof-of-space-time-system)
+   - [Chained Proof Challenges](#chained-proof-challenges)
+   - [Data Encryption and Zero-Knowledge Proofs for Privacy Preservation](#data-encryption-and-zero-knowledge-proofs-for-privacy-preservation)
+   - [Scalability and Reliability](#scalability-and-reliability)
+   - [Advanced Cryptographic Techniques](#advanced-cryptographic-techniques)
+   - [User-Centric Approach](#user-centric-approach)
+1. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
+   - [Storage Phase](#storage-phase)
+   - [Challenge Phase](#challenge-phase)
+   - [Retrieval Phase](#retrieval-phase)
+1. [Epoch UID Selection](#epoch-uid-selection)
+1. [Installation](#installation)
+   - [Install Redis](#install-redis)
+   - [Install PM2](#install-pm2)
+   - [Running a Miner](#running-a-miner)
+   - [Running a Validator](#running-a-validator)
+   - [Running the API](#running-the-api)
+   - [(Optional) Setup WandB](#setup-wandb)
 
 
 # Storage CLI Interface
@@ -135,7 +136,7 @@ ftcli retrieve list --wallet.name mywallet
 - File paths should be absolute or relative to your current directory.
 - Data hashes are unique identifiers for your stored data on the Bittensor network.
 
-For detailed instructions and more information, visit the [Bittensor Documentation](https://bittensor.com/docs).
+For detailed instructions and more information, visit the [Bittensor Documentation](https://docs.bittensor.com).
 
 
 ## What is a Decentralized Storage Network (DSN)?

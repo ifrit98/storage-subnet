@@ -18,9 +18,10 @@
 
 
 import torch
-import typing
 import numpy as np
 import bittensor as bt
+
+from typing import Union, List
 
 
 def adjusted_sigmoid(x, steepness=1, shift=0):
@@ -267,10 +268,10 @@ from pprint import pformat
 
 async def create_reward_vector(
     self,
-    synapse: typing.Union[Store, Retrieve],
+    synapse: Union[Store, Retrieve],
     rewards: torch.FloatTensor,
-    uids: list[int],
-    responses: list[Synapse],
+    uids: List[int],
+    responses: List[Synapse],
     event: EventSchema,
     callback: callable,
     fail_callback: callable,
