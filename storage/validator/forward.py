@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+import time
 import bittensor as bt
 
 from storage.validator.config import config, check_config, add_args
@@ -88,11 +89,6 @@ async def forward(self):
         # Log all chunk hash <> hotkey pairs
         chunk_hash_map = await get_all_chunk_hashes(self.database)
 
-        # Update the total network storage
-        total_storage = await total_network_storage(self.database)
-        bt.logging.info(
-            f"Total network storage (GB): {int(total_storage) // (1024**3)}"
-        )
 
         # Log the statistics, storage, and hashmap to wandb.
         if not self.config.wandb.off:
@@ -106,8 +102,15 @@ async def forward(self):
 
             self.wandb.save(self.config.neuron.hash_map_path)
 
+        # Update the total network storage
+        total_storage = await total_network_storage(self.database)
+        bt.logging.info(
+            f"Total network storage (GB): {int(total_storage) // (1024**3)}"
+        )
+        if not self.config.wandb.off:
+            total_storage_time = {"total_storage": total_storage, "timestamp": time.time()}
+            self.wandb.log(total_storage_time)
             with open(self.config.neuron.total_storage_path, "w") as file:
                 json.dump(total_storage, file)
-
-            self.wandb.log({"total_storage": total_storage})
             self.wandb.save(self.config.neuron.total_storage_path)
+

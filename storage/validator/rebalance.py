@@ -62,7 +62,7 @@ async def rebalance_data_for_hotkey(
         if await is_file_chunk(_hash, self.database):
             rebalance_hashes.append(_hash)
 
-    bt.logging.debug(f"rebalance hashes: {rebalance_hashes[:5]}")
+    bt.logging.trace(f"rebalance full hashes: {rebalance_hashes[:5]}")
 
     if hotkey_replaced:
         # Reset miner statistics
