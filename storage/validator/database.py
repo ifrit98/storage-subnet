@@ -45,6 +45,24 @@ async def add_metadata_to_hotkey(
     bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
 
 
+async def remove_metadata_from_hotkey(
+    ss58_address: str, data_hash: str, database: aioredis.Redis
+):
+    """
+    Removes a data hash and its metadata from a hotkey in Redis.
+
+    Parameters:
+        ss58_address (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        database (aioredis.Redis): The Redis client instance.
+    """
+    # Use HDEL to remove the data hash from the hotkey
+    key = f"hotkey:{ss58_address}"
+    await database.hdel(key, data_hash)
+    bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}."
+)
+
+
 async def get_metadata_for_hotkey(
     ss58_address: str, database: aioredis.Redis
 ) -> Dict[str, dict]:
@@ -88,6 +106,22 @@ async def get_hashes_for_hotkey(
     return [
         data_hash.decode("utf-8") for data_hash, metadata in all_data_hashes.items()
     ]
+
+async def remove_hashes_for_hotkey(
+    ss58_address: str, hashes: list, database: aioredis.Redis
+) -> List[str]:
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    for _hash in hashes:
+        await remove_metadata_from_hotkey(ss58_address, _hash, database)
 
 
 async def update_metadata_for_data_hash(
@@ -714,7 +748,7 @@ async def check_hash_type(data_hash: str, database: aioredis.Redis) -> str:
     - database (aioredis.Redis): The Redis database client.
 
     Returns:
-    - str: A string indicating the type of hash ('full_file', 'chunk', or 'standalone_challenge').
+    - str: A string indicating the type of hash ('full_file', 'chunk', or 'challenge').
     """
     is_full_file = await database.exists(f"file:{data_hash}")
     if is_full_file:
@@ -724,7 +758,7 @@ async def check_hash_type(data_hash: str, database: aioredis.Redis) -> str:
     if is_chunk:
         return "chunk"
 
-    return "standalone_challenge"
+    return "challenge"
 
 
 async def is_file_chunk(chunk_hash: str, database: aioredis.Redis) -> str:
@@ -742,3 +776,41 @@ async def is_file_chunk(chunk_hash: str, database: aioredis.Redis) -> str:
         if chunk_hash in key.decode():
             return True
     return False
+
+
+async def get_all_hashes_in_database(database: aioredis.Redis) -> List[str]:
+    """
+    Retrieves all hashes from the Redis instance.
+
+    Parameters:
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A list of hashes.
+    """
+    all_hashes = set()
+
+    async for hotkey_key in db.scan_iter(match="hotkey:*"):
+        all_hashes.update(list(await db.hgetall(hotkey_hey)))
+
+    return list(all_hashes)
+
+
+async def get_all_challenge_hashes(database: aioredis.Redis) -> List[str]:
+    """
+    Retrieves all challenge hashes from the Redis instance.
+
+    Parameters:
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A list of challenge hashes.
+    """
+    all_hashes = await get_all_hashes_in_database(database)
+
+    challenge_hashes = []
+    for h in all_hashes:
+        if await check_hash_type(h, db) == "challenge":
+            challenge_hashes.append(h)
+
+    return challenge_hashes
