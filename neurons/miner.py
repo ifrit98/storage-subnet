@@ -606,18 +606,18 @@ class miner:
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time
         prev_seed = data.get(b"seed", "").encode()
+        if prev_seed == None:
+            bt.logging.error(f"No seed found for {synapse.challenge_hash}")
+            return synapse
+
         new_seed = synapse.seed.encode()
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
         )
-        if self.config.miner.verbose:
-            bt.logging.debug(
-                f"types: prev_seed {str(type(prev_seed))}, new_seed {str(type(new_seed))}, proof {str(type(proof))}"
-            )
-            bt.logging.debug(f"prev seed : {prev_seed}")
-            bt.logging.debug(f"new seed  : {new_seed}")
-            bt.logging.debug(f"proof     : {proof}")
-            bt.logging.debug(f"commitment: {next_commitment}\n")
+        bt.logging.trace(f"prev seed : {prev_seed}")
+        bt.logging.trace(f"new seed  : {new_seed}")
+        bt.logging.trace(f"proof     : {proof}")
+        bt.logging.trace(f"commitment: {next_commitment}\n")
         synapse.commitment_hash = next_commitment
         synapse.commitment_proof = proof
 
@@ -651,13 +651,10 @@ class miner:
             merkle_tree.get_proof(synapse.challenge_index)
         )
         synapse.merkle_root = merkle_tree.get_merkle_root()
-        if self.config.miner.verbose:
-            bt.logging.debug(f"commitment: {synapse.commitment}")
-            bt.logging.debug(f"data_chunk: {synapse.data_chunk}")
-            bt.logging.debug(f"randomness: {synapse.randomness}")
-            bt.logging.debug(f"merkle_proof: {synapse.merkle_proof}")
-            bt.logging.debug(f"merkle_root: {synapse.merkle_root}")
-
+        bt.logging.trace(f"commitment: {str(synapse.commitment)[:24]}")
+        bt.logging.trace(f"randomness: {str(synapse.randomness)[:24]}")
+        bt.logging.trace(f"merkle_proof[0]: {str(synapse.merkle_proof[0])}")
+        bt.logging.trace(f"merkle_root: {str(synapse.merkle_root)[:24]}")
         bt.logging.info(f"returning challenge data {synapse.data_chunk[:24]}...")
         return synapse
 
@@ -703,7 +700,10 @@ class miner:
         bt.logging.debug(f"retrieved data: {pformat(data)}")
 
         # load the data from the filesystem
-        filepath = data[b"filepath"]
+        filepath = data.get(b"filepath", None)
+        if filepath == None:
+            bt.logging.error(f"No file found for {synapse.data_hash}")
+            return synapse
         encrypted_data_bytes = load_from_filesystem(filepath)
 
         # incorporate a final seed challenge to verify they still have the data at retrieval time
