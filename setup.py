@@ -73,7 +73,7 @@ setup(
     include_package_data=True,
     author_email="ifrit98@gmail.com",
     license="MIT",
-    python_requires=">=3.7,<3.11",
+    python_requires=">=3.8,<3.11",
     scripts=["bin/ftcli"],
     install_requires=requirements,
     classifiers=[
@@ -82,7 +82,6 @@ setup(
         "Topic :: Software Development :: Build Tools",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
