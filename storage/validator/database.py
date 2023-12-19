@@ -817,6 +817,21 @@ async def get_all_challenge_hashes(database: aioredis.Redis) -> List[str]:
 
 
 async def get_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+    """
+    Retrieves a list of challenge hashes associated with a specific hotkey.
+
+    This function scans through all the hashes related to a given hotkey and filters out
+    those which are identified as challenge data. It's useful for identifying which
+    challenges a particular miner (identified by hotkey) is involved with.
+
+    Parameters:
+    - ss58_address (str): The hotkey (miner identifier) whose challenge hashes are to be retrieved.
+    - database (aioredis.Redis): An instance of the Redis database used for data storage.
+
+    Returns:
+    - List[str]: A list of challenge hashes associated with the given hotkey.
+      Returns an empty list if no challenge data is associated with the hotkey.
+    """
     hashes = list(await database.hgetall(f"hotkey:{ss58_address}"))
     challenges = []
     for j, h in enumerate(hashes):
@@ -827,6 +842,17 @@ async def get_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis)
 
 
 async def purge_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+    """
+    Purges (deletes) all challenge hashes associated with a specific hotkey.
+
+    This function is used for housekeeping purposes in the database, allowing for the
+    removal of all challenge data related to a particular miner (hotkey). This can be
+    useful for clearing outdated or irrelevant challenge data from the database.
+
+    Parameters:
+    - ss58_address (str): The hotkey (miner identifier) whose challenge hashes are to be purged.
+    - database (aioredis.Redis): An instance of the Redis database used for data storage.
+    """
     challenge_hashes = await get_challenges_for_hotkey(ss58_address, database)
     bt.logging.trace(f"purging challenges for {ss58_address}...")
     for ch in challenge_hashes:
@@ -834,6 +860,18 @@ async def purge_challenges_for_hotkey(ss58_address: str, database: aioredis.Redi
 
 
 async def purge_challenges_for_all_hotkeys(database: aioredis.Redis):
+    """
+    Purges (deletes) all challenge hashes for every hotkey in the database.
+
+    This function performs a comprehensive cleanup of the database by removing all
+    challenge-related data. It iterates over each hotkey in the database and
+    individually purges the challenge hashes associated with them. This is particularly
+    useful for global maintenance tasks where outdated or irrelevant challenge data
+    needs to be cleared from the entire database. For example, when a UID is replaced.
+
+    Parameters:
+    - database (aioredis.Redis): An instance of the Redis database used for data storage.
+    """
     bt.logging.trace(f"purging challenges for ALL hotkeys...")
     async for hotkey in database.scan_iter(match="hotkey:*"):
         hotkey = hotkey.decode().split(":")[1]
