@@ -571,7 +571,7 @@ Currently available are:
 - miner statistics (store, challenge, retrieve)
 
 You can find them all at the following links:
-- total [storage](https://chart-studio.plotly.com/~philanthrope/14/)
-- miner [store](https://plotly.com/~philanthrope/5/) statistics
-- miner [challenge](https://plotly.com/~philanthrope/7/) statistics
-- miner [retrieve](https://plotly.com/~philanthrope/9/) statistics
+
+| Total Storage | Miner Store Stats | Miner Challenge Stats | Miner Retrieve Stats |
+|:-------------:|:-----------------:|:---------------------:|:--------------------:|
+| [![Total Storage](/assets/totalStorage.png)](https://chart-studio.plotly.com/~philanthrope/14/) | [![Miner Store](/assets/store.png)](https://plotly.com/~philanthrope/5/) | [![Miner Challenge](/assets/challenge.png)](https://plotly.com/~philanthrope/7/) | [![Miner Retrieve](/assets/retrieval.png)](https://plotly.com/~philanthrope/9/) |
