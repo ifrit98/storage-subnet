@@ -204,13 +204,18 @@ class neuron:
 
     def run(self):
         bt.logging.info("run()")
-        load_state(self)
-        checkpoint(self)
 
         if self.config.database.purge_challenges:
             bt.logging.info("purging challenges")
-            await purge_challenges_for_all_hotkeys(self.database)
-            bt.logging.info("purged challenges!")
+
+            async def run_purge():
+                await asyncio.gather([purge_challenges_for_all_hotkeys(self.database)])
+
+            self.loop.run_until_complete(run_purge())
+            bt.logging.info("purged challenges.")
+
+        load_state(self)
+        checkpoint(self)
 
         try:
             while True:

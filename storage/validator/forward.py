@@ -125,9 +125,9 @@ async def forward(self):
     file_exists = os.path.isfile(self.config.neuron.total_storage_path)
 
     # Open the CSV file in append mode
-    with open(self.config.neuron.total_storage_path, 'a', newline='') as csvfile:
+    with open(self.config.neuron.total_storage_path, "a", newline="") as csvfile:
         # Define the field names
-        fieldnames = ['total_storage', 'timestamp']
+        fieldnames = ["total_storage", "timestamp"]
 
         # Create a writer object specifying the field names
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
