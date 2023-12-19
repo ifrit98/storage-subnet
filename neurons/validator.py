@@ -47,7 +47,7 @@ from storage.validator.weights import (
     should_set_weights,
     set_weights,
 )
-
+from storage.validator.database import purge_challenges_for_all_hotkeys
 from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
 
@@ -206,6 +206,11 @@ class neuron:
         bt.logging.info("run()")
         load_state(self)
         checkpoint(self)
+
+        if self.config.database.purge_challenges:
+            bt.logging.info("purging challenges")
+            await purge_challenges_for_all_hotkeys(self.database)
+            bt.logging.info("purged challenges!")
 
         try:
             while True:

@@ -68,6 +68,15 @@ def check_config(cls, config: "bt.Config"):
             os.path.join(config.neuron.full_path + "/" + "total_storage.csv")
         )
 
+        if config.database.purge_challenges:
+            bt.logging.warning(
+                "Purging all challenges from ALL miners! Waiting 60 sec in case this is unintentional..."
+            )
+            bt.logging.warning(
+                "Please abort the process if you are not intending to purge all your challenge data!"
+            )
+            time.sleep(60)
+
 
 def add_args(cls, parser):
     # Netuid Arg
@@ -283,6 +292,12 @@ def add_args(cls, parser):
         "--database.index",
         default=1,
         help="The database number of the redis database.",
+    )
+    parser.add_argument(
+        "--database.purge_challenges",
+        action="store_true",
+        help="If set, we will purge all challenges from ALL miners on start.",
+        default=False,
     )
 
     # Wandb args
