@@ -169,6 +169,7 @@ async def retrieve_data(
             bt.logging.debug(f"No response: skipping retrieve for uid {uid}")
             continue  # We don't have any data for this hotkey, skip it.
 
+        decoded_data = b""
         try:
             decoded_data = base64.b64decode(response.data)
         except Exception as e:

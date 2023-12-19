@@ -550,7 +550,7 @@ class miner:
         )
 
         # Don't send data back, no need.
-        synapse.encrypted_data = base64.b64encode(b"").decode() # Empty b64 response
+        synapse.encrypted_data = base64.b64encode(b"").decode()  # Empty b64 response
         return synapse
 
     async def challenge(

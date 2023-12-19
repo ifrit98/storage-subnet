@@ -376,7 +376,7 @@ async def check_hotkeys_capacity(hotkeys_capacity, hotkey):
         return False
 
 
-async def total_network_storage(database: aioredis.Redis) -> int:
+async def total_validator_storage(database: aioredis.Redis) -> int:
     """
     Calculates the total storage used by all hotkeys in the database.
 
