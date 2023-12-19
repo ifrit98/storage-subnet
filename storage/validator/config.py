@@ -65,7 +65,7 @@ def check_config(cls, config: "bt.Config"):
             os.path.join(config.neuron.full_path + "/" + "hash_map.json")
         )
         config.neuron.total_storage_path = os.path.expanduser(
-            os.path.join(config.neuron.full_path + "/" + "total_storage.json")
+            os.path.join(config.neuron.full_path + "/" + "total_storage.csv")
         )
 
 

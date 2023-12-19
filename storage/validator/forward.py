@@ -16,6 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
+import csv
 import json
 import time
 import bittensor as bt
@@ -101,15 +103,38 @@ async def forward(self):
 
             self.wandb.save(self.config.neuron.hash_map_path)
 
+            # Also upload the total network storage periodically
+            self.wandb.save(self.config.neuron.total_storage_path)
+
     # Update the total network storage
     total_storage = await total_network_storage(self.database)
     bt.logging.info(f"Total network storage (GB): {int(total_storage) // (1024**3)}")
-    if not self.config.wandb.off:
-        total_storage_time = {
-            "total_storage": total_storage,
-            "timestamp": time.time(),
-        }
-        self.wandb.log(total_storage_time)
-        with open(self.config.neuron.total_storage_path, "w") as file:
-            json.dump(total_storage_time, file)
-        self.wandb.save(self.config.neuron.total_storage_path)
+
+    # Get the current local time
+    current_time = time.localtime()
+
+    # Format the time in a readable format, for example: "Year-Month-Day Hour:Minute:Second"
+    formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", current_time)
+
+    total_storage_time = {
+        "total_storage": total_storage,
+        "timestamp": formatted_time,
+    }
+
+    # Check if the CSV already exists
+    file_exists = os.path.isfile(self.config.neuron.total_storage_path)
+
+    # Open the CSV file in append mode
+    with open(self.config.neuron.total_storage_path, 'a', newline='') as csvfile:
+        # Define the field names
+        fieldnames = ['total_storage', 'timestamp']
+
+        # Create a writer object specifying the field names
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # Write the header only if the file is being created
+        if not file_exists:
+            writer.writeheader()
+
+        # Write the data row
+        writer.writerow(total_storage_time)

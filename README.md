@@ -47,6 +47,7 @@ Currently supporting `python>=3.8,<3.11`.
    - [Running a Validator](#running-a-validator)
    - [Running the API](#running-the-api)
    - [(Optional) Setup WandB](#setup-wandb)
+1. [Network Stats](#network-stats)
 
 
 # Storage CLI Interface
@@ -559,3 +560,18 @@ Following these steps, you should be able to successfully log into WANDB and set
 No GPU is currently required to run either a validator or miner. This may change in the future for accelerating the proof and/or verification system.
 
 See [`min_compute.yml`](min_compute.yml) for complete details on minimum and recommended requirements.
+
+
+### Network Stats
+
+You can observe several features of the network in real time (updated every 15 minutes).
+
+Currently available are:
+- total storage (current storage, total possible)
+- miner statistics (store, challenge, retrieve)
+
+You can find them all at the following links:
+- total [storage](https://chart-studio.plotly.com/~philanthrope/14/)
+- miner [store](https://plotly.com/~philanthrope/5/) statistics
+- miner [challenge](https://plotly.com/~philanthrope/7/) statistics
+- miner [retrieve](https://plotly.com/~philanthrope/9/) statistics
