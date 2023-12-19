@@ -21,12 +21,17 @@ import aioredis
 import bittensor as bt
 
 # Constants for storage limits in bytes
+STORAGE_LIMIT_SUPER_SAIYAN = 1024**6 * 1  # 1 EB
 STORAGE_LIMIT_DIAMOND = 1024**5 * 1  # 1 PB
 STORAGE_LIMIT_GOLD = 1024**4 * 100  # 100 TB
 STORAGE_LIMIT_SILVER = 1024**4 * 10  # 10 TB
 STORAGE_LIMIT_BRONZE = 1024**4 * 1  # 1 TB
 
 # Requirements for each tier. These must be maintained for a miner to remain in that tier.
+SUPER_SAIYAN_STORE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+SUPER_SAIYAN_RETIREVAL_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+SUPER_SAIYAN_CHALLENGE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
+
 DIAMOND_STORE_SUCCESS_RATE = 0.995  # 1/200 chance of failure
 DIAMOND_RETRIEVAL_SUCCESS_RATE = 0.995  # 1/200 chance of failure
 DIAMOND_CHALLENGE_SUCCESS_RATE = 0.995  # 1/200 chance of failure
@@ -39,11 +44,13 @@ SILVER_STORE_SUCCESS_RATE = 0.975  # 1/50 chance of failure
 SILVER_RETRIEVAL_SUCCESS_RATE = 0.975  # 1/50 chance of failure
 SILVER_CHALLENGE_SUCCESS_RATE = 0.975  # 1/50 chance of failure
 
+SUPER_SAIYAN_TIER_REWARD_FACTOR = 1.5  # Get 150% of rewards
 DIAMOND_TIER_REWARD_FACTOR = 1.0  # Get 100% of rewards
 GOLD_TIER_REWARD_FACTOR = 0.888  # Get 88.8% of rewards
 SILVER_TIER_REWARD_FACTOR = 0.555  # Get 55.5% of rewards
 BRONZE_TIER_REWARD_FACTOR = 0.333  # Get 33.3% of rewards
 
+SUPER_SAIYAN_TIER_TOTAL_SUCCESSES = 10**5 * 5  # 500,000
 DIAMOND_TIER_TOTAL_SUCCESSES = 10**5  # 100,000
 GOLD_TIER_TOTAL_SUCCESSES = 10**4  # 10,000
 SILVER_TIER_TOTAL_SUCCESSES = 10**3  # 1,000
@@ -163,6 +170,13 @@ async def compute_tier(stats_key: str, database: aioredis.Redis):
     total_successes = challenge_successes + retrieval_successes + store_successes
 
     if (
+        challenge_success_rate >= SUPER_SAIYAN_CHALLENGE_SUCCESS_RATE
+        and retrieval_success_rate >= SUPER_SAIYAN_RETIREVAL_SUCCESS_RATE
+        and store_success_rate >= SUPER_SAIYAN_STORE_SUCCESS_RATE
+        and total_successes >= SUPER_SAIYAN_TIER_TOTAL_SUCCESSES
+    ):
+        tier = b"Super Saiyan"
+    elif (
         challenge_success_rate >= DIAMOND_CHALLENGE_SUCCESS_RATE
         and retrieval_success_rate >= DIAMOND_RETRIEVAL_SUCCESS_RATE
         and store_success_rate >= DIAMOND_STORE_SUCCESS_RATE
@@ -193,7 +207,9 @@ async def compute_tier(stats_key: str, database: aioredis.Redis):
         bt.logging.trace(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
-        if tier == b"Diamond":
+        if tier == b"Super Saiyan":
+            storage_limit = STORAGE_LIMIT_SUPER_SAIYAN
+        elif tier == b"Diamond":
             storage_limit = STORAGE_LIMIT_DIAMOND
         elif tier == b"Gold":
             storage_limit = STORAGE_LIMIT_GOLD
