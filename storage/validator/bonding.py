@@ -251,7 +251,9 @@ async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
         float: The reward factor corresponding to the miner's tier.
     """
     tier = await database.hget(f"stats:{ss58_address}", "tier")
-    if tier == b"Diamond":
+    if tier == b"Super Saiyan":
+        return SUPER_SAIYAN_TIER_REWARD_FACTOR
+    elif tier == b"Diamond":
         return DIAMOND_TIER_REWARD_FACTOR
     elif tier == b"Gold":
         return GOLD_TIER_REWARD_FACTOR
