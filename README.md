@@ -15,6 +15,7 @@ Currently supporting `python>=3.8,<3.11`.
 # Table of Contents for Subnet 21 (FileTAO)
 
 1. [FileTAO](#FileTAO)
+1. [Network Stats](#network-stats)
 1. [Storage CLI Interface](#storage-cli-interface)
    - [Overview](#overview)
    - [Prerequisites](#prerequisites)
@@ -47,13 +48,28 @@ Currently supporting `python>=3.8,<3.11`.
    - [Running a Validator](#running-a-validator)
    - [Running the API](#running-the-api)
    - [(Optional) Setup WandB](#setup-wandb)
-1. [Network Stats](#network-stats)
 
 
 # Storage CLI Interface
 
 ## Overview
 The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+
+
+### Network Stats
+
+You can observe several features of the network in real time (updated every 15 minutes).
+
+Currently available are:
+- total storage (current storage, total possible)
+- miner statistics (store, challenge, retrieve)
+
+You can find them all at the following links:
+
+| Total Storage | Miner Store Stats | Miner Challenge Stats | Miner Retrieve Stats |
+|:----------------:|:-----------------:|:---------------------:|:--------------------:|
+| [![Total Storage](/assets/totalStorage.png)](https://chart-studio.plotly.com/~philanthrope/14/) | [![Miner Store](/assets/store.png)](https://plotly.com/~philanthrope/5/) | [![Miner Challenge](/assets/challenge.png)](https://plotly.com/~philanthrope/7/) | [![Miner Retrieve](/assets/retrieval.png)](https://plotly.com/~philanthrope/9/) |
+
 
 ## Prerequisites
 Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
@@ -560,18 +576,3 @@ Following these steps, you should be able to successfully log into WANDB and set
 No GPU is currently required to run either a validator or miner. This may change in the future for accelerating the proof and/or verification system.
 
 See [`min_compute.yml`](min_compute.yml) for complete details on minimum and recommended requirements.
-
-
-### Network Stats
-
-You can observe several features of the network in real time (updated every 15 minutes).
-
-Currently available are:
-- total storage (current storage, total possible)
-- miner statistics (store, challenge, retrieve)
-
-You can find them all at the following links:
-
-| Total Storage | Miner Store Stats | Miner Challenge Stats | Miner Retrieve Stats |
-|:----------------:|:-----------------:|:---------------------:|:--------------------:|
-| [![Total Storage](/assets/totalStorage.png)](https://chart-studio.plotly.com/~philanthrope/14/) | [![Miner Store](/assets/store.png)](https://plotly.com/~philanthrope/5/) | [![Miner Challenge](/assets/challenge.png)](https://plotly.com/~philanthrope/7/) | [![Miner Retrieve](/assets/retrieval.png)](https://plotly.com/~philanthrope/9/) |
