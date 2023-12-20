@@ -364,9 +364,25 @@ sudo npm install pm2 -g
 
 
 ### Running a miner
+You can run a miner in your base environment like so:
+
 ```bash
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
+
+However, it is recommended to use a process manager, such as `pm2`. This can be done simply:
+
+```bash
+pm2 start <path-to-script> --interpreter <path-to-python-binary> --name <unique-name> -- <program-args..,>
+```
+
+For example running a miner:
+```bash
+pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/miniconda3/envs/sn21/bin/python --name miner -- --netuid 21 --wandb.off --wallet.name default --wallet.hotkey miner  --axon.port 8888 --logging.debug
+```
+
+> Make sure to use absolute paths when executing your pm2 command.
+
 
 #### Options
 
@@ -455,6 +471,11 @@ export BT_COLD_PW_DEFAULT=xxxyyy
 ```
 
 This allows for restarting your process without having to input the wallet password each time.
+
+For example using `pm2`:
+```bash
+BT_COLD_PW_DEFAULT=<YOUR_PW_HERE> pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/user/miniconda3/envs/sn21/bin/python --name validator -- --netuid 21 --logging.debug --wallet.name default --wallet.hotkey validator
+```
 
 #### Options
 

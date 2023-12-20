@@ -27,7 +27,7 @@ from storage.validator.state import log_event
 from storage.validator.bonding import compute_all_tiers
 from storage.validator.reward import apply_reward_scores
 from storage.validator.database import (
-    total_network_storage,
+    total_validator_storage,
     get_all_chunk_hashes,
     get_miner_statistics,
 )
@@ -107,8 +107,8 @@ async def forward(self):
             self.wandb.save(self.config.neuron.total_storage_path)
 
     # Update the total network storage
-    total_storage = await total_network_storage(self.database)
-    bt.logging.info(f"Total network storage (GB): {int(total_storage) // (1024**3)}")
+    total_storage = await total_validator_storage(self.database)
+    bt.logging.info(f"Total validator storage (GB): {int(total_storage) // (1024**3)}")
 
     # Get the current local time
     current_time = time.localtime()

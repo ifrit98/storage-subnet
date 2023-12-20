@@ -57,14 +57,14 @@ def chunk_data_generator(data, chunk_size):
 
 
 def generate_file_size_with_lognormal(
-    mu: float = np.log(1 * 1024**2), sigma: float = 1.5
+    mu: float = np.log(20 * 1024**2), sigma: float = 1.5
 ) -> float:
     """
     Generate a single file size using a lognormal distribution.
     Default parameters are set to model a typical file size distribution,
     but can be overridden for custom distributions.
 
-    :param mu: Mean of the log values, default is set based on medium file size (10 MB).
+    :param mu: Mean of the log values, default is set based on medium file size (20 MB).
     :param sigma: Standard deviation of the log values, default is set to 1.5.
     :return: File size in bytes.
     """

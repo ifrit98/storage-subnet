@@ -26,7 +26,6 @@ import base64
 import typing
 import asyncio
 import aioredis
-import argparse
 import traceback
 import websocket
 import bittensor as bt

@@ -548,6 +548,9 @@ class miner:
         bt.logging.info(
             f"stored data hash {data_hash} with commitment: {synapse.commitment}"
         )
+
+        # Don't send data back, no need.
+        synapse.encrypted_data = base64.b64encode(b"").decode()  # Empty b64 response
         return synapse
 
     async def challenge(
