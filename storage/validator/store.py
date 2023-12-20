@@ -129,7 +129,6 @@ async def store_encrypted_data(
         max_retries=max_retries,
         exclude_uids=exclude_uids,
     )
-    uids = [15, 16]
     bt.logging.debug(f"store uids: {uids}")
 
     axons = [self.metagraph.axons[uid] for uid in uids]
