@@ -22,13 +22,6 @@ from Crypto.Random import random
 from Crypto.PublicKey import ECC
 
 
-def xor_bytes(a, b):
-    """
-    XOR two byte-like objects together.
-    """
-    return bytes(x ^ y for x, y in zip(a, b))
-
-
 def hash_data(data):
     """
     Compute a SHA3-256 hash of the input data and return its integer representation.

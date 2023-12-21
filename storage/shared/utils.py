@@ -86,12 +86,6 @@ def b64_decode(data: bytes, decode_hex: bool = False, encrypted: bool = False):
     return decoded_data
 
 
-def xor_data(x: bytes, y: bytes):
-    """XOR the x (data) and the y (seed), extending y (seed) if necessary for symmetry."""
-    y = (y * (len(x) // len(y))) + y[: len(x) % len(y)]
-    return bytes(a ^ b for a, b in zip(x, y))
-
-
 def chunk_data(data: bytes, chunksize: int) -> List[bytes]:
     """
     Generator function that chunks the given data into pieces of a specified size.
