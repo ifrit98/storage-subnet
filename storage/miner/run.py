@@ -71,7 +71,6 @@ def run(self):
 
             # --- Wait until next epoch.
             current_block = self.subtensor.get_current_block()
-            bt.logging.info(f"Miner running at block {current_block}...")
 
             while (
                 current_block - self.last_epoch_block
@@ -80,7 +79,8 @@ def run(self):
                 # --- Wait for next bloc.
                 time.sleep(1)
                 current_block = self.subtensor.get_current_block()
-
+                bt.logging.info(f"Miner running at block {current_block}...")                
+ 
                 # --- Check if we should exit.
                 if self.should_exit:
                     break
