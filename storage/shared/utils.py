@@ -103,21 +103,3 @@ def chunk_data(data: bytes, chunksize: int) -> List[bytes]:
     for i in range(0, len(data), chunksize):
         yield data[i : i + chunksize]
 
-
-def is_hex_str(s: str) -> bool:
-    """
-    Check if the input string is a valid hexadecimal string.
-
-    :param s: The string to check
-    :return: True if s is a valid hexadecimal string, False otherwise
-    """
-    # A valid hex string must have an even number of characters
-    if len(s) % 2 != 0:
-        return False
-
-    # Check if each character is a valid hex character
-    try:
-        int(s, 16)
-        return True
-    except ValueError:
-        return False
