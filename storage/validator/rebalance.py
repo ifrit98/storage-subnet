@@ -23,6 +23,7 @@ from pprint import pformat
 from storage.validator.database import (
     is_file_chunk,
     get_metadata_for_hotkey,
+    get_ordered_metadata,
     retrieve_encryption_payload,
     remove_hotkey_from_chunk,
     purge_challenges_for_hotkey,
@@ -71,7 +72,7 @@ async def rebalance_data_for_hotkey(
         await register_miner(source_hotkey, self.database)
         # Update index for full and chunk hashes for retrieve
         # Iterate through ordered metadata for all full hashses this miner had
-        async for file_key in self.databse.scan_iter("file:*"):
+        async for file_key in self.database.scan_iter("file:*"):
             file_key = file_key.decode("utf-8")
             file_hash = file_key.split(":")[1]
             # Get all ordered metadata for this file
