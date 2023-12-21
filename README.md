@@ -367,7 +367,7 @@ sudo npm install pm2 -g
 You can run a miner in your base environment like so:
 
 ```bash
-python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
+python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY> --logging.debug
 ```
 
 However, it is recommended to use a process manager, such as `pm2`. This can be done simply:
