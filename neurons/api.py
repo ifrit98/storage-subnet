@@ -297,14 +297,15 @@ class neuron:
         if synapse.dendrite.hotkey in self.top_n_validators:
             return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
 
-        # Otherwise, reject.
+        # If debug mode, whitelist everything (NOT RECOMMENDED)
         if self.config.api.debug:
             return False, "Debug all whitelisted"
-        return False, ""
-        # return (
-        #     True,
-        #     f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
-        # )
+        
+        # Otherwise, reject.
+        return (
+            True,
+            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        )
 
     async def store_priority(self, synapse: protocol.StoreUser) -> float:
         caller_uid = self.metagraph.hotkeys.index(
@@ -376,14 +377,15 @@ class neuron:
         if synapse.dendrite.hotkey in self.top_n_validators:
             return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
 
-        # Otherwise, reject.
+        # If debug mode, whitelist everything (NOT RECOMMENDED)
         if self.config.api.debug:
             return False, "Debug all whitelisted."
-        return False, ""
-        # return (
-        #     True,
-        #     f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
-        # )
+
+        # Otherwise, reject.
+        return (
+            True,
+            f"Hotkey {synapse.dendrite.hotkey} not whitelisted or in top n% stake.",
+        )
 
     async def retrieve_priority(self, synapse: protocol.RetrieveUser) -> float:
         caller_uid = self.metagraph.hotkeys.index(
