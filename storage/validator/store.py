@@ -259,7 +259,7 @@ async def store_random_data(self):
 
     # Encrypt the data
     # TODO: create and use a throwaway wallet (never decrypable)
-    encrypted_data, encryption_payload = encrypt_data(data, self.wallet)
+    encrypted_data, encryption_payload = encrypt_data(data, self.encryption_wallet)
 
     return await store_encrypted_data(
         self, encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl

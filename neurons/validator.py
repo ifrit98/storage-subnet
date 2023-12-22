@@ -124,7 +124,7 @@ class neuron:
             hotkey=self.config.neuron.encryption_hotkey,
         )
         self.encryption_wallet.create_if_non_existent(coldkey_use_password=False)
-        self.encrpytion_wallet.coldkey  # Unlock for testing
+        self.encrpytion_wallet.coldkey  # Unlock the coldkey.
 
         # Init metagraph.
         bt.logging.debug("loading metagraph")
