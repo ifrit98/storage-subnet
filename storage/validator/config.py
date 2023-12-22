@@ -352,18 +352,6 @@ def add_args(cls, parser):
     parser.add_argument(
         "--mock", action="store_true", help="Mock all items.", default=False
     )
-    parser.add_argument(
-        "--neuron.nsfw_off",
-        action="store_true",
-        help="Dont apply the nsfw reward model",
-        default=False,
-    )
-    parser.add_argument(
-        "--neuron.mock_dendrite_pool",
-        action="store_true",
-        help="Dont download the dendrite pool.",
-        default=False,
-    )
 
     # API specific
     parser.add_argument(
