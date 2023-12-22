@@ -181,8 +181,8 @@ async def monitor(self):
     occur. If a UID fails too many times, remove it from the
     list of UIDs to ping.
     """
-    # Ping all UIDs
-    query_uids = get_available_uids(self)
+    # Ping current subset of UIDs
+    query_uids = get_available_query_miners(self, k=self.config.neuron.monitor_sample_size)
     _, failed_uids = await ping_uids(self, query_uids)
 
     down_uids = []

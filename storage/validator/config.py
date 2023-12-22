@@ -156,6 +156,12 @@ def add_args(cls, parser):
         help="Number of steps before calling monitor for down uids.",
     )
     parser.add_argument(
+        "--neuron.monitor_sample_size",
+        type=int,
+        default=20,
+        help="Number of miners to monitor each interval.",
+    )
+    parser.add_argument(
         "--neuron.max_failed_pings",
         type=int,
         default=10,
