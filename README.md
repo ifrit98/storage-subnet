@@ -565,7 +565,7 @@ BT_COLD_PW_DEFAULT=<YOUR_PW_HERE> pm2 start /home/user/storage-subnet/neurons/va
 - `--neuron.blocks_per_step`: Blocks before a step is taken in the mining process. Default: 3.
 - `--neuron.events_retention_size`: File size for retaining event logs (e.g., "2 GB"). Default: "2 GB".
 - `--neuron.dont_save_events`: If set, event logs will not be saved to a file. Default: False.
-- `--neuron.vpermit_tao_limit`: The maximum TAO allowed for querying a validator with a vpermit. Default: 4096.
+- `--neuron.vpermit_tao_limit`: The maximum TAO allowed for querying a validator with a vpermit. Default: 500.
 - `--neuron.verbose`: If set, detailed verbose logs will be printed. Default: False.
 - `--neuron.log_responses`: If set, all responses will be logged. Note: These logs can be extensive. Default: False.
 - `--neuron.data_ttl`: The number of blocks before stored data expires. Default: 50000 (approximately 7 days).
