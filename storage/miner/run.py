@@ -79,7 +79,7 @@ def run(self):
                 # --- Wait for next bloc.
                 time.sleep(1)
                 self.current_block = self.subtensor.get_current_block()
-                bt.logging.info(f"Miner running at block {self.current_block}...")
+                bt.logging.info(f"Miner running at block {current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
@@ -94,6 +94,21 @@ def run(self):
                 lite=True,
                 block=self.last_epoch_block,
             )
+
+            self.average_reqeusts_per_hour = sum(self.requests_per_hour) / len(
+                self.requests_per_hour
+            )
+            self.available_storage = get_free_disk_space(self.config.database.directory)
+            self.used_storage = get_directory_size(self.config.database.directory)
+            stats_log = (
+                f"Avg Requests/Hour: {self.average_requests_per_hour} | "
+                f"Avail Storage: {self.available_storage} | "
+                f"Used Storage: {self.used_storage}"
+            )
+            bt.logging.info(stats_log)
+            if self.config.wandb.on:
+                wandb.log(stats_log)
+
             log = (
                 f"Step:{step} | "
                 f"Block:{self.metagraph.block.item()} | "

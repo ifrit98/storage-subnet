@@ -18,6 +18,7 @@
 
 import os
 import json
+import shutil
 import storage
 import wandb
 import copy
@@ -176,3 +177,76 @@ def init_wandb(self, reinit=False):
         prefix="Started a new wandb run",
         sufix=f"<blue> {self.wandb.name} </blue>",
     )
+
+
+def get_disk_space_stats(path):
+    """
+    Retrieves the disk space statistics for the drive containing the specified path.
+
+    This function provides the total, used, and free disk space of the drive on which the specified path resides.
+    It's useful for understanding the storage capacity and usage of the system where the miner is running.
+
+    Args:
+        path (str): A file path on the drive whose disk space statistics are to be fetched. Typically, you can
+                    provide the root path ('/') to get the stats for the primary drive.
+
+    Returns:
+        dict: A dictionary containing the 'total_gb', 'used_gb', and 'free_gb', representing the total, used,
+              and free space on the disk in gigabytes (GB), respectively.
+
+    Usage:
+        disk_stats = get_disk_space_stats('/')
+    """
+    total, used, free = shutil.disk_usage(path)
+    return {
+        "total_gb": total // (2**30),
+        "used_gb": used // (2**30),
+        "free_gb": free // (2**30),
+    }
+
+
+def get_free_disk_space(path):
+    """
+    Retrieves the free disk space for the drive containing the specified path.
+
+    This function provides the free disk space of the drive on which the specified path resides.
+    It's useful for understanding the storage capacity and usage of the system where the miner is running.
+
+    Args:
+        path (str): A file path on the drive whose free disk space is to be fetched. Typically, you can
+                    provide the root path ('/') to get the stats for the primary drive.
+
+    Returns:
+        int: The free space on the disk in gigabytes (GB).
+
+    Usage:
+        free_disk_space_gb = get_free_disk_space('/')
+    """
+    stats = get_disk_space_stats(path)
+    free = stats.get(free, 0)
+    return free // (2**30)
+
+
+def get_directory_size(path):
+    """
+    Calculates the total size of files in a specified directory.
+
+    This function traverses the directory at the given path, including all subdirectories, and sums up the size
+    of each file to calculate the total directory size.
+
+    Args:
+        path (str): The file path of the directory whose size is to be calculated.
+
+    Returns:
+        int: The total size of the directory in gigabytes (GB).
+
+    Usage:
+        directory_size_gb = get_directory_size('/path/to/directory')
+    """
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+    return total_size // (2**30)
