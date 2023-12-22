@@ -666,9 +666,26 @@ Availability is *critical* in storage in general and SN21, specifically. The rew
 
 It is *highly* recommended that all miners and validators run their own local subtensor node. This will resolve the many issues commonly found with intermittent connectivity across all subents.
 
+To start your miner/validator using your local node, include the flag `--subtensor.network local` into your startup parameters.
+
+### Docker installation
+For easiest installation, run subtensor inside of the foundation-provided docker container.
+```bash
+# Install the docker compose plugin
+sudo apt-get update
+sudo apt-get install docker-compose-plugin
+
+# Clone subtensor
+git clone https://github.com/opentensor/subtensor
+cd subtensor
+
+# Start the subtensor container on port 9944
+sudo docker compose up -d
+```
+
 #### Quick Installation
 Provided are two scripts to build subtensor, and then to run it inside a pm2 process as a convenience. If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
-```
+```bash
 # Installs dependencies and builds the subtensor binary
 ./scripts/build_subtensor_linux.sh
 
@@ -684,7 +701,7 @@ Provided are two scripts to build subtensor, and then to run it inside a pm2 pro
 
 You should see output like this in your pm2 logs for the process at startup:
 
-```
+```bash
 pm2 logs subtensor
 
 1|subtenso | 2023-12-22 14:21:30 🔨 Initializing Genesis block/state (state: 0x4015…9643, header-hash: 0x2f05…6c03)    
