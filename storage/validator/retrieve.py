@@ -162,6 +162,7 @@ async def retrieve_data(
         len(response_tuples), dtype=torch.float32
     ).to(self.device)
 
+    decoded_data = b""
     for idx, (uid, (response, data_hash)) in enumerate(zip(uids, response_tuples)):
         hotkey = self.metagraph.hotkeys[uid]
 
@@ -169,7 +170,6 @@ async def retrieve_data(
             bt.logging.debug(f"No response: skipping retrieve for uid {uid}")
             continue  # We don't have any data for this hotkey, skip it.
 
-        decoded_data = b""
         try:
             decoded_data = base64.b64decode(response.data)
         except Exception as e:
