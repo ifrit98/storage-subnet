@@ -79,7 +79,7 @@ def run(self):
                 # --- Wait for next bloc.
                 time.sleep(1)
                 self.current_block = self.subtensor.get_current_block()
-                bt.logging.info(f"Miner running at block {current_block}...")
+                bt.logging.info(f"Miner running at block {self.current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
