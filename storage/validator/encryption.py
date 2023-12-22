@@ -469,9 +469,9 @@ def test_serialize_nacl_encrypted_message(wallet: bt.wallet):
 
 
 def setup_encryption_wallet(
-    password="dummy_password",
     wallet_name="encryption",
     wallet_hotkey="encryption",
+    password="dummy_password",
     n_words=12,
     use_encryption=False,
     overwrite=False,

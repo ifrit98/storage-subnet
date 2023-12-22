@@ -144,4 +144,4 @@ async def forward(self):
         writer.writerow(total_storage_time)
 
     forward_time = time.time() - start
-    bt.logging.info(f"forward step time: {forward_time}s")
+    bt.logging.info(f"forward step time: {forward_time:.2f}s")

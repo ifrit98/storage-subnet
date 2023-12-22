@@ -398,6 +398,12 @@ def add_args(cls, parser):
         help="The hotkey name of the wallet to use for encryption.",
         default="core_storage_hotkey",
     )
+    parser.add_argument(
+        "--encryption.password",
+        type=str,
+        help="The password of the wallet to use for encryption.",
+        default="dummy_password",
+    )
 
 
 def config(cls):

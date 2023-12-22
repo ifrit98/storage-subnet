@@ -50,6 +50,7 @@ from storage.validator.weights import (
 from storage.validator.database import purge_challenges_for_all_hotkeys
 from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
+from storage.validator.encryption import setup_encryption_wallet
 
 
 class neuron:
@@ -120,12 +121,13 @@ class neuron:
 
         # Setup dummy wallet for encryption purposes. No password needed.
         self.encryption_wallet = setup_encryption_wallet(
-            wallet_name=self.config.neuron.encryption_wallet_name,
-            wallet_hotkey=self.config.neuron.encryption_hotkey,
-            password=self.config.neuron.encryption_password,
+            wallet_name=self.config.encryption.wallet_name,
+            wallet_hotkey=self.config.encryption.hotkey,
+            password=self.config.encryption.password,
         )
         self.encryption_wallet.create_if_non_existent(coldkey_use_password=False)
         self.encryption_wallet.coldkey  # Unlock the coldkey.
+        bt.logging.info(f"loading encryption wallet {self.encryption_wallet}")
 
         # Init metagraph.
         bt.logging.debug("loading metagraph")

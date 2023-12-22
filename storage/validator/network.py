@@ -182,7 +182,7 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping current subset of UIDs
-    query_uids = get_available_query_miners(
+    query_uids = await get_available_query_miners(
         self, k=self.config.neuron.monitor_sample_size
     )
     _, failed_uids = await ping_uids(self, query_uids)
