@@ -9,8 +9,11 @@ class InvalidData(Exception):
 def todo():
     pass
 
+### P2P Message structure
+
 STORE = 0x1
 REBALANCE = 0x2
+VOTE = 0x3
 
 @dataclass
 class Message:
@@ -57,8 +60,18 @@ class Message:
 
         return Message(type, nonce, origin, payload, signature)
 
+### P2P Peer Finding
+CONNECTION_POOL = []
+async def find_peers():
+    todo()
+
+async def negotiate():
+    todo()
+
+### P2P Message Manager
+
 # Construct a new message to broadcast
-def new_message():
+async def new_message(message: Message):
     todo()
 
 # We've received a message
@@ -72,9 +85,16 @@ async def incoming_message(message):
 
     todo()
 
+async def should_deny_connection(writer: StreamWriter) -> bool:
+    return False
+
+# Connection made to our TCP server
 async def connection_created(reader: StreamReader, writer: StreamWriter):
     peername = writer.get_extra_info('peername')
     print('Connection from {}'.format(peername))
+
+    if (await should_deny_connection(writer)):
+        return
 
     data = await reader.read()
     if len(data) > 370:
@@ -82,15 +102,22 @@ async def connection_created(reader: StreamReader, writer: StreamWriter):
     
     await incoming_message(data)
 
+    writer.write(b"ACK")
+    await writer.drain()
+
     writer.close()
     await writer.wait_closed()
 
-async def main():
+# Start TCP server
+async def start_messaging_protocol():
     server = await asyncio.start_server(
         client_connected_cb=connection_created,
         host='127.0.0.1', port=8888)
 
     async with server:
-        await server.serve_forever()
+        try:
+            await server.serve_forever()
+        except:
+            print("closed")
 
-asyncio.run(main())
+asyncio.run(start_messaging_protocol())
