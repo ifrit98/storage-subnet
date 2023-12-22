@@ -103,11 +103,11 @@ class neuron:
         )
         bt.logging.debug(str(self.subtensor))
 
-        # Init wallet.
+        # Init validator wallet.
         bt.logging.debug("loading wallet")
         self.wallet = bt.wallet(config=self.config)
-        self.wallet.coldkey  # Unlock for testing
         self.wallet.create_if_non_existent()
+
         if not self.config.wallet._mock:
             if not self.subtensor.is_hotkey_registered_on_subnet(
                 hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
@@ -117,6 +117,14 @@ class neuron:
                 )
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
+
+        # Setup dummy wallet for encryption purposes. No password needed.
+        self.encryption_wallet = bt.wallet(
+            name=self.config.neuron.encryption_wallet_name,
+            hotkey=self.config.neuron.encryption_hotkey,
+        )
+        self.encryption_wallet.create_if_non_existent(coldkey_use_password=False)
+        self.encrpytion_wallet.coldkey  # Unlock for testing
 
         # Init metagraph.
         bt.logging.debug("loading metagraph")

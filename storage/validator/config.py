@@ -391,6 +391,20 @@ def add_args(cls, parser):
         help="If set, we whitelist by default to test easily.",
     )
 
+    # Encryption wallet
+    parser.add_argument(
+        "--encryption.wallet_name",
+        type=str,
+        help="The name of the wallet to use for encryption.",
+        default="core_storage_coldkey",
+    )
+    parser.add_argument(
+        "--encryption.wallet_hotkey",
+        type=str,
+        help="The hotkey name of the wallet to use for encryption.",
+        default="core_storage_hotkey",
+    )
+
 
 def config(cls):
     parser = argparse.ArgumentParser()
