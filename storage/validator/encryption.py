@@ -321,7 +321,7 @@ decrypt_data = decrypt_data_and_deserialize
 decrypt_data_with_private_key = decrypt_data_and_deserialize_with_coldkey_private_key
 
 
-def test_encrypt_decrypt_small_data():
+def test_encrypt_decrypt_small_data(wallet: bt.wallet):
     """
     A test function to demonstrate the encryption and decryption of a small string using the wallet-based encryption scheme.
 
@@ -332,17 +332,17 @@ def test_encrypt_decrypt_small_data():
     data_to_encrypt = b"Your small string here"
 
     # Encrypt
-    encrypted_data = encrypt_data(data_to_encrypt, bt.wallet())
+    encrypted_data, encryption_payload = encrypt_data(data_to_encrypt, wallet)
 
     # Decrypt
-    decrypted_data = decrypt_data(encrypted_data, bt.wallet())
+    decrypted_data = decrypt_data(encrypted_data, encryption_payload, wallet)
 
     print("Original:", data_to_encrypt)
     print("Encrypted:", encrypted_data)
     print("Decrypted:", decrypted_data)
 
 
-def test_encrypt_decrypt_large_data():
+def test_encrypt_decrypt_large_data(wallet: bt.wallet):
     """
     A test function to demonstrate the encryption and decryption of a large amount of data using AES and wallet-based encryption.
 
@@ -351,14 +351,14 @@ def test_encrypt_decrypt_large_data():
     """
 
     # Encrypting large data
-    data_to_encrypt = b"Large amount of data here..."
+    data_to_encrypt = (str(["LARGE DATA"] * int(1e8))).encode()
     encrypted_data, encryption_payload = encrypt_data_with_aes_and_serialize(
-        data_to_encrypt, bt.wallet()
+        data_to_encrypt, wallet
     )
 
     # Decrypting data
     decrypted_data = decrypt_data_and_deserialize(
-        encrypted_data, encryption_payload, bt.wallet()
+        encrypted_data, encryption_payload, wallet
     )
 
     print("Original Data:", data_to_encrypt)
@@ -366,7 +366,7 @@ def test_encrypt_decrypt_large_data():
 
 
 # Timing function for large data encryption and decryption
-def time_encrypt_decrypt_large_data(exp=9):
+def time_encrypt_decrypt_large_data(wallet: bt.wallet, exp=9):
     """
     Measures and prints the time taken to encrypt and decrypt a large amount of data.
 
@@ -378,7 +378,6 @@ def time_encrypt_decrypt_large_data(exp=9):
     `decrypt_data_and_deserialize`. The time taken for each operation is printed out.
     """
 
-    wallet = bt.wallet()
     wallet.coldkey  # unlock wallet before timing
 
     # Generate large data for test
@@ -450,8 +449,8 @@ def deserialize_nacl_encrypted_message(serialized_data: str) -> EncryptedMessage
     return EncryptedMessage._from_parts(nonce, ciphertext, combined)
 
 
-def test_serialize_nacl_encrypted_message():
-    encrypted_msg = encrypt_data_with_wallet(b"Hello World!", bt.wallet())
+def test_serialize_nacl_encrypted_message(wallet: bt.wallet):
+    encrypted_msg = encrypt_data_with_wallet(b"Hello World!", wallet)
 
     # Assuming 'encrypted_msg' is an EncryptedMessage object
     serialized = serialize_nacl_encrypted_message(encrypted_msg)
@@ -467,3 +466,66 @@ def test_serialize_nacl_encrypted_message():
     assert (
         deserialized_msg.ciphertext == encrypted_msg.ciphertext
     ), "Ciphertexts do not match"
+
+
+def setup_encryption_wallet(
+    password="dummy_password",
+    wallet_name="encryption",
+    wallet_hotkey="encryption",
+    n_words=12,
+    use_encryption=False,
+    overwrite=False,
+):
+    """
+    Sets up a Bittensor wallet with coldkey and coldkeypub using a generated mnemonic.
+
+    Args:
+        wallet_name (str): Name of the wallet. Default is 'encryption_coldkey'.
+        wallet_hotkey (str): Name of the hotkey. Default is 'encryption_hotkey'.
+        n_words (int): Number of words for the mnemonic. Default is 12.
+        password (str): Password used for encryption. Default is 'your_password'.
+        use_encryption (bool): Flag to determine if encryption should be used. Default is True.
+        overwrite (bool): Flag to determine if existing keys should be overwritten. Default is False.
+
+    Returns:
+        bt.wallet: A Bittensor wallet object with coldkey and coldkeypub set.
+    """
+
+    # Init wallet
+    w = bt.wallet(wallet_name, wallet_hotkey)
+
+    # Check if wallet exists on device
+    if w.coldkey_file.exists_on_device() or w.coldkeypub_file.exists_on_device():
+        bt.logging.info(f"Wallet {w} already exists on device. Not overwriting wallet.")
+        return w
+
+    # Generate mnemonic and create keypair
+    mnemonic = bt.Keypair.generate_mnemonic(n_words)
+    keypair = bt.Keypair.create_from_mnemonic(mnemonic)
+
+    # Set coldkeypub
+    w._coldkeypub = bt.Keypair(ss58_address=keypair.ss58_address)
+    w.coldkeypub_file.set_keypair(
+        w._coldkeypub, encrypt=use_encryption, overwrite=overwrite, password=password
+    )
+
+    # Set coldkey
+    w._coldkey = keypair
+    w.coldkey_file.set_keypair(
+        w._coldkey, encrypt=use_encryption, overwrite=overwrite, password=password
+    )
+
+    # Write cold keyfile data to file with specified password
+    keyfile = w.coldkey_file
+    keyfile.make_dirs()
+    keyfile_data = bt.serialized_keypair_to_keyfile_data(keypair)
+    if use_encryption:
+        keyfile_data = bt.encrypt_keyfile_data(keyfile_data, password)
+    keyfile._write_keyfile_data_to_file(keyfile_data, overwrite=True)
+
+    # Setup hotkey (dummy, but necessary)
+    mnemonic = bt.Keypair.generate_mnemonic(n_words)
+    keypair = bt.Keypair.create_from_mnemonic(mnemonic)
+    w.set_hotkey(keypair, encrypt=False, overwrite=True)
+
+    return w

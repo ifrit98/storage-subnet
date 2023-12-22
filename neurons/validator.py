@@ -119,12 +119,13 @@ class neuron:
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
         # Setup dummy wallet for encryption purposes. No password needed.
-        self.encryption_wallet = bt.wallet(
-            name=self.config.neuron.encryption_wallet_name,
-            hotkey=self.config.neuron.encryption_hotkey,
+        self.encryption_wallet = setup_encryption_wallet(
+            wallet_name=self.config.neuron.encryption_wallet_name,
+            wallet_hotkey=self.config.neuron.encryption_hotkey,
+            password=self.config.neuron.encryption_password,
         )
         self.encryption_wallet.create_if_non_existent(coldkey_use_password=False)
-        self.encrpytion_wallet.coldkey  # Unlock the coldkey.
+        self.encryption_wallet.coldkey  # Unlock the coldkey.
 
         # Init metagraph.
         bt.logging.debug("loading metagraph")
