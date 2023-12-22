@@ -300,7 +300,7 @@ class neuron:
         # If debug mode, whitelist everything (NOT RECOMMENDED)
         if self.config.api.debug:
             return False, "Debug all whitelisted"
-        
+
         # Otherwise, reject.
         return (
             True,

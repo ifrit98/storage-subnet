@@ -43,6 +43,9 @@ from .network import monitor
 async def forward(self):
     bt.logging.info(f"forward step: {self.step}")
 
+    # Record forward time
+    start = time.time()
+
     if self.step % self.config.neuron.store_step_length == 0:
         # Store some random data
         bt.logging.info("initiating store random")
@@ -139,3 +142,6 @@ async def forward(self):
 
         # Write the data row
         writer.writerow(total_storage_time)
+
+    forward_time = time.time() - start
+    bt.logging.info(f"forward step time: {forward_time}s")

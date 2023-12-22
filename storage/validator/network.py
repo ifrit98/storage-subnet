@@ -182,7 +182,9 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping current subset of UIDs
-    query_uids = get_available_query_miners(self, k=self.config.neuron.monitor_sample_size)
+    query_uids = get_available_query_miners(
+        self, k=self.config.neuron.monitor_sample_size
+    )
     _, failed_uids = await ping_uids(self, query_uids)
 
     down_uids = []
@@ -205,7 +207,7 @@ async def monitor(self):
                 task_type="monitor",
                 database=self.database,
             )
-            rewards[i] = -0.1
+            rewards[i] = -0.05
 
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
             0, torch.tensor(down_uids).to(self.device), rewards
