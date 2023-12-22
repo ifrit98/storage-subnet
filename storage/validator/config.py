@@ -150,6 +150,12 @@ def add_args(cls, parser):
         help="Number of steps before computing and logging all stats.",
     )
     parser.add_argument(
+        "--neuron.monitor_step_length",
+        type=int,
+        default=5,
+        help="Number of steps before calling monitor for down uids.",
+    )
+    parser.add_argument(
         "--neuron.max_failed_pings",
         type=int,
         default=10,

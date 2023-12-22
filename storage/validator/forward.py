@@ -71,16 +71,17 @@ async def forward(self):
         bt.logging.info("initiating distribute")
         await distribute_data(self, self.config.neuron.store_redundancy)
 
-    # Monitor every step
-    down_uids = await monitor(self)
-    bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
-    if len(down_uids) > 0:
-        await rebalance_data(
-            self,
-            k=2,  # increase redundancy
-            dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
-            hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
-        )
+    # Monitor every 5 steps
+    if self.step % self.config.neuron.monitor_step_length == 0:
+        down_uids = await monitor(self)
+        bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
+        if len(down_uids) > 0:
+            await rebalance_data(
+                self,
+                k=2,  # increase redundancy
+                dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
+                hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
+            )
 
     if self.step % self.config.neuron.compute_stats_interval == 0:
         await compute_all_tiers(self.database)
