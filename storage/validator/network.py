@@ -182,7 +182,8 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping all UIDs
-    _, failed_uids = await ping_uids(self, self.metagraph.uids.tolist())
+    query_uids = get_available_uids(self)
+    _, failed_uids = await ping_uids(self, query_uids)
 
     down_uids = []
     for uid in failed_uids:
