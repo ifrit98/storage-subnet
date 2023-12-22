@@ -273,7 +273,7 @@ class StoreData:
         store_parser.add_argument(
             "--stake_limit",
             type=float,
-            default=1000,
+            default=500,
             help="Stake limit to exclude validator axons to query.",
         )
         store_parser.add_argument(
