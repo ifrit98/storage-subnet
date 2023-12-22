@@ -321,92 +321,6 @@ decrypt_data = decrypt_data_and_deserialize
 decrypt_data_with_private_key = decrypt_data_and_deserialize_with_coldkey_private_key
 
 
-def test_encrypt_decrypt_small_data(wallet: bt.wallet):
-    """
-    A test function to demonstrate the encryption and decryption of a small string using the wallet-based encryption scheme.
-
-    This function is intended for testing and demonstration purposes. It shows how to encrypt and decrypt a small string
-    of data using the `encrypt_data_with_wallet` and `decrypt_data_with_wallet` functions.
-    """
-
-    data_to_encrypt = b"Your small string here"
-
-    # Encrypt
-    encrypted_data, encryption_payload = encrypt_data(data_to_encrypt, wallet)
-
-    # Decrypt
-    decrypted_data = decrypt_data(encrypted_data, encryption_payload, wallet)
-
-    print("Original:", data_to_encrypt)
-    print("Encrypted:", encrypted_data)
-    print("Decrypted:", decrypted_data)
-
-
-def test_encrypt_decrypt_large_data(wallet: bt.wallet):
-    """
-    A test function to demonstrate the encryption and decryption of a large amount of data using AES and wallet-based encryption.
-
-    This function is intended for testing and demonstration purposes. It shows how to encrypt and decrypt large data
-    using the `encrypt_data_with_aes_and_serialize` and `decrypt_data_and_deserialize` functions.
-    """
-
-    # Encrypting large data
-    data_to_encrypt = (str(["LARGE DATA"] * int(1e8))).encode()
-    encrypted_data, encryption_payload = encrypt_data_with_aes_and_serialize(
-        data_to_encrypt, wallet
-    )
-
-    # Decrypting data
-    decrypted_data = decrypt_data_and_deserialize(
-        encrypted_data, encryption_payload, wallet
-    )
-
-    print("Original Data:", data_to_encrypt)
-    print("Decrypted Data:", decrypted_data)
-
-
-# Timing function for large data encryption and decryption
-def time_encrypt_decrypt_large_data(wallet: bt.wallet, exp=9):
-    """
-    Measures and prints the time taken to encrypt and decrypt a large amount of data.
-
-    Args:
-        exp (int, optional): Exponent to determine the size of the data. Defaults to 9 (1GB).
-
-    This function is used for performance testing. It generates a large amount of random data,
-    encrypts it using `encrypt_data_with_aes_and_serialize`, and then decrypts it using
-    `decrypt_data_and_deserialize`. The time taken for each operation is printed out.
-    """
-
-    wallet.coldkey  # unlock wallet before timing
-
-    # Generate large data for test
-    data_to_encrypt = os.urandom(10**exp)  # 10**9 => 1000MB of random data
-
-    # Start timing encryption
-    start_time = time.time()
-    encrypted_data, encryption_payload = encrypt_data_with_aes_and_serialize(
-        data_to_encrypt, wallet
-    )
-    encryption_time = time.time() - start_time
-
-    # Start timing decryption
-    start_time = time.time()
-    decrypted_data = decrypt_data_and_deserialize(
-        encrypted_data, encryption_payload, wallet
-    )
-    decryption_time = time.time() - start_time
-
-    # Output timings
-    print(f"Encryption Time: {encryption_time} seconds")
-    print(f"Decryption Time: {decryption_time} seconds")
-
-    # Optional: Verify if the decrypted data matches the original
-    assert (
-        decrypted_data == data_to_encrypt
-    ), "Decrypted data does not match the original"
-
-
 def serialize_nacl_encrypted_message(encrypted_message: EncryptedMessage) -> str:
     """
     Serializes an EncryptedMessage object to a JSON string.
@@ -447,25 +361,6 @@ def deserialize_nacl_encrypted_message(serialized_data: str) -> EncryptedMessage
     ciphertext = HexEncoder.decode(data["ciphertext"].encode("utf-8"))
     combined = nonce + ciphertext
     return EncryptedMessage._from_parts(nonce, ciphertext, combined)
-
-
-def test_serialize_nacl_encrypted_message(wallet: bt.wallet):
-    encrypted_msg = encrypt_data_with_wallet(b"Hello World!", wallet)
-
-    # Assuming 'encrypted_msg' is an EncryptedMessage object
-    serialized = serialize_nacl_encrypted_message(encrypted_msg)
-    print("Serialized data:", serialized)
-
-    # Deserializing back to an EncryptedMessage object
-    deserialized_msg = deserialize_nacl_encrypted_message(serialized)
-    print("Deserialized message nonce:", deserialized_msg.nonce)
-    print("Deserialized message ciphertext:", deserialized_msg.ciphertext)
-
-    # Assertions to verify equivalence
-    assert deserialized_msg.nonce == encrypted_msg.nonce, "Nonces do not match"
-    assert (
-        deserialized_msg.ciphertext == encrypted_msg.ciphertext
-    ), "Ciphertexts do not match"
 
 
 def setup_encryption_wallet(
