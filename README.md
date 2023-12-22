@@ -49,7 +49,7 @@ Currently supporting `python>=3.8,<3.11`.
    - [Running a Validator](#running-a-validator)
    - [Running the API](#running-the-api)
    - [(Optional) Setup WandB](#setup-wandb)
-
+1. [Local Subtensor](#local-subtensor)
 
 # Storage CLI Interface
 
@@ -658,3 +658,52 @@ Following these steps, you should be able to successfully log into WANDB and set
 No GPU is currently required to run either a validator or miner. This may change in the future for accelerating the proof and/or verification system.
 
 See [`min_compute.yml`](min_compute.yml) for complete details on minimum and recommended requirements.
+
+
+### Local Subtensor
+
+Availability is *critical* in storage in general and SN21, specifically. The reward mechanism punishes failed challenges and retrievals, even if the reason for that failure is unavailability, not only explicitly incorrect proofs or intentionally malicious behavior. It is possible to experience intermittent connectivity with the free provided endpoints for subtensor connections.
+
+It is *highly* recommended that all miners and validators run their own local subtensor node. This will resolve the many issues commonly found with intermittent connectivity across all subents.
+
+#### Quick Installation
+Provided are two scripts to build subtensor, and then to run it inside a pm2 process as a convenience. If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
+```
+# Installs dependencies and builds the subtensor binary
+./scripts/build_subtensor_linux.sh
+
+# Runs local subtensor in a pm2 process (NOTE: this can take several hours to sync chain history)
+# Make sure the directory is configured properly to run from the built subtensor binary
+# This lives in `./subtensor/target/release/node-subtensor`, so if your subtensor repo lives in
+# ~/storage-subnet/subtensor (by default) then you would need to cd in, e.g.:
+# cd ~/storage-subnet/subtensor
+
+# Run the script to start subtensor
+./scripts/start_local_subtensor.sh
+```
+
+You should see output like this in your pm2 logs for the process at startup:
+
+```
+pm2 logs subtensor
+
+1|subtenso | 2023-12-22 14:21:30 🔨 Initializing Genesis block/state (state: 0x4015…9643, header-hash: 0x2f05…6c03)    
+1|subtenso | 2023-12-22 14:21:30 👴 Loading GRANDPA authority set from genesis on what appears to be first startup.    
+1|subtenso | 2023-12-22 14:21:30 🏷  Local node identity is: 12D3KooWAXnooHcMSnMpML6ooVLzFwsmt5umFhCkmkxH88LvP5gm    
+1|subtenso | 2023-12-22 14:21:30 💻 Operating system: linux    
+1|subtenso | 2023-12-22 14:21:30 💻 CPU architecture: aarch64    
+1|subtenso | 2023-12-22 14:21:30 💻 Target environment: gnu    
+1|subtenso | 2023-12-22 14:21:30 💻 Memory: 62890MB    
+1|subtenso | 2023-12-22 14:21:30 💻 Kernel: 5.15.0-1051-aws    
+1|subtenso | 2023-12-22 14:21:30 💻 Linux distribution: Ubuntu 20.04.6 LTS    
+1|subtenso | 2023-12-22 14:21:30 💻 Virtual machine: no    
+1|subtenso | 2023-12-22 14:21:30 📦 Highest known block at #0    
+1|subtenso | 2023-12-22 14:21:30 〽️ Prometheus exporter started at 127.0.0.1:9615    
+1|subtenso | 2023-12-22 14:21:30 Running JSON-RPC HTTP server: addr=0.0.0.0:9933, allowed origins=["*"]    
+1|subtenso | 2023-12-22 14:21:30 Running JSON-RPC WS server: addr=0.0.0.0:9944, allowed origins=["*"]    
+1|subtenso | 2023-12-22 14:21:31 🔍 Discovered new external address for our node: /ip4/52.56.34.197/tcp/30333/ws/p2p/12D3KooWAXnooHcMSnMpML6ooVLzFwsmt5umFhCkmkxH88LvP5gm    
+
+1|subtensor  | 2023-12-22 14:21:35 ⏩ Warping, Downloading state, 2.74 Mib (56 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 498.3kiB/s ⬆ 41.3kiB/s    
+1|subtensor  | 2023-12-22 14:21:40 ⏩ Warping, Downloading state, 11.25 Mib (110 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 1.1MiB/s ⬆ 37.0kiB/s    
+1|subtensor  | 2023-12-22 14:21:45 ⏩ Warping, Downloading state, 20.22 Mib (163 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 1.2MiB/s ⬆ 48.7kiB/s 
+```
