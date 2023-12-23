@@ -178,11 +178,12 @@ def current_block_hash(self):
     Returns:
         str: The current block hash.
     """
-    current_block = self.current_block
-    if current_block == None:
-        current_block = self.subtensor.get_current_block()
-    bt.logging.trace(f"current block in current_block_hash: {current_block}")
-    return self.subtensor.get_block_hash(current_block)
+    #current_block = self.current_block
+    #if current_block == None:
+    #    current_block = self.subtensor.get_current_block()
+    #bt.logging.trace(f"current block in current_block_hash: {current_block}")
+    #return self.subtensor.get_block_hash(current_block)
+    return self.subtensor.get_block_hash()
 
 
 def get_block_seed(self):
