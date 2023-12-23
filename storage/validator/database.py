@@ -791,7 +791,7 @@ async def get_all_hashes_in_database(database: aioredis.Redis) -> List[str]:
     all_hashes = set()
 
     async for hotkey_key in database.scan_iter(match="hotkey:*"):
-        all_hashes.update(list(await database.hgetall(hotkey_hey)))
+        all_hashes.update(list(await database.hgetall(hotkey_key)))
 
     return list(all_hashes)
 

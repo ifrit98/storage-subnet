@@ -51,6 +51,8 @@ from storage.validator.database import purge_challenges_for_all_hotkeys
 from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
 
+def MockDendrite():
+    pass
 
 class neuron:
     """

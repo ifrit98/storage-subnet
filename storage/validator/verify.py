@@ -115,8 +115,8 @@ def verify_challenge_with_seed(synapse, verbose=False):
         if verbose:
             bt.logging.error(f"Merkle proof validation failed!")
             bt.logging.error(f"commitment  : {synapse.commitment[:100]}")
-            bt.logging.error(f"merkle root : {merkle_root}")
-            bt.logging.error(f"merkle proof: {pformat(merkle_proof)[-1]}")
+            bt.logging.error(f"merkle root : {synapse.merkle_root}")
+            bt.logging.error(f"merkle proof: {pformat(synapse.merkle_proof)[-1]}")
             bt.logging.error(f"synapse     : {pformat(synapse.dendrite.dict())}")
         return False
 
@@ -149,7 +149,7 @@ def verify_store_with_seed(synapse, verbose=False):
     if synapse.commitment_hash != str(reconstructed_hash):
         if verbose:
             bt.logging.error(f"Initial commitment hash != hash(data + seed)")
-            bt.logging.error(f"commitment hash   : {commitment_hash}")
+            bt.logging.error(f"commitment hash   : {synapse.commitment_hash}")
             bt.logging.error(f"reconstructed hash: {reconstructed_hash}")
             bt.logging.error(f"synapse           : {synapse.dendrite.dict()}")
         return False

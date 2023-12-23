@@ -29,6 +29,7 @@ import aioredis
 import traceback
 import websocket
 import bittensor as bt
+import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
@@ -43,6 +44,17 @@ from storage.validator.network import (
     compute_and_ping_chunks,
     ping_uids,
 )
+
+from storage.validator.database import (
+    retrieve_encryption_payload
+)
+
+from storage.validator.encryption import (
+    decrypt_data_with_private_key
+)
+
+def MockDendrite():
+    pass
 
 
 class neuron:
@@ -184,7 +196,7 @@ class neuron:
         self.is_running: bool = False
         self.thread: threading.Thread = None
         self.lock = asyncio.Lock()
-        self.request_timestamps: Dict = {}
+        self.request_timestamps: typing.Dict = {}
 
         self.step = 0
 
@@ -343,17 +355,17 @@ class neuron:
             f"validator_encryption_payload: {validator_encryption_payload}"
         )
         decrypted_data = decrypt_data_with_private_key(
-            data,
+            validator_encrypted_data,
             bytes(json.dumps(validator_encryption_payload), "utf-8"),
             bytes(self.wallet.coldkey.private_key.hex(), "utf-8"),
         )
         bt.logging.debug(f"decrypted_data: {decrypted_data[:100]}")
 
-        bt.logging.debug(f"returning user data: {encrypted_data[:100]}")
-        bt.logging.debug(f"returning user payload: {encryption_payload}")
-        synapse.encrypted_data = base64.b64encode(encrypted_data)
+        bt.logging.debug(f"returning user data: {decrypted_data[:100]}")
+        bt.logging.debug(f"returning user payload: {user_encryption_payload}")
+        synapse.encrypted_data = base64.b64encode(user_encryption_payload)
         synapse.encryption_payload = (
-            json.dumps(payload) if isinstance(payload, dict) else payload
+            json.dumps(user_encryption_payload) if isinstance(user_encryption_payload, dict) else user_encryption_payload
         )
         return synapse
 

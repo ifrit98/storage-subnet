@@ -260,7 +260,7 @@ from .verify import (
 from .database import add_metadata_to_hotkey
 from .bonding import update_statistics, get_tier_factor
 from .event import EventSchema
-from storage.protocol import Store, Retrieve
+from storage.protocol import Store, Retrieve, Challenge
 
 import sys
 from pprint import pformat
