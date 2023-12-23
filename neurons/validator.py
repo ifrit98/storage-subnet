@@ -52,6 +52,8 @@ from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
 from storage.validator.encryption import setup_encryption_wallet
 
+def MockDendrite():
+    pass
 
 class neuron:
     """
