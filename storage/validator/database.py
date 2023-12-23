@@ -278,7 +278,6 @@ async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
         if metadata:
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
-    bt.logging.trace(f"total_hotkey_storage {total_storage} | hotkey {hotkey}")
     return total_storage
 
 

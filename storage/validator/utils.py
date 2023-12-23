@@ -37,8 +37,8 @@ from ..validator.database import hotkey_at_capacity
 import bittensor as bt
 
 
-MIN_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
-MAX_CHUNK_SIZE = 256 * 1024 * 1024  # 256 MB
+MIN_CHUNK_SIZE = 64 * 1024 * 1024  # 128 MB
+MAX_CHUNK_SIZE = 512 * 1024 * 1024  # 512 MB
 
 
 def chunk_data_generator(data, chunk_size):
@@ -107,8 +107,8 @@ def make_random_file(name: str = None, maxsize: int = None) -> Union[bytes, str]
         return data  # Return the data itself
 
 
-# Determine a random chunksize between 24kb-512kb (random sample from this range) store as chunksize_E
-def get_random_chunksize(minsize: int = 24, maxsize: int = 512) -> int:
+# Determine a random chunksize between 512kb (random sample from this range) store as chunksize_E
+def get_random_chunksize(minsize: int = 128, maxsize: int = 1024) -> int:
     """
     Determines a random chunk size within a specified range for data chunking.
 
