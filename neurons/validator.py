@@ -197,6 +197,8 @@ class neuron:
         self, obj, update_nr, subscription_id
     ):
         bt.logging.debug(f"New block #{obj['header']['number']}")
+        self.current_block = obj['header']['number']
+        
         bt.logging.debug(obj)
 
         block_no = obj["header"]["number"]
