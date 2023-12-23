@@ -219,7 +219,7 @@ def add_args(cls, parser):
         "--neuron.challenge_timeout",
         type=float,
         help="Challenge data query timeout.",
-        default=20,
+        default=30,
     )
     parser.add_argument(
         "--neuron.retrieve_timeout",
