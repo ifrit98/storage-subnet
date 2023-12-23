@@ -255,7 +255,11 @@ async def store_random_data(self):
     encrypted_data, encryption_payload = encrypt_data(data, self.encryption_wallet)
 
     return await store_encrypted_data(
-        self, encrypted_data, encryption_payload, ttl=self.config.neuron.data_ttl
+        self,
+        encrypted_data,
+        encryption_payload,
+        k=self.config.neuron.store_sample_size,
+        ttl=self.config.neuron.data_ttl,
     )
 
 

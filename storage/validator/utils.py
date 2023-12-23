@@ -57,7 +57,7 @@ def chunk_data_generator(data, chunk_size):
 
 
 def generate_file_size_with_lognormal(
-    mu: float = np.log(20 * 1024**2), sigma: float = 1.5
+    mu: float = np.log(5 * 1024**2), sigma: float = 1.5
 ) -> float:
     """
     Generate a single file size using a lognormal distribution.
@@ -167,7 +167,6 @@ def ttl_cache(maxsize=128, ttl=10):
     return wrapper_cache
 
 
-#@ttl_cache(ttl=12)  # Cache TTL of 30 seconds
 def current_block_hash(self):
     """
     Get the current block hash with caching.
@@ -178,11 +177,6 @@ def current_block_hash(self):
     Returns:
         str: The current block hash.
     """
-    #current_block = self.current_block
-    #if current_block == None:
-    #    current_block = self.subtensor.get_current_block()
-    #bt.logging.trace(f"current block in current_block_hash: {current_block}")
-    #return self.subtensor.get_block_hash(current_block)
     return self.subtensor.get_block_hash(self.subtensor.get_current_block())
 
 
