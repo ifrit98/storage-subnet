@@ -228,6 +228,10 @@ async def challenge_data(self):
     # Calculate the total step length for all challenges
     event.step_length = time.time() - start_time
 
+    if len(responses) == 0:
+        bt.logging.debug(f"Received zero hashes from miners, returning event early.")
+        return event
+
     # Remove UIDs without hashes (don't punish new miners that have no challenges yet)
     uids, responses = zip(
         *[
