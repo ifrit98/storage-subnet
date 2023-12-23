@@ -64,6 +64,7 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     keys = await self.database.hkeys(f"hotkey:{hotkey}")
     bt.logging.trace(f"{len(keys)} hashes pulled for hotkey {hotkey}")
     if keys == []:
+        bt.logging.trace(f"Returning dummy synapse for {hotkey} and keys {keys}")
         # Create a dummy response to send back
         dummy_response = protocol.Challenge(
             challenge_hash="",
@@ -79,9 +80,8 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     data_hash = random.choice(keys).decode("utf-8")
     data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
 
-    if self.config.neuron.verbose:
-        bt.logging.trace(f"Challenge lookup key: {data_hash}")
-        bt.logging.trace(f"Challenge data: {data}")
+    bt.logging.trace(f"Challenge lookup key: {data_hash}")
+    bt.logging.trace(f"Challenge data: {data}")
 
     try:
         chunk_size = (
@@ -104,10 +104,10 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     num_chunks = (
         data["size"] // chunk_size if data["size"] > chunk_size else data["size"]
     )
-    if self.config.neuron.verbose:
-        bt.logging.trace(f"challenge data size : {data['size']}")
-        bt.logging.trace(f"challenge chunk size: {chunk_size}")
-        bt.logging.trace(f"challenge num chunks: {num_chunks}")
+    # if self.config.neuron.verbose:
+    bt.logging.trace(f"challenge data size : {data['size']}")
+    bt.logging.trace(f"challenge chunk size: {chunk_size}")
+    bt.logging.trace(f"challenge num chunks: {num_chunks}")
 
     # Setup new Common-Reference-String for this challenge
     g, h = setup_CRS()
@@ -179,13 +179,12 @@ async def challenge_data(self):
         tasks.append(asyncio.create_task(handle_challenge(self, uid)))
     responses = await asyncio.gather(*tasks)
 
-    if self.config.neuron.verbose and self.config.neuron.log_responses:
-        [
-            bt.logging.trace(
-                f"Challenge response {uid} | {pformat(response[0].axon.dict())}"
-            )
-            for uid, response in zip(uids, responses)
-        ]
+    [
+        bt.logging.trace(
+            f"Challenge response {uid} | {pformat(response[1][0].dendrite.dict())}"
+        )
+        for uid, response in zip(uids, responses)
+    ]
 
     # Compute the rewards for the responses given the prompt.
     rewards: torch.FloatTensor = torch.zeros(len(responses), dtype=torch.float32).to(
