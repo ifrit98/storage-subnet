@@ -26,15 +26,7 @@ from pprint import pformat
 from Crypto.Random import get_random_bytes, random
 
 from storage import protocol
-from storage.validator.verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-from storage.validator.database import (
-    update_metadata_for_data_hash,
-    get_ordered_metadata,
-)
+from storage.validator.database import get_ordered_metadata
 
 from .store import store_broadband
 from .retrieve import retrieve_broadband

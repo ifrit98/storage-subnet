@@ -50,12 +50,7 @@ from storage.shared.merkle import (
     MerkleTree,
 )
 
-from storage.shared.utils import (
-    b64_encode,
-    b64_decode,
-    chunk_data,
-    safe_key_search
-)
+from storage.shared.utils import b64_encode, b64_decode, chunk_data, safe_key_search
 
 from storage.miner import (
     run,
@@ -84,6 +79,7 @@ from storage.miner.database import (
     get_all_filepaths,
     get_total_storage_used,
 )
+
 
 class miner:
     @classmethod

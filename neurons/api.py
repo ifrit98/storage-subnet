@@ -45,13 +45,10 @@ from storage.validator.network import (
     ping_uids,
 )
 
-from storage.validator.database import (
-    retrieve_encryption_payload
-)
+from storage.validator.database import retrieve_encryption_payload
 
-from storage.validator.encryption import (
-    decrypt_data_with_private_key
-)
+from storage.validator.encryption import decrypt_data_with_private_key
+
 
 def MockDendrite():
     pass
@@ -374,7 +371,9 @@ class neuron:
         bt.logging.debug(f"returning user payload: {user_encryption_payload}")
         synapse.encrypted_data = base64.b64encode(user_encryption_payload)
         synapse.encryption_payload = (
-            json.dumps(user_encryption_payload) if isinstance(user_encryption_payload, dict) else user_encryption_payload
+            json.dumps(user_encryption_payload)
+            if isinstance(user_encryption_payload, dict)
+            else user_encryption_payload
         )
         return synapse
 

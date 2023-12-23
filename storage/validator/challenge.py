@@ -130,7 +130,7 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
         deserialize=True,
         timeout=self.config.neuron.challenge_timeout,
     )
-    verified = verify_challenge_with_seed(response[0])
+    verified = verify_challenge_with_seed(response[0], synapse.seed)
 
     if verified:
         data["prev_seed"] = synapse.seed

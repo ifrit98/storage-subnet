@@ -96,7 +96,7 @@ async def handle_retrieve(self, uid):
     except Exception as e:
         bt.logging.error(f"Failed to retrieve data from UID: {uid} with error: {e}")
 
-    return response[0], data_hash
+    return response[0], data_hash, synapse.seed
 
 
 async def retrieve_data(
@@ -163,7 +163,9 @@ async def retrieve_data(
     ).to(self.device)
 
     decoded_data = b""
-    for idx, (uid, (response, data_hash)) in enumerate(zip(uids, response_tuples)):
+    for idx, (uid, (response, data_hash, seed)) in enumerate(
+        zip(uids, response_tuples)
+    ):
         hotkey = self.metagraph.hotkeys[uid]
 
         if response == None:
@@ -202,7 +204,7 @@ async def retrieve_data(
             )
             continue
 
-        success = verify_retrieve_with_seed(response)
+        success = verify_retrieve_with_seed(response, seed)
         if not success:
             bt.logging.error(
                 f"data verification failed! {pformat(response.axon.dict())}"
@@ -343,7 +345,7 @@ async def retrieve_broadband(self, full_hash: str):
             event.best_uid = event.uids[best_index]
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
-        return responses
+        return responses, synapse.seed
 
     # Get the chunks you need to reconstruct IN order
     ordered_metadata = await get_ordered_metadata(full_hash, self.database)
@@ -377,12 +379,12 @@ async def retrieve_broadband(self, full_hash: str):
 
         chunks = {}
         # TODO: make these asyncio tasks and use .to_thread() to avoid blocking
-        for i, response_group in enumerate(responses):
+        for i, (response_group, seed) in enumerate(responses):
             for response in response_group:
                 if response.dendrite.status_code != 200:
                     bt.logging.debug(f"failed response: {response.dendrite.dict()}")
                     continue
-                verified = verify_retrieve_with_seed(response)
+                verified = verify_retrieve_with_seed(response, seed)
                 if verified:
                     # Add to final chunks dict
                     if i not in list(chunks.keys()):
