@@ -212,10 +212,13 @@ def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
     # Normalize the response times
     normalized_times = min_max_normalize(process_times)
 
-    # Scale the rewards with normalized times
-    for i in range(len(rewards)):
-        rewards[i] += rewards[i] * normalized_times[i]
+    # Create a dictionary mapping UIDs to normalized times
+    uid_to_normalized_time = {uid: normalized_time for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)}
 
+    # Scale the rewards with normalized times
+    for i, uid in enumerate(uids):
+        normalized_time_for_uid = uid_to_normalized_time[uid]
+        rewards[i] += rewards[i] * normalized_time_for_uid
     return rewards
 
 
