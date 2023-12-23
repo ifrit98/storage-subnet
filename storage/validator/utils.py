@@ -183,7 +183,7 @@ def current_block_hash(self):
     #    current_block = self.subtensor.get_current_block()
     #bt.logging.trace(f"current block in current_block_hash: {current_block}")
     #return self.subtensor.get_block_hash(current_block)
-    return self.subtensor.get_block_hash()
+    return self.subtensor.get_block_hash(self.subtensor.get_current_block())
 
 
 def get_block_seed(self):
