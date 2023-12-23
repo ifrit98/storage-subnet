@@ -376,7 +376,7 @@ def add_args(cls, parser):
         "--api.ping_timeout",
         type=int,
         help="Ping data query timeout.",
-        default=2,
+        default=5,
     )
     parser.add_argument(
         "--api.whitelisted_hotkeys",
