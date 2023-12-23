@@ -147,6 +147,13 @@ async def challenge_data(self):
     Asynchronously challenge and see who returns the data fastest (passes verification), and rank them highest
     """
 
+    def remove_indices_from_tensor(tensor, indices_to_remove):
+        # Sort indices in descending order to avoid index out of range error
+        sorted_indices = sorted(indices_to_remove, reverse=True)
+        for index in sorted_indices:
+            tensor = torch.cat([tensor[:index], tensor[index + 1 :]])
+        return tensor
+
     event = EventSchema(
         task_name="Challenge",
         successful=[],
@@ -185,6 +192,7 @@ async def challenge_data(self):
         self.device
     )
 
+    remove_reward_idxs = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
         if self.config.neuron.verbose:
             bt.logging.trace(
@@ -194,6 +202,7 @@ async def challenge_data(self):
         hotkey = self.metagraph.hotkeys[uid]
 
         if verified == None:
+            remove_reward_idxs.append(idx)
             continue  # We don't have any data for this hotkey, skip it.
 
         # Update the challenge statistics
@@ -206,7 +215,7 @@ async def challenge_data(self):
 
         # Apply reward for this challenge
         tier_factor = await get_tier_factor(hotkey, self.database)
-        rewards[idx] = 1.0 * tier_factor if verified else -0.1 * tier_factor
+        rewards[idx] = 1.0 * tier_factor if verified else -0.02 * tier_factor
 
         # Log the event data for this specific challenge
         event.uids.append(uid)
@@ -219,7 +228,16 @@ async def challenge_data(self):
     # Calculate the total step length for all challenges
     event.step_length = time.time() - start_time
 
-    responses = [response[0] for (verified, response) in responses]
+    # Remove UIDs without hashes (don't punish new miners that have no challenges yet)
+    uids, responses = zip(
+        *[
+            (uid, response[0])
+            for (uid, (verified, response)) in zip(uids, responses)
+            if verified != None
+        ]
+    )
+    rewards = remove_indices_from_tensor(rewards, remove_reward_idxs)
+
     bt.logging.trace("Applying challenge rewards")
     apply_reward_scores(
         self,
