@@ -229,7 +229,6 @@ async def challenge_data(self):
     event.step_length = time.time() - start_time
 
     # Remove UIDs without hashes (don't punish new miners that have no challenges yet)
-    bt.logging.trace(f"uids: {uids}\nresponses: {responses}")
     uids, responses = zip(
         *[
             (uid, response[0])
