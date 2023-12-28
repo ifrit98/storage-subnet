@@ -515,6 +515,32 @@ pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/mi
 These options allow you to configure the miner's behavior, database connections, blacklist/whitelist settings, priority handling, and integration with monitoring tools like WandB. Adjust these settings based on your mining setup and requirements.
 
 
+#### Data migration
+If for whatever reason you need to migrate the data in your hard drive configured with `--database.directory` to a new directory than is reflected in the Redis index, then you can do it by simply running the script in `scripts/migrate_miner_data.py`. 
+
+```bash
+python scripts/migrate_miner_data.py --help
+
+usage: migrate_miner_data.py [-h] [--database_index DATABASE_INDEX] --new_data_directory NEW_DATA_DIRECTORY
+
+options:
+  -h, --help            show this help message and exit
+  --database_index DATABASE_INDEX
+  --new_data_directory NEW_DATA_DIRECTORY
+```
+
+Example usage:
+```bash
+python scripts/migrate_miner_data.py --database_index 0 --new_data_directory ~/.new_data_path 
+
+2023-12-28 21:16:25.940 |       INFO       | Attempting miner data migration to /home/user/.new_data_path
+2023-12-28 21:16:25.940 |       INFO       | Connecting to Redis at db=0...
+2023-12-28 21:16:25.943 |     SUCCESS      | All data was migrated to the new directory.
+```
+
+If you run into issues and see warnings regarding failed filepaths, then check to ensure the data exists in the new provided directory. It is not automigrated for you, this is merely to update the index in redis.
+
+
 ### Running a validator
 ```bash
 python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
