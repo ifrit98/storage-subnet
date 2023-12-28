@@ -37,7 +37,7 @@ class TestStoreCommand(TestCase):
 
         encrypted_1_1 = box_1.encrypt(raw_data)
         decrypted_1_1 = box_1.decrypt(encrypted_1_1)
-        self.assertEquals(raw_data, decrypted_1_1)
+        self.assertEqual(raw_data, decrypted_1_1)
 
         """
         #

@@ -22,6 +22,11 @@ import traceback
 from .set_weights import set_weights
 
 
+def should_wait_until_next_epoch(current_block, last_epoch_block, epoch_lenght):
+    diff_blocks = current_block - last_epoch_block
+    return diff_blocks < epoch_lenght
+
+
 def run(self):
     """
     Initiates and manages the main loop for the miner on the Bittensor network.
@@ -72,9 +77,10 @@ def run(self):
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
 
-            while (
-                self.current_block - self.last_epoch_block
-                < self.config.miner.set_weights_epoch_length
+            while should_wait_until_next_epoch(
+                self.current_block,
+                self.last_epoch_block, 
+                self.config.miner.set_weights_epoch_length
             ):
                 # --- Wait for next bloc.
                 time.sleep(1)
