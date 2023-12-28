@@ -518,9 +518,12 @@ These options allow you to configure the miner's behavior, database connections,
 #### Data migration
 If for whatever reason you need to migrate the data in your hard drive configured with `--database.directory` to a new directory than is reflected in the Redis index, then you can do it by simply running the script in `scripts/migrate_database_directory.sh`. 
 
+When should you run the migration script?:
+- if you want to specify a different --database.directory
+- if your data has moved but your redis index has not reflected this change
 
 ```bash
-python scripts/migrate_database_directory.sh <OLD_PATH> <NEW_PATH> <DATABASE_INDEX>
+bash scripts/migrate_database_directory.sh <OLD_PATH> <NEW_PATH> <DATABASE_INDEX>
 ```
 
 
