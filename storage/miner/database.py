@@ -19,6 +19,7 @@
 import json
 import redis
 import aioredis
+import bittensor as bt
 
 
 async def store_chunk_metadata(r, chunk_hash, filepath, size, seed):
@@ -136,3 +137,26 @@ async def get_total_storage_used(r):
         if size:
             total_size += int(size)
     return total_size
+
+
+async def migrate_data_directory(r, new_base_directory, return_failures=False):
+    failed_filepaths = []
+
+    async for key in r.scan_iter("*"):
+        filepath = await r.hget(key, b"filepath")
+
+        if filepath:
+            filepath = filepath.decode("utf-8")
+            data_hash = key.decode("utf-8")
+            new_filepath = os.path.join(new_base_directory, data_hash)
+
+            if not os.path.exists(new_filepath):
+                bt.logging.debug(
+                    f"Data does not exist in new path {new_filepath}. Skipping..."
+                )
+                failed_filepaths.append(new_filepath)
+                continue
+
+            await r.hset(key, "filepath", new_filepath)
+
+    return failed_filepaths if return_failures else None
