@@ -516,29 +516,26 @@ These options allow you to configure the miner's behavior, database connections,
 
 
 #### Data migration
-If for whatever reason you need to migrate the data in your hard drive configured with `--database.directory` to a new directory than is reflected in the Redis index, then you can do it by simply running the script in `scripts/migrate_miner_data.py`. 
+If for whatever reason you need to migrate the data in your hard drive configured with `--database.directory` to a new directory than is reflected in the Redis index, then you can do it by simply running the script in `scripts/migrate_database_directory.sh`. 
+
 
 ```bash
-python scripts/migrate_miner_data.py --help
-
-usage: migrate_miner_data.py [-h] [--database_index DATABASE_INDEX] --new_data_directory NEW_DATA_DIRECTORY
-
-options:
-  -h, --help            show this help message and exit
-  --database_index DATABASE_INDEX
-  --new_data_directory NEW_DATA_DIRECTORY
+python scripts/migrate_database_directory.sh <OLD_PATH> <NEW_PATH> <DATABASE_INDEX>
 ```
 
-Example usage:
+
+Example usage from the top-level directory `storage-subnet`:
+
 ```bash
-python scripts/migrate_miner_data.py --database_index 0 --new_data_directory ~/.new_data_path 
+bash scripts/migrate_database_directory.sh ~/.data ~/.new_data_path 0 
+
+
+Migrating database from ~/.data to ~/.new_data_path ...
 
 2023-12-28 21:16:25.940 |       INFO       | Attempting miner data migration to /home/user/.new_data_path
 2023-12-28 21:16:25.940 |       INFO       | Connecting to Redis at db=0...
 2023-12-28 21:16:25.943 |     SUCCESS      | All data was migrated to the new directory.
 ```
-
-If you run into issues and see warnings regarding failed filepaths, then check to ensure the data exists in the new provided directory. It is not automigrated for you, this is merely to update the index in redis.
 
 
 ### Running a validator
