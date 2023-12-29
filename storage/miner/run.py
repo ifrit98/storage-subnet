@@ -87,7 +87,7 @@ def run(self):
                 self.config.miner.set_weights_epoch_length
             ):
                 # --- Wait for next bloc.
-                time.sleep(1)
+                time.sleep(2)
                 self.current_block = self.subtensor.get_current_block()
                 bt.logging.info(f"Miner running at block {self.current_block}...")
 
