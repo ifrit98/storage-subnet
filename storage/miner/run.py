@@ -67,7 +67,7 @@ def run(self):
         exit()
 
     # --- Run until should_exit = True.
-    self.last_epoch_block = self.metagraph.last_update[uid].item()
+    self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
     bt.logging.info(f"Miner starting at block: {self.last_epoch_block}")
 
     # This loop maintains the miner's operations until intentionally stopped.
@@ -128,7 +128,7 @@ def run(self):
 
             # --- Update the metagraph with the latest network state.
             if weights_were_set:
-                self.last_epoch_block = self.metagraph.last_update[uid].item()
+                self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
                 self.current_block = self.subtensor.get_current_block()
 
                 self.metagraph = self.subtensor.metagraph(
