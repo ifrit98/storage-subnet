@@ -27,7 +27,7 @@ def should_wait_until_next_epoch(
     tempo
 ):
     diff_blocks = current_block - last_epoch_block
-    return diff_blocks < tempo/2
+    return diff_blocks < tempo/2 + 1
 
 
 def run(self):
@@ -153,8 +153,8 @@ def run(self):
                 wait_factor_next_set_weights = 0
             else:
                 self.current_block = self.subtensor.get_current_block()
-                num_blocks_to_wait = 0.5
-                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
+                num_blocks_to_wait = 1
+                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} block to set weights again.")
                 time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
