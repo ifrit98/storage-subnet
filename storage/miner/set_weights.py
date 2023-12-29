@@ -26,6 +26,7 @@ def set_weights(
     netuid: int,
     uid: int,
     wallet: "bt.wallet",
+    metagraph: "bt.metagraph",
     wandb_on=False,
     wait_for_inclusion=False,
     wait_for_finalization=False,
@@ -48,6 +49,7 @@ def set_weights(
         netuid (int): The unique identifier for the chain subnet.
         uid (int): The unique identifier for the miner on the network.
         wallet (bt.wallet): The miner's wallet holding cryptographic information.
+        metagraph (bt.metagraph): Bittensor metagraph
         wandb_on (bool, optional): Flag to determine if logging to Weights & Biases is enabled. Defaults to False.
         wait_for_inclusion (bool, optional): Wether to wait for the extrinsic to enter a block
         wait_for_finalization (bool, optional): Wether to wait for the extrinsic to be finalized on the chain
@@ -66,17 +68,24 @@ def set_weights(
         chain_weights[uid] = 1
 
         # --- Set weights.
-        success = subtensor.set_weights(
-            uids=torch.arange(0, len(chain_weights)),
-            netuid=netuid,
-            weights=chain_weights,
-            wait_for_inclusion=wait_for_inclusion,
-            wait_for_finalization=wait_for_finalization,
-            wallet=wallet,
-            version_key=1,
-        )
-        if wandb_on:
-            wandb.log({"set_weights": 1})
+        last_updated = metagraph.last_update[uid].item()
+        current_block = subtensor.get_current_block()
+
+        if current_block - last_updated > 180:
+            success = subtensor.set_weights(
+                uids=torch.arange(0, len(chain_weights)),
+                netuid=netuid,
+                weights=chain_weights,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+                wallet=wallet,
+                version_key=1,
+            )
+            if wandb_on:
+                wandb.log({"set_weights": 1})
+        else:
+            bt.logging.info(f'Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}')
+            success = False
 
         return success
     except Exception as e:

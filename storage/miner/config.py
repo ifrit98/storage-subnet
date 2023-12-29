@@ -115,12 +115,6 @@ def add_args(cls, parser):
         help="Wether to wait for the extrinsic to be finalized on the chain",
         default=False,
     )
-    parser.add_argument(
-        "--miner.set_weights_at_start",
-        action="store_true",
-        help="Wether to set weights when the miner starts",
-        default=False,
-    )
 
     # Blacklist.
     parser.add_argument(

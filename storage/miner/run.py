@@ -22,9 +22,12 @@ import traceback
 from .set_weights import set_weights
 
 
-def should_wait_until_next_epoch(current_block, last_epoch_block, epoch_lenght):
+def should_wait_until_next_epoch(
+    current_block, last_epoch_block, 
+    tempo
+):
     diff_blocks = current_block - last_epoch_block
-    return diff_blocks < epoch_lenght
+    return diff_blocks < tempo/2
 
 
 def run(self):
@@ -64,17 +67,14 @@ def run(self):
         exit()
 
     # --- Run until should_exit = True.
-    if self.config.miner.set_weights_at_start:
-        self.last_epoch_block = -1
-    else:
-        self.last_epoch_block = self.subtensor.get_current_block()
-
+    self.last_epoch_block = self.metagraph.last_update[uid].item()
     bt.logging.info(f"Miner starting at block: {self.last_epoch_block}")
 
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
     wait_factor_next_set_weights = 0
+    tempo = 360
     try:
         while not self.should_exit:
             start_epoch = time.time()
@@ -88,19 +88,19 @@ def run(self):
             seconds_waiting_in_loop = 1
             seconds_to_wait_to_log_presence_message = 2
             presence_message_seconds_count = 0
+
             while should_wait_until_next_epoch(
                 self.current_block,
-                self.last_epoch_block, 
-                self.config.miner.set_weights_epoch_length
+                self.last_epoch_block,
+                tempo,
             ):
                 # --- Wait for next bloc.
                 time.sleep(seconds_waiting_in_loop)
                 presence_message_seconds_count += seconds_waiting_in_loop
+                self.current_block = self.subtensor.get_current_block()
 
                 if presence_message_seconds_count % seconds_to_wait_to_log_presence_message == 0:
-                    self.current_block = self.subtensor.get_current_block()
-
-                bt.logging.info(f"Miner running at block {self.current_block}...")
+                    bt.logging.info(f"Miner running at block {self.current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
@@ -119,6 +119,7 @@ def run(self):
                     self.config.netuid,
                     self.my_subnet_uid,
                     self.wallet,
+                    self.metagraph,
                     self.config.wandb.on,
                     wait_for_inclusion=self.config.miner.set_weights_wait_for_inclusion,
                     wait_for_finalization=self.config.miner.set_weights_wait_for_finalization,
@@ -127,9 +128,8 @@ def run(self):
 
             # --- Update the metagraph with the latest network state.
             if weights_were_set:
-                current_block = self.subtensor.get_current_block()
-                self.last_epoch_block = current_block
-                self.current_block = current_block
+                self.last_epoch_block = self.metagraph.last_update[uid].item()
+                self.current_block = self.subtensor.get_current_block()
 
                 self.metagraph = self.subtensor.metagraph(
                     netuid=self.config.netuid,
@@ -153,7 +153,7 @@ def run(self):
                 wait_factor_next_set_weights = 0
             else:
                 self.current_block = self.subtensor.get_current_block()
-                num_blocks_to_wait = 2
+                num_blocks_to_wait = 0.5
                 bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
                 time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
 

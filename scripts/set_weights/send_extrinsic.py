@@ -19,23 +19,18 @@ async def main(args):
         wallet.hotkey.ss58_address
     )
 
-    last_updated = metagraph.last_update[my_subnet_uid].item()
-    current_block = subtensor.get_current_block()
+    weights_were_set = set_weights(
+        subtensor=subtensor,
+        netuid=args.netuid,
+        uid=my_subnet_uid,
+        wallet=wallet,
+        metagraph=metagraph,
+        wandb_on=False,
+        wait_for_inclusion=False,
+        wait_for_finalization=True,
+    )
+    bt.logging.info(f'Were weights set? {weights_were_set}')
 
-    if current_block - last_updated > 180:
-        weights_were_set = set_weights(
-            subtensor=subtensor,
-            netuid=args.netuid,
-            uid=my_subnet_uid,
-            wallet=wallet,
-            wandb_on=False,
-            wait_for_inclusion=False,
-            wait_for_finalization=True,
-        )
-        bt.logging.info(f'Were weights set? {weights_were_set}')
-    else:
-        bt.logging.info(f'Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}')
-    
 
 if __name__ == "__main__":
     try:
