@@ -81,6 +81,7 @@ def run(self):
 
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
+            self.metagraph.sync(subtensor=self.subtensor)
             self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
 
             # --- To control messages without changing time.sleep within the while-loop
