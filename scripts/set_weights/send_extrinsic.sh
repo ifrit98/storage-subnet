@@ -6,4 +6,4 @@ SUBTENSOR_NETWORK=$3
 
 BASE_PATH=$(dirname "$0")
 
-python $BASE_PATH/send_extrinsic.py --wallet $WALLET_NAME --hotkey $WALLET_HOTKEY -network $SUBTENSOR_NETWORK
+python $BASE_PATH/send_extrinsic.py --wallet $WALLET_NAME --hotkey $WALLET_HOTKEY --network $SUBTENSOR_NETWORK
