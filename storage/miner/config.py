@@ -105,19 +105,19 @@ def add_args(cls, parser):
     )
     parser.add_argument(
         "--miner.set_weights_wait_for_inclusion",
-        type=bool,
+        action="store_true",
         help="Wether to wait for the extrinsic to enter a block",
         default=False,
     )
     parser.add_argument(
         "--miner.set_weights_wait_for_finalization",
-        type=bool,
+        action="store_true",
         help="Wether to wait for the extrinsic to be finalized on the chain",
         default=False,
     )
     parser.add_argument(
         "--miner.set_weights_at_start",
-        type=bool,
+        action="store_true",
         help="Wether to set weights when the miner starts",
         default=False,
     )
