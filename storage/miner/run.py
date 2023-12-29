@@ -19,15 +19,7 @@ import time
 import wandb
 import bittensor as bt
 import traceback
-from .set_weights import set_weights
-
-
-def should_wait_until_next_epoch(
-    current_block, last_epoch_block, 
-    tempo
-):
-    diff_blocks = current_block - last_epoch_block
-    return diff_blocks < tempo/2 + 1
+from .set_weights import set_weights, should_wait_to_set_weights
 
 
 def run(self):
@@ -91,7 +83,7 @@ def run(self):
             seconds_to_wait_to_log_presence_message = 2
             presence_message_seconds_count = 0
 
-            while should_wait_until_next_epoch(
+            while should_wait_to_set_weights(
                 self.current_block,
                 self.last_epoch_block,
                 tempo,
