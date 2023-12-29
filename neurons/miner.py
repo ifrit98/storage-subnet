@@ -259,7 +259,8 @@ class miner:
             f"Number of requests received in the last hour: {self.request_count}"
         )
         self.requests_per_hour.append(self.request_count)
-        self.average_reqeusts_per_hour = sum(self.requests_per_hour) / len(
+        bt.logging.info(f"Requests per hour: {self.requests_per_hour}")
+        self.average_requests_per_hour = sum(self.requests_per_hour) / len(
             self.requests_per_hour
         )
         bt.logging.info(f"Average requests per hour: {self.average_requests_per_hour}")
@@ -532,6 +533,7 @@ class miner:
             >>> updated_synapse = self.store(synapse)
         """
         bt.logging.info(f"received store request: {synapse.encrypted_data[:24]}")
+        self.request_count += 1
 
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
@@ -628,6 +630,8 @@ class miner:
         """
         # Retrieve the data itself from miner storage
         bt.logging.info(f"recieved challenge hash: {synapse.challenge_hash}")
+        self.request_count += 1
+
         data = await get_chunk_metadata(self.database, synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
@@ -738,6 +742,7 @@ class miner:
             >>> updated_synapse = self.retrieve(synapse)
         """
         bt.logging.info(f"recieved retrieve hash: {synapse.data_hash}")
+        self.request_count += 1
 
         # Fetch the data from the miner database
         data = await get_chunk_metadata(self.database, synapse.data_hash)
