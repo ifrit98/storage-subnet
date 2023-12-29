@@ -78,6 +78,7 @@ def set_weights(
         if wandb_on:
             wandb.log({"set_weights": 1})
 
+        return success
     except Exception as e:
         if wandb_on:
             wandb.log({"set_weights": 0})
