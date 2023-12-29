@@ -22,6 +22,11 @@ import traceback
 from .set_weights import set_weights
 
 
+def should_wait_until_next_epoch(current_block, last_epoch_block, epoch_lenght):
+    diff_blocks = current_block - last_epoch_block
+    return diff_blocks < epoch_lenght
+
+
 def run(self):
     """
     Initiates and manages the main loop for the miner on the Bittensor network.
@@ -59,12 +64,17 @@ def run(self):
         exit()
 
     # --- Run until should_exit = True.
-    self.last_epoch_block = self.subtensor.get_current_block()
+    if self.config.miner.set_weights_at_start:
+        self.last_epoch_block = -1
+    else:
+        self.last_epoch_block = self.subtensor.get_current_block()
+
     bt.logging.info(f"Miner starting at block: {self.last_epoch_block}")
 
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
+    wait_factor_next_set_weights = 0
     try:
         while not self.should_exit:
             start_epoch = time.time()
@@ -72,68 +82,80 @@ def run(self):
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
 
-            while (
-                self.current_block - self.last_epoch_block
-                < self.config.miner.set_weights_epoch_length
+            # --- To control messages without changing time.sleep within the while-loop
+            # we can increase/decrease 'seconds_waiting_in_loop' without problems
+            # with 'seconds_to_wait_to_log_presence_message' we control the logging factor in the wait
+            seconds_waiting_in_loop = 1
+            seconds_to_wait_to_log_presence_message = 2
+            presence_message_seconds_count = 0
+            while should_wait_until_next_epoch(
+                self.current_block,
+                self.last_epoch_block, 
+                self.config.miner.set_weights_epoch_length
             ):
                 # --- Wait for next bloc.
-                time.sleep(1)
-                self.current_block = self.subtensor.get_current_block()
+                time.sleep(seconds_waiting_in_loop)
+                presence_message_seconds_count += seconds_waiting_in_loop
+
+                if presence_message_seconds_count % seconds_to_wait_to_log_presence_message == 0:
+                    self.current_block = self.subtensor.get_current_block()
+
                 bt.logging.info(f"Miner running at block {self.current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
                     break
 
-            # --- Update the metagraph with the latest network state.
-            self.last_epoch_block = self.subtensor.get_current_block()
-            self.current_block = self.last_epoch_block
-
-            self.metagraph = self.subtensor.metagraph(
-                netuid=self.config.netuid,
-                lite=True,
-                block=self.last_epoch_block,
-            )
-
-            self.average_reqeusts_per_hour = sum(self.requests_per_hour) / len(
-                self.requests_per_hour
-            )
-            self.available_storage = get_free_disk_space(self.config.database.directory)
-            self.used_storage = get_directory_size(self.config.database.directory)
-            stats_log = (
-                f"Avg Requests/Hour: {self.average_requests_per_hour} | "
-                f"Avail Storage: {self.available_storage} | "
-                f"Used Storage: {self.used_storage}"
-            )
-            bt.logging.info(stats_log)
-            if self.config.wandb.on:
-                wandb.log(stats_log)
-
-            log = (
-                f"Step:{step} | "
-                f"Block:{self.metagraph.block.item()} | "
-                f"Stake:{self.metagraph.S[self.my_subnet_uid]} | "
-                f"Rank:{self.metagraph.R[self.my_subnet_uid]} | "
-                f"Trust:{self.metagraph.T[self.my_subnet_uid]} | "
-                f"Consensus:{self.metagraph.C[self.my_subnet_uid] } | "
-                f"Incentive:{self.metagraph.I[self.my_subnet_uid]} | "
-                f"Emission:{self.metagraph.E[self.my_subnet_uid]}"
-            )
-            bt.logging.info(log)
-            if self.config.wandb.on:
-                wandb.log(log)
+            presence_message_seconds_count = 0
 
             # --- Set weights.
+            weights_were_set = False
             if not self.config.miner.no_set_weights:
                 bt.logging.info(f"Setting weights on chain.")
-                set_weights(
+                # if both 'wait_for_*' args are False, weights_were_set = True
+                # even if they are not set yet or the extrinsic has failed
+                weights_were_set = set_weights(
                     self.subtensor,
                     self.config.netuid,
                     self.my_subnet_uid,
                     self.wallet,
                     self.config.wandb.on,
+                    wait_for_inclusion=self.config.miner.set_weights_wait_for_inclusion,
+                    wait_for_finalization=self.config.miner.set_weights_wait_for_finalization,
                 )
             step += 1
+
+            # --- Update the metagraph with the latest network state.
+            if weights_were_set:
+                current_block = self.subtensor.get_current_block()
+                self.last_epoch_block = current_block
+                self.current_block = current_block
+
+                self.metagraph = self.subtensor.metagraph(
+                    netuid=self.config.netuid,
+                    lite=True,
+                    block=self.last_epoch_block,
+                )
+                log = (
+                    f"Step:{step} | "
+                    f"Block:{self.metagraph.block.item()} | "
+                    f"Stake:{self.metagraph.S[self.my_subnet_uid]} | "
+                    f"Rank:{self.metagraph.R[self.my_subnet_uid]} | "
+                    f"Trust:{self.metagraph.T[self.my_subnet_uid]} | "
+                    f"Consensus:{self.metagraph.C[self.my_subnet_uid] } | "
+                    f"Incentive:{self.metagraph.I[self.my_subnet_uid]} | "
+                    f"Emission:{self.metagraph.E[self.my_subnet_uid]}"
+                )
+                bt.logging.info(log)
+                if self.config.wandb.on:
+                    wandb.log(log)
+
+                wait_factor_next_set_weights = 0
+            else:
+                self.current_block = self.subtensor.get_current_block()
+                num_blocks_to_wait = 3
+                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
+                time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:

@@ -56,10 +56,10 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
         return False
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
     if verbose:
-        bt.logging.debug("recieved proof      :", proof)
-        bt.logging.debug("recieved seed       :", seed)
-        bt.logging.debug("recieved commitment :", commitment)
-        bt.logging.debug("excpected commitment:", expected_commitment)
+        bt.logging.debug("received proof      :", proof)
+        bt.logging.debug("received seed       :", seed)
+        bt.logging.debug("received commitment :", commitment)
+        bt.logging.debug("received commitment:", expected_commitment)
     return expected_commitment == commitment
 
 

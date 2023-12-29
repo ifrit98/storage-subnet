@@ -27,7 +27,9 @@ def set_weights(
     uid: int,
     wallet: "bt.wallet",
     wandb_on=False,
-) -> None:
+    wait_for_inclusion=False,
+    wait_for_finalization=False,
+) -> bool:
     """
     Sets the miner's weights on the Bittensor network.
 
@@ -47,6 +49,13 @@ def set_weights(
         uid (int): The unique identifier for the miner on the network.
         wallet (bt.wallet): The miner's wallet holding cryptographic information.
         wandb_on (bool, optional): Flag to determine if logging to Weights & Biases is enabled. Defaults to False.
+        wait_for_inclusion (bool, optional): Wether to wait for the extrinsic to enter a block
+        wait_for_finalization (bool, optional): Wether to wait for the extrinsic to be finalized on the chain
+
+    Returns:
+        success (bool):
+            flag is true if extrinsic was finalized or uncluded in the block.
+            If we did not wait for finalization / inclusion, the response is true.
 
     Raises:
         Exception: If there's an error while setting weights, the exception is logged for diagnosis.
@@ -57,17 +66,19 @@ def set_weights(
         chain_weights[uid] = 1
 
         # --- Set weights.
-        subtensor.set_weights(
+        success = subtensor.set_weights(
             uids=torch.arange(0, len(chain_weights)),
             netuid=netuid,
             weights=chain_weights,
-            wait_for_inclusion=False,
+            wait_for_inclusion=wait_for_inclusion,
+            wait_for_finalization=wait_for_finalization,
             wallet=wallet,
             version_key=1,
         )
         if wandb_on:
             wandb.log({"set_weights": 1})
 
+        return success
     except Exception as e:
         if wandb_on:
             wandb.log({"set_weights": 0})

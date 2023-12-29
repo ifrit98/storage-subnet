@@ -629,7 +629,7 @@ class miner:
             >>> updated_synapse = self.challenge(synapse)
         """
         # Retrieve the data itself from miner storage
-        bt.logging.info(f"recieved challenge hash: {synapse.challenge_hash}")
+        bt.logging.info(f"received challenge hash: {synapse.challenge_hash}")
         self.request_count += 1
 
         data = await get_chunk_metadata(self.database, synapse.challenge_hash)
@@ -741,7 +741,7 @@ class miner:
             Assuming an initialized 'synapse' with a data hash and seed:
             >>> updated_synapse = self.retrieve(synapse)
         """
-        bt.logging.info(f"recieved retrieve hash: {synapse.data_hash}")
+        bt.logging.info(f"received retrieve hash: {synapse.data_hash}")
         self.request_count += 1
 
         # Fetch the data from the miner database

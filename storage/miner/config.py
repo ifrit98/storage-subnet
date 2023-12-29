@@ -99,9 +99,27 @@ def add_args(cls, parser):
     # Run config.
     parser.add_argument(
         "--miner.set_weights_epoch_length",
-        type=str,
+        type=int,
         help="Blocks until the miner sets weights on chain",
         default=100,
+    )
+    parser.add_argument(
+        "--miner.set_weights_wait_for_inclusion",
+        action="store_true",
+        help="Wether to wait for the extrinsic to enter a block",
+        default=False,
+    )
+    parser.add_argument(
+        "--miner.set_weights_wait_for_finalization",
+        action="store_true",
+        help="Wether to wait for the extrinsic to be finalized on the chain",
+        default=False,
+    )
+    parser.add_argument(
+        "--miner.set_weights_at_start",
+        action="store_true",
+        help="Wether to set weights when the miner starts",
+        default=False,
     )
 
     # Blacklist.
