@@ -155,8 +155,7 @@ def run(self):
                 self.current_block = self.subtensor.get_current_block()
                 bt.logging.info(f"Weights were not set. Applying a linear backoff to set weights...")
                 num_blocks_to_wait = 5
-                b_plural = 's' if num_blocks_to_wait > 1 else ''
-                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait:.2f} block{b_plural} to set weights again.")
+                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
                 time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
