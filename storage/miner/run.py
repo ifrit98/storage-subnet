@@ -153,7 +153,6 @@ def run(self):
                 wait_factor_next_set_weights = 0
             else:
                 self.current_block = self.subtensor.get_current_block()
-                bt.logging.info(f"Weights were not set. Applying a linear backoff to set weights...")
                 num_blocks_to_wait = 5
                 bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
                 time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
