@@ -37,8 +37,8 @@ from ..validator.database import hotkey_at_capacity
 import bittensor as bt
 
 
-MIN_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
-MAX_CHUNK_SIZE = 256 * 1024 * 1024  # 256 MB
+MIN_CHUNK_SIZE = 64 * 1024 * 1024  # 128 MB
+MAX_CHUNK_SIZE = 512 * 1024 * 1024  # 512 MB
 
 
 def chunk_data_generator(data, chunk_size):
@@ -57,7 +57,7 @@ def chunk_data_generator(data, chunk_size):
 
 
 def generate_file_size_with_lognormal(
-    mu: float = np.log(20 * 1024**2), sigma: float = 1.5
+    mu: float = np.log(5 * 1024**2), sigma: float = 1.5
 ) -> float:
     """
     Generate a single file size using a lognormal distribution.
@@ -107,8 +107,8 @@ def make_random_file(name: str = None, maxsize: int = None) -> Union[bytes, str]
         return data  # Return the data itself
 
 
-# Determine a random chunksize between 24kb-512kb (random sample from this range) store as chunksize_E
-def get_random_chunksize(minsize: int = 24, maxsize: int = 512) -> int:
+# Determine a random chunksize between 512kb (random sample from this range) store as chunksize_E
+def get_random_chunksize(minsize: int = 128, maxsize: int = 1024) -> int:
     """
     Determines a random chunk size within a specified range for data chunking.
 
@@ -167,7 +167,6 @@ def ttl_cache(maxsize=128, ttl=10):
     return wrapper_cache
 
 
-@ttl_cache(ttl=12)  # Cache TTL of 30 seconds
 def current_block_hash(self):
     """
     Get the current block hash with caching.
@@ -178,11 +177,7 @@ def current_block_hash(self):
     Returns:
         str: The current block hash.
     """
-    current_block = self.current_block
-    if current_block == None:
-        current_block = self.subtensor.get_current_block()
-    bt.logging.trace(f"current block in current_block_hash: {current_block}")
-    return self.subtensor.get_block_hash(current_block)
+    return self.subtensor.get_block_hash(self.subtensor.get_current_block())
 
 
 def get_block_seed(self):

@@ -17,11 +17,24 @@
 # DEALINGS IN THE SOFTWARE.
 
 
+import sys
 import torch
 import numpy as np
 import bittensor as bt
-
+from bittensor import Synapse
+from pprint import pformat
 from typing import Union, List
+
+from .verify import (
+    verify_store_with_seed,
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+)
+from .database import add_metadata_to_hotkey
+from .bonding import update_statistics, get_tier_factor
+from .event import EventSchema
+
+from storage.protocol import Store, Retrieve, Challenge
 
 
 def adjusted_sigmoid(x, steepness=1, shift=0):
@@ -119,8 +132,8 @@ def get_sorted_response_times(uids, responses, timeout: float):
     axon_times = [
         (
             uids[idx],
-            response.axon.process_time
-            if response.axon.process_time != None
+            response.dendrite.process_time
+            if response.dendrite.process_time != None
             else timeout,
         )
         for idx, response in enumerate(responses)
@@ -199,10 +212,13 @@ def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
     # Normalize the response times
     normalized_times = min_max_normalize(process_times)
 
-    # Scale the rewards with normalized times
-    for i in range(len(rewards)):
-        rewards[i] += rewards[i] * normalized_times[i]
+    # Create a dictionary mapping UIDs to normalized times
+    uid_to_normalized_time = {uid: normalized_time for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)}
 
+    # Scale the rewards with normalized times
+    for i, uid in enumerate(uids):
+        normalized_time_for_uid = uid_to_normalized_time[uid]
+        rewards[i] += rewards[i] * normalized_time_for_uid
     return rewards
 
 
@@ -250,25 +266,12 @@ def apply_reward_scores(
     bt.logging.trace(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
 
-from bittensor import Synapse
-
-from .verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-from .database import add_metadata_to_hotkey
-from .bonding import update_statistics, get_tier_factor
-from .event import EventSchema
-from storage.protocol import Store, Retrieve
-
-import sys
-from pprint import pformat
+from functools import partial
 
 
 async def create_reward_vector(
     self,
-    synapse: Union[Store, Retrieve],
+    synapse: Union[Store, Retrieve, Challenge],
     rewards: torch.FloatTensor,
     uids: List[int],
     responses: List[Synapse],
@@ -276,21 +279,34 @@ async def create_reward_vector(
     callback: callable,
     fail_callback: callable,
 ):
+    # Determine if the commitment is valid
+    success = False
     if isinstance(synapse, Store):
-        verify_fn = verify_store_with_seed
+        verify_fn = partial(
+            verify_store_with_seed,
+            b64_encrypted_data=synapse.encrypted_data,
+            seed=synapse.seed,
+        )
+        task_type = "store"
     elif isinstance(synapse, Retrieve):
-        verify_fn = verify_retrieve_with_seed
+        verify_fn = partial(verify_retrieve_with_seed, seed=synapse.seed)
+        task_type = "retrieve"
     elif isinstance(synapse, Challenge):
-        verify_fn = verify_challenge_with_seed
+        verify_fn = partial(verify_challenge_with_seed, seed=synapse.seed)
+        task_type = "challenge"
     else:
         raise ValueError(f"Invalid synapse type: {type(synapse)}")
 
     for idx, (uid, response) in enumerate(zip(uids, responses)):
         # Verify the commitment
         hotkey = self.metagraph.hotkeys[uid]
-        success = verify_fn(response)
+
+        # Determine if the commitment is valid
+        success = verify_fn(synapse=response)
         if success:
-            bt.logging.debug(f"Successfully verified store commitment from UID: {uid}")
+            bt.logging.debug(
+                f"Successfully verified {synapse.__class__} commitment from UID: {uid}"
+            )
             await callback(hotkey, idx, uid, response)
         else:
             bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
@@ -300,11 +316,11 @@ async def create_reward_vector(
         await update_statistics(
             ss58_address=hotkey,
             success=success,
-            task_type="store",
+            task_type=task_type,
             database=self.database,
         )
 
-        # Apply reward for this store
+        # Apply reward for this task
         tier_factor = await get_tier_factor(hotkey, self.database)
         rewards[idx] = 1.0 * tier_factor if success else 0.0
 

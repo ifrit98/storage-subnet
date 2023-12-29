@@ -278,7 +278,6 @@ async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
         if metadata:
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
-    bt.logging.trace(f"total_hotkey_storage {total_storage} | hotkey {hotkey}")
     return total_storage
 
 
@@ -791,7 +790,7 @@ async def get_all_hashes_in_database(database: aioredis.Redis) -> List[str]:
     all_hashes = set()
 
     async for hotkey_key in database.scan_iter(match="hotkey:*"):
-        all_hashes.update(list(await database.hgetall(hotkey_hey)))
+        all_hashes.update(list(await database.hgetall(hotkey_key)))
 
     return list(all_hashes)
 

@@ -32,6 +32,7 @@ import traceback
 import bittensor as bt
 from collections import defaultdict
 from Crypto.Random import get_random_bytes
+from typing import Dict
 
 from pprint import pprint, pformat
 
@@ -49,11 +50,7 @@ from storage.shared.merkle import (
     MerkleTree,
 )
 
-from storage.shared.utils import (
-    b64_encode,
-    b64_decode,
-    chunk_data,
-)
+from storage.shared.utils import b64_encode, b64_decode, chunk_data, safe_key_search
 
 from storage.miner import (
     run,
@@ -583,7 +580,6 @@ class miner:
         # Initialize the commitment hash with the initial commitment for chained proofs
         synapse.commitment_hash = str(m_val)
         if self.config.miner.verbose:
-            bt.logging.trace(f"metadata: {pformat(dumped)}")
             bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
             bt.logging.trace(f"type(seed): {type(synapse.seed)}")
             bt.logging.trace(f"initial commitment_hash: {synapse.commitment_hash}")

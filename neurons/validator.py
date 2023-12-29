@@ -50,6 +50,11 @@ from storage.validator.weights import (
 from storage.validator.database import purge_challenges_for_all_hotkeys
 from storage.validator.forward import forward
 from storage.validator.rebalance import rebalance_data
+from storage.validator.encryption import setup_encryption_wallet
+
+
+def MockDendrite():
+    pass
 
 
 class neuron:
@@ -119,12 +124,14 @@ class neuron:
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
         # Setup dummy wallet for encryption purposes. No password needed.
-        self.encryption_wallet = bt.wallet(
-            name=self.config.neuron.encryption_wallet_name,
-            hotkey=self.config.neuron.encryption_hotkey,
+        self.encryption_wallet = setup_encryption_wallet(
+            wallet_name=self.config.encryption.wallet_name,
+            wallet_hotkey=self.config.encryption.hotkey,
+            password=self.config.encryption.password,
         )
         self.encryption_wallet.create_if_non_existent(coldkey_use_password=False)
-        self.encrpytion_wallet.coldkey  # Unlock the coldkey.
+        self.encryption_wallet.coldkey  # Unlock the coldkey.
+        bt.logging.info(f"loading encryption wallet {self.encryption_wallet}")
 
         # Init metagraph.
         bt.logging.debug("loading metagraph")
@@ -190,6 +197,8 @@ class neuron:
         self, obj, update_nr, subscription_id
     ):
         bt.logging.debug(f"New block #{obj['header']['number']}")
+        self.current_block = obj["header"]["number"]
+
         bt.logging.debug(obj)
 
         block_no = obj["header"]["number"]

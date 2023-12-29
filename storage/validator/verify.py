@@ -63,7 +63,7 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
     return expected_commitment == commitment
 
 
-def verify_challenge_with_seed(synapse, verbose=False):
+def verify_challenge_with_seed(synapse, seed, verbose=False):
     """
     Verifies a challenge in a decentralized network using a seed and the details contained in a synapse.
     The function validates the initial commitment hash against the expected result, checks the integrity of the commitment,
@@ -81,7 +81,7 @@ def verify_challenge_with_seed(synapse, verbose=False):
         return False
 
     if not verify_chained_commitment(
-        synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
+        synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
         bt.logging.error(f"synapse {pformat(synapse.dendrite.dict())}")
@@ -97,13 +97,13 @@ def verify_challenge_with_seed(synapse, verbose=False):
 
     if not committer.open(
         commitment,
-        hash_data(base64.b64decode(synapse.data_chunk) + str(synapse.seed).encode()),
+        hash_data(base64.b64decode(synapse.data_chunk) + str(seed).encode()),
         synapse.randomness,
     ):
         if verbose:
             bt.logging.error(f"Opening commitment failed!")
             bt.logging.error(f"commitment: {synapse.commitment[:100]}")
-            bt.logging.error(f"seed      : {synapse.seed}")
+            bt.logging.error(f"seed      : {seed}")
             bt.logging.error(f"synapse   : {pformat(synapse.dendrite.dict())}")
         return False
 
@@ -115,15 +115,15 @@ def verify_challenge_with_seed(synapse, verbose=False):
         if verbose:
             bt.logging.error(f"Merkle proof validation failed!")
             bt.logging.error(f"commitment  : {synapse.commitment[:100]}")
-            bt.logging.error(f"merkle root : {merkle_root}")
-            bt.logging.error(f"merkle proof: {pformat(merkle_proof)[-1]}")
+            bt.logging.error(f"merkle root : {synapse.merkle_root}")
+            bt.logging.error(f"merkle proof: {pformat(synapse.merkle_proof)[-1]}")
             bt.logging.error(f"synapse     : {pformat(synapse.dendrite.dict())}")
         return False
 
     return True
 
 
-def verify_store_with_seed(synapse, verbose=False):
+def verify_store_with_seed(synapse, b64_encrypted_data, seed, verbose=False):
     """
     Verifies the storing process in a decentralized network using the provided synapse and seed.
     This function decodes the data, reconstructs the hash using the seed, and verifies it against the commitment hash.
@@ -134,22 +134,20 @@ def verify_store_with_seed(synapse, verbose=False):
     Returns:
         bool: True if the storing process is verified successfully, False otherwise.
     """
-    # TODO: Add checks and defensive programming here to handle all types
-    # (bytes, str, hex, ecc point, etc)
     try:
-        decoded_data = base64.b64decode(synapse.encrypted_data)
+        encrypted_data = base64.b64decode(b64_encrypted_data)
     except Exception as e:
-        bt.logging.error(f"Could not decode data with error: {e}")
+        bt.logging.error(f"Could not decode store data with error: {e}")
         return False
 
-    seed_value = str(synapse.seed).encode()
-    reconstructed_hash = hash_data(decoded_data + seed_value)
+    seed_value = str(seed).encode()
+    reconstructed_hash = hash_data(encrypted_data + seed_value)
 
     # e.g. send synapse.commitment_hash as an int for consistency
     if synapse.commitment_hash != str(reconstructed_hash):
         if verbose:
             bt.logging.error(f"Initial commitment hash != hash(data + seed)")
-            bt.logging.error(f"commitment hash   : {commitment_hash}")
+            bt.logging.error(f"commitment hash   : {synapse.commitment_hash}")
             bt.logging.error(f"reconstructed hash: {reconstructed_hash}")
             bt.logging.error(f"synapse           : {synapse.dendrite.dict()}")
         return False
@@ -162,7 +160,7 @@ def verify_store_with_seed(synapse, verbose=False):
 
     if not committer.open(
         commitment,
-        hash_data(decoded_data + str(synapse.seed).encode()),
+        hash_data(encrypted_data + str(seed).encode()),
         synapse.randomness,
     ):
         bt.logging.error(f"Opening commitment failed")
@@ -172,7 +170,7 @@ def verify_store_with_seed(synapse, verbose=False):
     return True
 
 
-def verify_retrieve_with_seed(synapse, verbose=False):
+def verify_retrieve_with_seed(synapse, seed, verbose=False):
     """
     Verifies the retrieval process in a decentralized network using the provided synapse and seed.
     The function validates the initial commitment hash against the expected result using the provided seed and commitment proof.
@@ -183,13 +181,13 @@ def verify_retrieve_with_seed(synapse, verbose=False):
         bool: True if the retrieval process is verified successfully, False otherwise.
     """
     if not verify_chained_commitment(
-        synapse.commitment_proof, synapse.seed, synapse.commitment_hash, verbose=verbose
+        synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
         if verbose:
             bt.logging.error(f"synapse {synapse.dendrite.dict()}")
             bt.logging.error(f"commitment_proof: {synapse.commitment_proof}")
-            bt.logging.error(f"seed            : {synapse.seed}")
+            bt.logging.error(f"seed            : {seed}")
             bt.logging.error(f"commitment_hash : {synapse.commitment_hash}")
         return False
 
