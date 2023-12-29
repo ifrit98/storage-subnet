@@ -81,6 +81,7 @@ def run(self):
 
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
+            self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
 
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
@@ -128,8 +129,9 @@ def run(self):
 
             # --- Update the metagraph with the latest network state.
             if weights_were_set:
-                self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
-                self.current_block = self.subtensor.get_current_block()
+                current_block = self.subtensor.get_current_block()
+                self.last_epoch_block = current_block
+                self.current_block = current_block
 
                 self.metagraph = self.subtensor.metagraph(
                     netuid=self.config.netuid,
