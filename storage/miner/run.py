@@ -122,6 +122,7 @@ def run(self):
                     self.wallet,
                     self.metagraph,
                     self.config.wandb.on,
+                    tempo=tempo,
                     wait_for_inclusion=self.config.miner.set_weights_wait_for_inclusion,
                     wait_for_finalization=self.config.miner.set_weights_wait_for_finalization,
                 )
