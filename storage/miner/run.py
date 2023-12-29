@@ -91,40 +91,52 @@ def run(self):
                 if self.should_exit:
                     break
 
-            # --- Update the metagraph with the latest network state.
-            self.last_epoch_block = self.subtensor.get_current_block()
-            self.current_block = self.last_epoch_block
-
-            self.metagraph = self.subtensor.metagraph(
-                netuid=self.config.netuid,
-                lite=True,
-                block=self.last_epoch_block,
-            )
-            log = (
-                f"Step:{step} | "
-                f"Block:{self.metagraph.block.item()} | "
-                f"Stake:{self.metagraph.S[self.my_subnet_uid]} | "
-                f"Rank:{self.metagraph.R[self.my_subnet_uid]} | "
-                f"Trust:{self.metagraph.T[self.my_subnet_uid]} | "
-                f"Consensus:{self.metagraph.C[self.my_subnet_uid] } | "
-                f"Incentive:{self.metagraph.I[self.my_subnet_uid]} | "
-                f"Emission:{self.metagraph.E[self.my_subnet_uid]}"
-            )
-            bt.logging.info(log)
-            if self.config.wandb.on:
-                wandb.log(log)
-
             # --- Set weights.
+            weights_were_set = False
             if not self.config.miner.no_set_weights:
                 bt.logging.info(f"Setting weights on chain.")
-                set_weights(
+                # if both 'wait_for_*' args are False, weights_were_set = True
+                # even if they are not set yet or the extrinsic has failed
+                weights_were_set = set_weights(
                     self.subtensor,
                     self.config.netuid,
                     self.my_subnet_uid,
                     self.wallet,
                     self.config.wandb.on,
+                    wait_for_inclusion=self.config.miner.set_weights_wait_for_inclusion,
+                    wait_for_finalization=self.config.miner.set_weights_wait_for_finalization,
                 )
             step += 1
+
+            # --- Update the metagraph with the latest network state.
+            if weights_were_set:
+                current_block = self.subtensor.get_current_block()
+                self.last_epoch_block = current_block
+                self.current_block = current_block
+
+                self.metagraph = self.subtensor.metagraph(
+                    netuid=self.config.netuid,
+                    lite=True,
+                    block=self.last_epoch_block,
+                )
+                log = (
+                    f"Step:{step} | "
+                    f"Block:{self.metagraph.block.item()} | "
+                    f"Stake:{self.metagraph.S[self.my_subnet_uid]} | "
+                    f"Rank:{self.metagraph.R[self.my_subnet_uid]} | "
+                    f"Trust:{self.metagraph.T[self.my_subnet_uid]} | "
+                    f"Consensus:{self.metagraph.C[self.my_subnet_uid] } | "
+                    f"Incentive:{self.metagraph.I[self.my_subnet_uid]} | "
+                    f"Emission:{self.metagraph.E[self.my_subnet_uid]}"
+                )
+            else:
+                self.current_block = self.subtensor.get_current_block()
+                log = (f"Weights were not set")
+
+            bt.logging.info(log)
+            if self.config.wandb.on:
+                wandb.log(log)
+
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:

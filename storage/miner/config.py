@@ -103,6 +103,18 @@ def add_args(cls, parser):
         help="Blocks until the miner sets weights on chain",
         default=100,
     )
+    parser.add_argument(
+        "--miner.set_weights_wait_for_inclusion",
+        type=bool,
+        help="Wether to wait for the extrinsic to enter a block",
+        default=False,
+    )
+    parser.add_argument(
+        "--miner.set_weights_wait_for_finalization",
+        type=bool,
+        help="Wether to wait for the extrinsic to be finalized on the chain",
+        default=False,
+    )
 
     # Blacklist.
     parser.add_argument(
