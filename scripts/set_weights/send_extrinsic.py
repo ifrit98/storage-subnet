@@ -24,7 +24,7 @@ async def main(args):
         wallet=wallet,
         wandb_on=False,
         wait_for_inclusion=False,
-        wait_for_finalization=self.config.miner.set_weights_wait_for_finalization,
+        wait_for_finalization=True,
     )
 
     bt.logging.info(f'Were weights set? {weights_were_set}')
