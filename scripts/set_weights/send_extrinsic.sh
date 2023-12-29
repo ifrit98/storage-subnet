@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PATH=/root/.pyenv/shims:/root/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 WALLET_NAME=$1
 WALLET_HOTKEY=$2
 SUBTENSOR_NETWORK=$3
