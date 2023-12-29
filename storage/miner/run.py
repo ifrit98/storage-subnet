@@ -64,7 +64,10 @@ def run(self):
         exit()
 
     # --- Run until should_exit = True.
-    self.last_epoch_block = self.subtensor.get_current_block()
+    if self.config.miner.set_weights_at_start:
+        self.last_epoch_block = -1
+    else:
+        self.last_epoch_block = self.subtensor.get_current_block()
     bt.logging.info(f"Miner starting at block: {self.last_epoch_block}")
 
     # This loop maintains the miner's operations until intentionally stopped.
