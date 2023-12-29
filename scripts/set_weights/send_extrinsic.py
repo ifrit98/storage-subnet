@@ -4,7 +4,6 @@ import argparse
 import bittensor as bt
 
 from storage.miner.set_weights import set_weights
-from storage.miner.database import migrate_data_directory
 
 
 async def main(args):
