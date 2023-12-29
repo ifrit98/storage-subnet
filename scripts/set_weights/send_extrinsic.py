@@ -44,3 +44,6 @@ if __name__ == "__main__":
         asyncio.run(main(args))
     except KeyboardInterrupt:
         print('KeyboardInterrupt')
+    except ValueError as e:
+        print(f'ValueError: {e}')
+
