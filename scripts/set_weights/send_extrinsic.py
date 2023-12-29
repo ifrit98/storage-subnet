@@ -33,11 +33,14 @@ async def main(args):
     
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--wallet", type=str, default='default')
-    parser.add_argument("--hotkey", type=str, default='default')
-    parser.add_argument("--network", type=str, default='local')
-    parser.add_argument("--netuid", type=int, default=21)
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--wallet", type=str, default='default')
+        parser.add_argument("--hotkey", type=str, default='default')
+        parser.add_argument("--network", type=str, default='local')
+        parser.add_argument("--netuid", type=int, default=21)
+        args = parser.parse_args()
 
-    asyncio.run(main(args))
+        asyncio.run(main(args))
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt')
