@@ -75,7 +75,6 @@ def run(self):
     bt.logging.info(f"Starting main loop")
     step = 0
     try:
-        bt.logging.info(f"DEBUG: While not self.should_exit: {not self.should_exit}")
         while not self.should_exit:
             start_epoch = time.time()
 
