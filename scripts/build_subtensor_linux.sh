@@ -11,7 +11,7 @@ source "$HOME/.cargo/env"
 
 # Get the subtensor repo
 git clone https://github.com/opentensor/subtensor.git
-cd subtensor
+pushd subtensor
 
 # Update to nightly rust/cargo 
 ./scripts/init.sh
@@ -20,4 +20,4 @@ cd subtensor
 cargo build --release --features runtime-benchmarks --locked
 
 # Return to storage-subnet directory
-cd ../
+popd

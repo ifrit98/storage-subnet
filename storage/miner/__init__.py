@@ -22,7 +22,7 @@ from .run import run
 from .set_weights import set_weights
 
 
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 version_split = __version__.split(".")
 __spec_version__ = (
     (1000 * int(version_split[0]))

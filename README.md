@@ -515,6 +515,32 @@ pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/mi
 These options allow you to configure the miner's behavior, database connections, blacklist/whitelist settings, priority handling, and integration with monitoring tools like WandB. Adjust these settings based on your mining setup and requirements.
 
 
+#### Data migration
+If for whatever reason you need to migrate the data in your hard drive configured with `--database.directory` to a new directory than is reflected in the Redis index, then you can do it by simply running the script in `scripts/migrate_database_directory.sh`. 
+
+When should you run the migration script?:
+- if you want to specify a different --database.directory
+- if your data has moved but your redis index has not reflected this change
+
+```bash
+bash scripts/migrate_database_directory.sh <OLD_PATH> <NEW_PATH> <DATABASE_INDEX>
+```
+
+
+Example usage from the top-level directory `storage-subnet`:
+
+```bash
+bash scripts/migrate_database_directory.sh ~/.data ~/.new_data_path 0 
+
+
+Migrating database from ~/.data to ~/.new_data_path ...
+
+2023-12-28 21:16:25.940 |       INFO       | Attempting miner data migration to /home/user/.new_data_path
+2023-12-28 21:16:25.940 |       INFO       | Connecting to Redis at db=0...
+2023-12-28 21:16:25.943 |     SUCCESS      | All data was migrated to the new directory.
+```
+
+
 ### Running a validator
 ```bash
 python neurons/validator.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
@@ -657,9 +683,29 @@ Availability is *critical* in storage in general and SN21, specifically. The rew
 
 It is *highly* recommended that all miners and validators run their own local subtensor node. This will resolve the many issues commonly found with intermittent connectivity across all subents.
 
+To start your miner/validator using your local node, include the flag `--subtensor.network local` into your startup parameters.
+
+### Docker installation
+For easiest installation, run subtensor inside of the foundation-provided docker container.
+
+For official docker and docker-compose install instructions, see [here](https://docs.docker.com/engine/install/ubuntu/#installation-methods) and [here](https://docs.docker.com/compose/install/linux/#install-using-the-repository), respectively.
+
+```bash
+# Install the docker compose plugin
+sudo apt-get update
+sudo apt-get install docker-compose-plugin
+
+# Clone subtensor
+git clone https://github.com/opentensor/subtensor
+cd subtensor
+
+# Start the subtensor container on port 9944
+sudo docker compose up -d
+```
+
 #### Quick Installation
 Provided are two scripts to build subtensor, and then to run it inside a pm2 process as a convenience. If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
-```
+```bash
 # Installs dependencies and builds the subtensor binary
 ./scripts/build_subtensor_linux.sh
 
@@ -675,7 +721,7 @@ Provided are two scripts to build subtensor, and then to run it inside a pm2 pro
 
 You should see output like this in your pm2 logs for the process at startup:
 
-```
+```bash
 pm2 logs subtensor
 
 1|subtenso | 2023-12-22 14:21:30 🔨 Initializing Genesis block/state (state: 0x4015…9643, header-hash: 0x2f05…6c03)    

@@ -11,13 +11,9 @@ from storage.miner.set_weights import set_weights
 async def main(args):
     subtensor = bt.subtensor(network=args.network)
     wallet = bt.wallet(name=args.wallet, hotkey=args.hotkey)
-    metagraph = bt.metagraph(
-        netuid=args.netuid, network=args.network, sync=False
-    )
+    metagraph = bt.metagraph(netuid=args.netuid, network=args.network, sync=False)
     metagraph.sync(subtensor=subtensor)
-    my_subnet_uid = metagraph.hotkeys.index(
-        wallet.hotkey.ss58_address
-    )
+    my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
 
     weights_were_set = set_weights(
         subtensor=subtensor,

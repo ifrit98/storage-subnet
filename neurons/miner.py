@@ -63,6 +63,9 @@ from storage.miner.utils import (
     load_from_filesystem,
     commit_data_with_seed,
     init_wandb,
+    get_directory_size,
+    get_free_disk_space,
+    update_storage_stats,
 )
 
 from storage.miner.config import (
@@ -223,6 +226,52 @@ class miner:
         self.request_timestamps: Dict = {}
 
         self.step = 0
+
+        # Init the miner's storage request tracker
+        self.request_count = 0
+        self.start_request_count_timer()
+        self.requests_per_hour = []
+        self.average_requests_per_hour = 0
+
+        # Init the miner's storage usage tracker
+        update_storage_stats(self)
+
+    def start_request_count_timer(self):
+        """
+        Initializes and starts a timer for tracking the number of requests received by the miner in an hour.
+
+        This method sets up a one-hour timer that, upon expiration, calls the `reset_request_count` method to log
+        the number of requests received and reset the count for the next hour. The timer is set to run in a separate
+        thread to avoid blocking the main execution.
+
+        Usage:
+            Should be called during the initialization of the miner to start tracking requests per hour.
+        """
+        self.request_count_timer = threading.Timer(3600, self.reset_request_count)
+        self.request_count_timer.start()
+
+    def reset_request_count(self):
+        """
+        Logs the number of requests received in the last hour and resets the count.
+
+        This method is automatically called when the one-hour timer set by `start_request_count_timer` expires.
+        It logs the count of requests received in the last hour and then resets the count. Additionally, it
+        restarts the timer for the next hour.
+
+        Usage:
+            This method is intended to be called automatically by a timer and typically should not be called directly.
+        """
+        bt.logging.info(
+            f"Number of requests received in the last hour: {self.request_count}"
+        )
+        self.requests_per_hour.append(self.request_count)
+        bt.logging.info(f"Requests per hour: {self.requests_per_hour}")
+        self.average_requests_per_hour = sum(self.requests_per_hour) / len(
+            self.requests_per_hour
+        )
+        bt.logging.info(f"Average requests per hour: {self.average_requests_per_hour}")
+        self.request_count = 0
+        self.start_request_count_timer()
 
     @property
     async def total_storage(self):
@@ -490,6 +539,7 @@ class miner:
             >>> updated_synapse = self.store(synapse)
         """
         bt.logging.info(f"received store request: {synapse.encrypted_data[:24]}")
+        self.request_count += 1
 
         # Decode the data from base64 to raw bytes
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
@@ -586,6 +636,8 @@ class miner:
         """
         # Retrieve the data itself from miner storage
         bt.logging.info(f"received challenge hash: {synapse.challenge_hash}")
+        self.request_count += 1
+
         data = await get_chunk_metadata(self.database, synapse.challenge_hash)
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
@@ -696,6 +748,7 @@ class miner:
             >>> updated_synapse = self.retrieve(synapse)
         """
         bt.logging.info(f"received retrieve hash: {synapse.data_hash}")
+        self.request_count += 1
 
         # Fetch the data from the miner database
         data = await get_chunk_metadata(self.database, synapse.data_hash)
