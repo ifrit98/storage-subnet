@@ -670,6 +670,9 @@ To start your miner/validator using your local node, include the flag `--subtens
 
 ### Docker installation
 For easiest installation, run subtensor inside of the foundation-provided docker container.
+
+For official docker and docker-compose install instructions, see [here](https://docs.docker.com/engine/install/ubuntu/#installation-methods) and [here](https://docs.docker.com/compose/install/linux/#install-using-the-repository), respectively.
+
 ```bash
 # Install the docker compose plugin
 sudo apt-get update
