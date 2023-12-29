@@ -81,19 +81,31 @@ def run(self):
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
 
+            # --- To control messages without changing time.sleep within the while-loop
+            # we can increase/decrease 'seconds_waiting_in_loop' without problems
+            # with 'seconds_to_wait_to_log_presence_message' we control the logging factor in the wait
+            seconds_waiting_in_loop = 1
+            seconds_to_wait_to_log_presence_message = 2
+            presence_message_seconds_count = 0
             while should_wait_until_next_epoch(
                 self.current_block,
                 self.last_epoch_block, 
                 self.config.miner.set_weights_epoch_length
             ):
                 # --- Wait for next bloc.
-                time.sleep(2)
-                self.current_block = self.subtensor.get_current_block()
+                time.sleep(seconds_waiting_in_loop)
+                presence_message_seconds_count += seconds_waiting_in_loop
+
+                if presence_message_seconds_count % seconds_to_wait_to_log_presence_message == 0:
+                    self.current_block = self.subtensor.get_current_block()
+
                 bt.logging.info(f"Miner running at block {self.current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
                     break
+
+            presence_message_seconds_count = 0
 
             # --- Set weights.
             weights_were_set = False
