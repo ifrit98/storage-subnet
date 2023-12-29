@@ -145,13 +145,29 @@ def run(self):
                     f"Incentive:{self.metagraph.I[self.my_subnet_uid]} | "
                     f"Emission:{self.metagraph.E[self.my_subnet_uid]}"
                 )
+                bt.logging.info(log)
+                if self.config.wandb.on:
+                    wandb.log(log)
+
+                wait_factor_next_set_weights = 0
             else:
                 self.current_block = self.subtensor.get_current_block()
-                log = (f"Weights were not set")
+                bt.logging.info(f"Weights were not set. Applying logarithmic backoff to set weights...")
+                # Kind of soft logarithmic curve based on block timing
+                # logarithmic scale looking:
+                #   - not to exceed a wait of more than 100 blocks
+                #   - reduce number of extrinsics sent within a range of: 1 <= extrinsics_sent < 15
+                # N blocks, N + N%2 blocks, N + N%2 + N%3 blocks .... :->: 100 (~8 iterations to reach 100)
+                step_for_waiting_curve = 3
+                num_blocks_to_wait = step_for_waiting_curve
+                for i in range(1, wait_factor_next_set_weights):
+                    num_blocks_to_wait += step_for_waiting_curve / i
 
-            bt.logging.info(log)
-            if self.config.wandb.on:
-                wandb.log(log)
+                wait_factor_next_set_weights += 1
+
+                b_plural = 's' if num_blocks_to_wait > 1 else ''
+                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait:.2f} block{b_plural} to set weights again.")
+                time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
 
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
