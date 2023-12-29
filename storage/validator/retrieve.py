@@ -191,7 +191,7 @@ async def retrieve_data(
 
         if str(hash_data(decoded_data)) != data_hash:
             bt.logging.error(
-                f"Hash of recieved data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
+                f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
             )
             rewards[idx] = -0.1
 

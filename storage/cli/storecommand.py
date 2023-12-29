@@ -208,7 +208,7 @@ class StoreData:
                     if isinstance(response.data_hash, bytes)
                     else response.data_hash
                 )
-                bittensor.logging.debug("recieved data hash: {}".format(data_hash))
+                bittensor.logging.debug("received data hash: {}".format(data_hash))
                 success = True
                 break
 
