@@ -20,6 +20,7 @@ import wandb
 import bittensor as bt
 import traceback
 from .set_weights import set_weights
+from .utils import update_storage_stats
 
 
 def should_wait_until_next_epoch(current_block, last_epoch_block, epoch_lenght):
@@ -100,7 +101,7 @@ def run(self):
                 if presence_message_seconds_count % seconds_to_wait_to_log_presence_message == 0:
                     self.current_block = self.subtensor.get_current_block()
 
-                bt.logging.info(f"Miner running at block {self.current_block}...")
+                bt.logging.info(f"Miner UID {self.my_subnet_uid} running at block {self.current_block}...")
 
                 # --- Check if we should exit.
                 if self.should_exit:
@@ -156,6 +157,9 @@ def run(self):
                 num_blocks_to_wait = 3
                 bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
                 time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
+
+            # --- Update the miner storage information periodically.
+            update_storage_stats(self)
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:

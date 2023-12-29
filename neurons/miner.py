@@ -63,6 +63,9 @@ from storage.miner.utils import (
     load_from_filesystem,
     commit_data_with_seed,
     init_wandb,
+    get_directory_size,
+    get_free_disk_space,
+    update_storage_stats,
 )
 
 from storage.miner.config import (
@@ -229,6 +232,9 @@ class miner:
         self.start_request_count_timer()
         self.requests_per_hour = []
         self.average_requests_per_hour = 0
+
+        # Init the miner's storage usage tracker
+        update_storage_stats(self)
 
     def start_request_count_timer(self):
         """

@@ -197,15 +197,16 @@ def get_disk_space_stats(path):
     Usage:
         disk_stats = get_disk_space_stats('/')
     """
+    path = os.path.expanduser(path)
     total, used, free = shutil.disk_usage(path)
     return {
-        "total_gb": total // (2**30),
-        "used_gb": used // (2**30),
-        "free_gb": free // (2**30),
+        "total_bytes": total,
+        "used_bytes": used,
+        "free_bytes": free,
     }
 
 
-def get_free_disk_space(path):
+def get_free_disk_space(path="."):
     """
     Retrieves the free disk space for the drive containing the specified path.
 
@@ -217,14 +218,14 @@ def get_free_disk_space(path):
                     provide the root path ('/') to get the stats for the primary drive.
 
     Returns:
-        int: The free space on the disk in gigabytes (GB).
+        int: The free space on the disk in bytes (B).
 
     Usage:
         free_disk_space_gb = get_free_disk_space('/')
     """
     stats = get_disk_space_stats(path)
-    free = stats.get(free, 0)
-    return free // (2**30)
+    free = stats.get("free_bytes", 0)
+    return free
 
 
 def get_directory_size(path):
@@ -238,15 +239,33 @@ def get_directory_size(path):
         path (str): The file path of the directory whose size is to be calculated.
 
     Returns:
-        int: The total size of the directory in gigabytes (GB).
+        int: The total size of the directory in bytes (B).
 
     Usage:
         directory_size_gb = get_directory_size('/path/to/directory')
     """
     total_size = 0
+    path = os.path.expanduser(path)
     for dirpath, dirnames, filenames in os.walk(path):
         for f in filenames:
             fp = os.path.join(dirpath, f)
             if not os.path.islink(fp):
                 total_size += os.path.getsize(fp)
-    return total_size // (2**30)
+    return total_size
+
+
+def update_storage_stats(self):
+    """
+    Updates the miner's storage statistics.
+
+    This function updates the miner's storage statistics, including the free disk space, current storage usage,
+    and percent disk usage. It's useful for understanding the storage capacity and usage of the system where
+    the miner is running.
+    """
+
+    self.free_memory = get_free_disk_space()
+    bt.logging.info(f"Free memory: {self.free_memory} bytes")
+    self.current_storage_usage = get_directory_size(self.config.database.directory)
+    bt.logging.info(f"Miner storage usage: {self.current_storage_usage} bytes")
+    self.percent_disk_usage = self.current_storage_usage / self.free_memory
+    bt.logging.info(f"Miner % disk usage : {100 * self.percent_disk_usage:.3f}%")
