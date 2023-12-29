@@ -12,6 +12,7 @@ async def main(args):
     metagraph = bt.metagraph(
         netuid=args.netuid, network=args.network, sync=False
     )
+    metagraph.sync(subtensor=subtensor)
     my_subnet_uid = metagraph.hotkeys.index(
         wallet.hotkey.ss58_address
     )
