@@ -214,6 +214,10 @@ class neuron:
                     await rebalance_data(
                         self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
                     )
+                    # Update the monitor lookup
+                    self.monitor_lookup[uid] = 0
+                    # Update the moving average scores
+                    self.moving_averaged_scores[uid] = 0.0
 
     def start_neuron_event_subscription(self):
         asyncio.run(
