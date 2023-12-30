@@ -485,7 +485,8 @@ pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/mi
 - `--database.index`: Redis database index. Default: 0.
 - `--database.directory`: Directory to store local data. Default: "~/.data".
 
-- `--miner.set_weights_epoch_length`: Number of blocks until the miner updates weights on chain. Default: 100.
+- `--miner.set_weights_wait_for_inclusion`: Wether to wait for the set_weights extrinsic to enter a block. Default: False.
+- `--miner.set_weights_wait_for_finalization`: Wether to wait for the set_weights extrinsic to be finalized on the chain. Default: False.
 
 - `--miner.blacklist.blacklist`: List of hotkeys to blacklist. Default: [].
 - `--miner.blacklist.whitelist`: List of hotkeys to whitelist. Default: [].
