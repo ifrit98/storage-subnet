@@ -77,6 +77,17 @@ def run(self):
             self.metagraph.sync(subtensor=self.subtensor)
             self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
 
+            # --- Check for registration (periodically).
+            if not self.subtensor.is_hotkey_registered(
+                netuid=self.config.netuid,
+                hotkey_ss58=self.wallet.hotkey.ss58_address,
+            ):
+                bt.logging.error(
+                    f"Wallet: {self.wallet} is not registered on netuid {self.config.netuid}"
+                    f"Please register the hotkey using `btcli subnets register` before trying again"
+                )
+                exit()
+
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
             # with 'seconds_to_wait_to_log_presence_message' we control the logging factor in the wait
