@@ -396,7 +396,7 @@ async def get_available_query_miners(
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_available_uids(self, exclude=exclude)
     bt.logging.debug(f"get_available_query_miners() available uids: {muids}")
-    if excude_full:
+    if exclude_full:
         muids_nonfull = [
             uid
             for uid in muids

@@ -58,6 +58,39 @@ def check_config(cls, config: "bt.Config"):
             format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
         )
 
+        logger.add(
+            config.neuron.full_path + "/" + "DEBUG.log",
+            rotation=config.neuron.events_retention_size,
+            serialize=True,
+            enqueue=True,
+            backtrace=False,
+            diagnose=False,
+            level="INFO",
+            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        )
+
+        logger.add(
+            config.neuron.full_path + "/" + "DEBUG.log",
+            rotation=config.neuron.events_retention_size,
+            serialize=True,
+            enqueue=True,
+            backtrace=False,
+            diagnose=False,
+            level="DEBUG",
+            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        )
+
+        logger.add(
+            config.neuron.full_path + "/" + "TRACE.log",
+            rotation=config.neuron.events_retention_size,
+            serialize=True,
+            enqueue=True,
+            backtrace=False,
+            diagnose=False,
+            level="TRACE",
+            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        )
+
         # Set miner stats and total storage save path
         config.neuron.miner_stats_path = os.path.expanduser(
             os.path.join(config.neuron.full_path + "/" + "miner_stats.json")

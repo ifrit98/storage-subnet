@@ -171,7 +171,7 @@ async def ping_and_retry_uids(
     # Log if the maximum retries are reached without enough successful UIDs
     if len(successful_uids) < k:
         bt.logging.warning(
-            f"Insufficient successful UIDs for k: {k} Failed UIDs: {failed_uids}"
+            f"Insufficient successful UIDs for k: {k} Success UIDs {successful_uids} Failed UIDs: {failed_uids}"
         )
 
     return list(successful_uids)[:k], failed_uids

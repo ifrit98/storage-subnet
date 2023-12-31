@@ -125,6 +125,11 @@ def reinit_wandb(self):
 
 def should_checkpoint(self):
     # Check if enough epoch blocks have elapsed since the last checkpoint.
+    a = ttl_get_block(self) % self.config.neuron.checkpoint_block_length
+    b = self.prev_step_block % self.config.neuron.checkpoint_block_length
+    bt.logging.debug(
+        f"should_checkpoint() block {ttl_get_block(self)} % checkpoint_block_length {self.config.neuron.checkpoint_block_length} = {a} < prev_step_block {self.prev_step_block} % checkpoint_block_length {self.config.neuron.checkpoint_block_length} = {b}"
+    )
     return (
         ttl_get_block(self) % self.config.neuron.checkpoint_block_length
         < self.prev_step_block % self.config.neuron.checkpoint_block_length
@@ -150,18 +155,27 @@ def resync_metagraph(self: "validator.neuron.neuron"):
 
     # Check if the metagraph axon info has changed.
     metagraph_axon_info_updated = previous_metagraph.axons != self.metagraph.axons
+    bt.logging.debug(f"metagraph_axon_info_updated: {metagraph_axon_info_updated}")
 
     if metagraph_axon_info_updated:
-        bt.logging.info("Metagraph updated, re-syncing moving averages")
+        bt.logging.info(
+            "resync_metagraph() Metagraph updated, re-syncing moving averages"
+        )
 
         # Zero out all hotkeys that have been replaced.
         for uid, hotkey in enumerate(self.metagraph.hotkeys):
             if hotkey != self.metagraph.hotkeys[uid]:
+                bt.logging.debug(
+                    f"resync_metagraph() old hotkey {hotkey} | uid {uid} has been replaced by {self.metagraph.hotkeys[uid]}"
+                )
                 self.moving_averaged_scores[uid] = 0  # hotkey has been replaced
 
         # Check to see if the metagraph has changed size.
         # If so, we need to add new hotkeys and moving averages.
         if len(self.moving_averaged_scores) < len(self.metagraph.hotkeys):
+            bt.logging.info(
+                f"resync_metagraph() Metagraph has grown, adding new hotkeys and moving averages"
+            )
             # Update the size of the moving average scores.
             new_moving_average = torch.zeros((self.metagraph.n)).to(self.device)
             min_len = min(len(self.metagraph.hotkeys), len(self.moving_averaged_scores))
