@@ -62,15 +62,14 @@ class Store(bt.Synapse):
 
     def __str__(self):
         return (
-            f"Store(encrypted_data={self.encrypted_data[:32]}, "
+            f"Store(encrypted_data={self.encrypted_data[:12]}, "
             f"curve={self.curve}, "
             f"g={self.g}, "
             f"h={self.h}, "
-            f"seed={self.seed}, "
-            f"randomness={self.randomness}, "
-            f"commitment={self.commitment}, "
-            f"signature={self.signature}, "
-            f"commitment_hash={self.commitment_hash})"
+            f"seed={self.seed[:12]}, "
+            f"randomness={self.randomness[:12]}, "
+            f"commitment={self.commitment[:12]}, "
+            f"commitment_hash={self.commitment_hash[:12]})"
             f"axon={self.axon.dict()}, "
             f"dendrite={self.dendrite.dict()}"
         )
@@ -136,6 +135,26 @@ class Challenge(bt.Synapse):
         allow_mutation=False,
     )
 
+    def __str__(self):
+        return (
+            f"Challenge(challenge_hash={self.challenge_hash[:12]}, "
+            f"challenge_index={self.challenge_index}, "
+            f"chunk_size={self.chunk_size}, "
+            f"g={self.g}, "
+            f"h={self.h}, "
+            f"curve={self.curve}, "
+            f"seed={self.seed[:12]}, "
+            f"commitment_hash={self.commitment_hash[:12]}, "
+            f"commitment_proof={self.commitment_proof[:12]}, "
+            f"commitment={self.commitment[:12]}, "
+            f"data_chunk={self.data_chunk[:12]}, "
+            f"randomness={self.randomness[:12]}, "
+            f"merkle_proof={self.merkle_proof[:12]}, "
+            f"merkle_root={self.merkle_root[:12]})"
+            f"axon={self.axon.dict()}, "
+            f"dendrite={self.dendrite.dict()}"
+        )
+
 
 class Retrieve(bt.Synapse):
     # Where to find the data
@@ -153,6 +172,17 @@ class Retrieve(bt.Synapse):
         description="A list of required fields for the hash.",
         allow_mutation=False,
     )
+
+    def __str__(self):
+        return (
+            f"Retrieve(data_hash={self.data_hash[:12]}, "
+            f"seed={self.seed[:12]}, "
+            f"data={self.data[:12]}, "
+            f"commitment_hash={self.commitment_hash[:12]}, "
+            f"commitment_proof={self.commitment_proof[:12]})"
+            f"axon={self.axon.dict()}, "
+            f"dendrite={self.dendrite.dict()}"
+        )
 
 
 class RetrieveUser(bt.Synapse):
