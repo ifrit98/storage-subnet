@@ -293,6 +293,12 @@ def add_args(cls, parser):
         help="If set, we will profile the neuron network and I/O actions.",
         default=False,
     )
+    parser.add_argument(
+        "--neuron.debug_logging_path",
+        type=str,
+        help="The path to save debug logs.",
+        default="debug_logs.txt",
+    )
 
     # Redis arguments
     parser.add_argument(
