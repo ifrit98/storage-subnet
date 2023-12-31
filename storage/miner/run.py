@@ -67,7 +67,6 @@ def run(self):
     bt.logging.info(f"Starting main loop")
     step = 0
     wait_factor_next_set_weights = 0
-    tempo = 360
     try:
         while not self.should_exit:
             start_epoch = time.time()
@@ -78,7 +77,8 @@ def run(self):
             self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
 
             hyperparameters = self.subtensor.get_subnet_hyperparameters(self.config.netuid, self.current_block)
-            bt.logging.info(f'Tempo for subnet: {hyperparameters.tempo}')
+            tempo = hyperparameters.tempo
+            bt.logging.info(f'Tempo for subnet: {tempo}')
 
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
