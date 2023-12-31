@@ -77,6 +77,9 @@ def run(self):
             self.metagraph.sync(subtensor=self.subtensor)
             self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
 
+            hyperparameters = self.subtensor.get_subnet_hyperparameters(self.config.netuid, self.current_block)
+            bt.logging.info(f'Tempo for subnet: {hyperparameters.tempo}')
+
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
             # with 'seconds_to_wait_to_log_presence_message' we control the logging factor in the wait
