@@ -184,10 +184,9 @@ async def challenge_data(self):
 
     if self.config.neuron.verbose and self.config.neuron.log_responses:
         [
-            bt.logging.trace(
-                f"Challenge response {uid} | {pformat(response[0].axon.dict())}"
-            )
+            bt.logging.trace(f"Challenge response {uid} | {str(response)}")
             for uid, response in zip(uids, responses)
+            if response != None
         ]
 
     # Compute the rewards for the responses given the prompt.
@@ -198,7 +197,7 @@ async def challenge_data(self):
     remove_reward_idxs = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
         bt.logging.trace(
-            f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
+            f"Challenge idx {idx} uid {uid} verified {verified} response {str(response)}"
         )
 
         hotkey = self.metagraph.hotkeys[uid]

@@ -42,7 +42,7 @@ def check_config(cls, config: "bt.Config"):
             config.neuron.name,
         )
     )
-    log_path = os.path.join(full_path, timestamp)
+    log_path = os.path.join(full_path, "logs", timestamp)
 
     config.neuron.full_path = os.path.expanduser(full_path)
     config.neuron.log_path = log_path

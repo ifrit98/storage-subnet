@@ -161,10 +161,8 @@ async def retrieve_data(
 
     if self.config.neuron.verbose and self.config.neuron.log_responses:
         [
-            bt.logging.trace(
-                f"Retrieve response: {uid} | {pformat(response.dendrite.dict())}"
-            )
-            for uid, (response, _) in zip(uids, response_tuples)
+            bt.logging.trace(f"Retrieve response: {uid} | {str(response)}")
+            for uid, (response, _, _) in zip(uids, response_tuples)
         ]
     rewards: torch.FloatTensor = torch.zeros(
         len(response_tuples), dtype=torch.float32
@@ -408,12 +406,12 @@ async def retrieve_broadband(self, full_hash: str):
                         f"Failed to verify store commitment from UID: {uid}"
                     )
 
-    bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
+    bt.logging.trace(f"chunks after: {[chunk[:12] for chunk in chunks.values()]}")
     bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
 
     # Reconstruct the data
     encrypted_data = b"".join(chunks.values())
-    bt.logging.trace(f"retrieved data: {encrypted_data[:100]}")
+    bt.logging.trace(f"retrieved data: {encrypted_data[:12]}")
 
     # Retrieve user encryption payload (if exists)
     encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
