@@ -159,11 +159,11 @@ async def retrieve_data(
         tasks.append(asyncio.create_task(handle_retrieve(self, uid)))
     response_tuples = await asyncio.gather(*tasks)
 
-    if self.config.neuron.verbose and self.config.neuron.log_responses:
-        [
-            bt.logging.trace(f"Retrieve response: {uid} | {str(response)}")
-            for uid, (response, _, _) in zip(uids, response_tuples)
-        ]
+    # if self.config.neuron.verbose and self.config.neuron.log_responses:
+    #     [
+    #         bt.logging.trace(f"Retrieve response: {uid} | {str(response)}")
+    #         for uid, (response, _, _) in zip(uids, response_tuples)
+    #     ]
     rewards: torch.FloatTensor = torch.zeros(
         len(response_tuples), dtype=torch.float32
     ).to(self.device)
@@ -399,7 +399,7 @@ async def retrieve_broadband(self, full_hash: str):
                             f"Adding chunk {i} to chunks, size: {sys.getsizeof(response.data)}"
                         )
                         chunks[i] = base64.b64decode(response.data)
-                        bt.logging.debug(f"chunk {i} | {chunks[i][:100]}")
+                        bt.logging.debug(f"chunk {i} | {chunks[i][:10]}")
                 else:
                     uid = self.metagraph.hotkeys.index(response.axon.hotkey)
                     bt.logging.error(

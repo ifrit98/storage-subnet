@@ -142,12 +142,12 @@ async def store_encrypted_data(
         )
 
         # Log the results for monitoring purposes.
-        if self.config.neuron.verbose and self.config.neuron.log_responses:
-            bt.logging.debug(f"Store round {retries + 1}.")
-            [
-                bt.logging.debug(f"Store response: {str(response)}")
-                for response in responses
-            ]
+        # if self.config.neuron.verbose and self.config.neuron.log_responses:
+        #     bt.logging.debug(f"Store round {retries + 1}.")
+        #     [
+        #         bt.logging.debug(f"Store response: {str(response)}")
+        #         for response in responses
+        #     ]
 
         # Compute the rewards for the responses given proc time.
         rewards: torch.FloatTensor = torch.zeros(
@@ -455,7 +455,7 @@ async def store_broadband(
                     f"Start index: {dist['start_idx']}, End index: {dist['end_idx']}"
                 )
                 chunk = encrypted_data[dist["start_idx"] : dist["end_idx"]]
-                bt.logging.trace(f"chunk: {chunk[:100]}")
+                bt.logging.trace(f"chunk: {chunk[:12]}")
                 dist["chunk_hash"] = hash_data(chunk)
                 bt.logging.debug(
                     f"Chunk {i} | uid distribution: {dist['uids']} | size: {dist['chunk_size']}"
