@@ -48,7 +48,7 @@ def check_config(cls, config: "bt.Config"):
         # Add custom event logger for the events.
         logger.level("EVENTS", no=38, icon="📝")
         logger.add(
-            config.neuron.full_path + "/" + "completions.log",
+            config.neuron.full_path + "/" + "EVENTS.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -59,7 +59,7 @@ def check_config(cls, config: "bt.Config"):
         )
 
         logger.add(
-            config.neuron.full_path + "/" + "DEBUG.log",
+            config.neuron.full_path + "/" + "INFO.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
