@@ -20,6 +20,7 @@ import os
 import time
 import torch
 import argparse
+import datetime
 import bittensor as bt
 from loguru import logger
 
@@ -31,6 +32,7 @@ def check_config(cls, config: "bt.Config"):
     if config.mock:
         config.wallet._mock = True
 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     full_path = os.path.expanduser(
         "{}/{}/{}/netuid{}/{}".format(
             config.logging.logging_dir,
@@ -40,15 +42,21 @@ def check_config(cls, config: "bt.Config"):
             config.neuron.name,
         )
     )
+    log_path = os.path.join(full_path, timestamp)
+
     config.neuron.full_path = os.path.expanduser(full_path)
+    config.neuron.log_path = log_path
+
     if not os.path.exists(config.neuron.full_path):
         os.makedirs(config.neuron.full_path, exist_ok=True)
+    if not os.path.exists(config.neuron.log_path):
+        os.makedirs(config.neuron.log_path, exist_ok=True)
 
     if not config.neuron.dont_save_events:
         # Add custom event logger for the events.
         logger.level("EVENTS", no=38, icon="📝")
         logger.add(
-            config.neuron.full_path + "/" + "EVENTS.log",
+            config.neuron.log_path + "/" + "EVENTS.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -59,7 +67,7 @@ def check_config(cls, config: "bt.Config"):
         )
 
         logger.add(
-            config.neuron.full_path + "/" + "INFO.log",
+            config.neuron.log_path + "/" + "INFO.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -70,7 +78,7 @@ def check_config(cls, config: "bt.Config"):
         )
 
         logger.add(
-            config.neuron.full_path + "/" + "DEBUG.log",
+            config.neuron.log_path + "/" + "DEBUG.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -81,7 +89,7 @@ def check_config(cls, config: "bt.Config"):
         )
 
         logger.add(
-            config.neuron.full_path + "/" + "TRACE.log",
+            config.neuron.log_path + "/" + "TRACE.log",
             rotation=config.neuron.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -110,6 +118,8 @@ def check_config(cls, config: "bt.Config"):
                 "Please abort the process if you are not intending to purge all your challenge data!"
             )
             time.sleep(60)
+
+    bt.logging.info(f"Loaded config in fullpath: {config.neuron.full_path}")
 
 
 def add_args(cls, parser):

@@ -103,9 +103,9 @@ async def store_encrypted_data(
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
 
     if self.config.neuron.verbose:
-        bt.logging.debug(f"storing user data: {encrypted_data[:200]}...")
+        bt.logging.debug(f"storing user data: {encrypted_data[:12]}...")
         bt.logging.debug(f"storing user hash: {data_hash}")
-        bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:200]}...")
+        bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:12]}...")
 
     synapse = protocol.Store(
         encrypted_data=b64_encrypted_data,

@@ -66,10 +66,10 @@ class Store(bt.Synapse):
             f"curve={self.curve}, "
             f"g={self.g}, "
             f"h={self.h}, "
-            f"seed={self.seed[:12]}, "
-            f"randomness={self.randomness[:12]}, "
-            f"commitment={self.commitment[:12]}, "
-            f"commitment_hash={self.commitment_hash[:12]})"
+            f"seed={str(self.seed)[:12]}, "
+            f"randomness={str(self.randomness)[:12]}, "
+            f"commitment={str(self.commitment)[:12]}, "
+            f"commitment_hash={str(self.commitment_hash)[:12]})"
             f"axon={self.axon.dict()}, "
             f"dendrite={self.dendrite.dict()}"
         )
@@ -137,20 +137,20 @@ class Challenge(bt.Synapse):
 
     def __str__(self):
         return (
-            f"Challenge(challenge_hash={self.challenge_hash[:12]}, "
+            f"Challenge(challenge_hash={str(self.challenge_hash[:12])}, "
             f"challenge_index={self.challenge_index}, "
             f"chunk_size={self.chunk_size}, "
             f"g={self.g}, "
             f"h={self.h}, "
             f"curve={self.curve}, "
-            f"seed={self.seed[:12]}, "
-            f"commitment_hash={self.commitment_hash[:12]}, "
-            f"commitment_proof={self.commitment_proof[:12]}, "
-            f"commitment={self.commitment[:12]}, "
-            f"data_chunk={self.data_chunk[:12]}, "
-            f"randomness={self.randomness[:12]}, "
-            f"merkle_proof={self.merkle_proof[:12]}, "
-            f"merkle_root={self.merkle_root[:12]})"
+            f"seed={str(self.seed[:12])}, "
+            f"commitment_hash={str(self.commitment_hash[:12])}, "
+            f"commitment_proof={str(self.commitment_proof[:12])}, "
+            f"commitment={str(self.commitment[:12])}, "
+            f"data_chunk={str(self.data_chunk[:12])}, "
+            f"randomness={str(self.randomness[:12])}, "
+            f"merkle_proof={str(self.merkle_proof[:12])}, "
+            f"merkle_root={str(self.merkle_root[:12])})"
             f"axon={self.axon.dict()}, "
             f"dendrite={self.dendrite.dict()}"
         )
@@ -175,11 +175,11 @@ class Retrieve(bt.Synapse):
 
     def __str__(self):
         return (
-            f"Retrieve(data_hash={self.data_hash[:12]}, "
-            f"seed={self.seed[:12]}, "
-            f"data={self.data[:12]}, "
-            f"commitment_hash={self.commitment_hash[:12]}, "
-            f"commitment_proof={self.commitment_proof[:12]})"
+            f"Retrieve(data_hash={str(self.data_hash[:12])}, "
+            f"seed={str(self.seed[:12])}, "
+            f"data={str(self.data[:12])}, "
+            f"commitment_hash={str(self.commitment_hash[:12])}, "
+            f"commitment_proof={str(self.commitment_proof[:12])})"
             f"axon={self.axon.dict()}, "
             f"dendrite={self.dendrite.dict()}"
         )
