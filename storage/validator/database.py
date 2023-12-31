@@ -77,6 +77,9 @@ async def get_metadata_for_hotkey(
     """
     # Fetch all fields (data hashes) and values (metadata) for the hotkey
     all_data_hashes = await database.hgetall(f"hotkey:{ss58_address}")
+    bt.logging.trace(
+        f"get_metadata_for_hotkey() # hashes found for hotkey {ss58_address}: {len(all_data_hashes)}"
+    )
 
     # Deserialize the metadata for each data hash
     return {
@@ -120,6 +123,9 @@ async def remove_hashes_for_hotkey(
     Returns:
         A dictionary where keys are data hashes and values are the associated metadata.
     """
+    bt.logging.trace(
+        f"remove_hashes_for_hotkey() removing {len(hashes)} hashes from hotkey {ss58_address}"
+    )
     for _hash in hashes:
         await remove_metadata_from_hotkey(ss58_address, _hash, database)
 
@@ -259,7 +265,9 @@ async def get_all_hotkeys_for_data_hash(
     return list(all_hotkeys)
 
 
-async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
+async def total_hotkey_storage(
+    hotkey: str, database: aioredis.Redis, verbose: bool = False
+) -> int:
     """
     Calculates the total storage used by a hotkey in the database.
 
@@ -274,7 +282,9 @@ async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
     keys = await database.hkeys(f"hotkey:{hotkey}")
     for data_hash in keys:
         # Get the metadata for the current data hash
-        metadata = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, database)
+        metadata = await get_metadata_for_hotkey_and_hash(
+            hotkey, data_hash, database, verbose
+        )
         if metadata:
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
@@ -295,7 +305,7 @@ async def hotkey_at_capacity(
         True if the hotkey is at capacity, False otherwise.
     """
     # Get the total storage used by the hotkey
-    total_storage = await total_hotkey_storage(hotkey, database)
+    total_storage = await total_hotkey_storage(hotkey, database, verbose)
     # Check if the hotkey is at capacity
     byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
     if byte_limit is None:
@@ -322,7 +332,9 @@ async def hotkey_at_capacity(
         return False
 
 
-async def cache_hotkeys_capacity(hotkeys, database):
+async def cache_hotkeys_capacity(
+    hotkeys: List[str], database: aioredis.Redis, verbose: bool = False
+):
     """
     Caches the capacity information for a list of hotkeys.
 
@@ -337,7 +349,7 @@ async def cache_hotkeys_capacity(hotkeys, database):
 
     for hotkey in hotkeys:
         # Get the total storage used by the hotkey
-        total_storage = await total_hotkey_storage(hotkey, database)
+        total_storage = await total_hotkey_storage(hotkey, database, verbose)
         # Get the byte limit for the hotkey
         byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
 

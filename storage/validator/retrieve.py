@@ -69,7 +69,9 @@ async def handle_retrieve(self, uid):
     data_hash = random.choice(keys).decode("utf-8")
     bt.logging.trace(f"handle_retrieve() data_hash: {data_hash}")
 
-    data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+    data = await get_metadata_for_hotkey_and_hash(
+        hotkey, data_hash, self.database, self.config.neuron.verbose
+    )
     axon = self.metagraph.axons[uid]
 
     synapse = protocol.Retrieve(
@@ -87,7 +89,9 @@ async def handle_retrieve(self, uid):
         bt.logging.trace(f"Fetching AES payload from UID: {uid}")
 
         # Load the data for this miner from validator storage
-        data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+        data = await get_metadata_for_hotkey_and_hash(
+            hotkey, data_hash, self.database, self.config.neuron.verbose
+        )
 
         # If we reach here, this miner has passed verification. Update the validator storage.
         data["prev_seed"] = synapse.seed

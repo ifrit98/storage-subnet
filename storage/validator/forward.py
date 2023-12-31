@@ -77,8 +77,8 @@ async def forward(self):
     # Monitor every 5 steps
     if self.step % self.config.neuron.monitor_step_length == 0:
         down_uids = await monitor(self)
-        bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
         if len(down_uids) > 0:
+            bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
             await rebalance_data(
                 self,
                 k=2,  # increase redundancy

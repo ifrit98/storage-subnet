@@ -197,10 +197,9 @@ async def challenge_data(self):
 
     remove_reward_idxs = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-        if self.config.neuron.verbose:
-            bt.logging.trace(
-                f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
-            )
+        bt.logging.trace(
+            f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
+        )
 
         hotkey = self.metagraph.hotkeys[uid]
 
@@ -251,7 +250,11 @@ async def challenge_data(self):
             if verified != None
         ]
     )
+    bt.logging.debug(
+        f"challenge_data() full rewards: {rewards} | uids {uids} | uids to remove {remove_reward_idxs}"
+    )
     rewards = remove_indices_from_tensor(rewards, remove_reward_idxs)
+    bt.logging.debug(f"challenge_data() kept rewards: {rewards} | uids {uids}")
 
     bt.logging.trace("Applying challenge rewards")
     apply_reward_scores(

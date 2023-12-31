@@ -143,9 +143,9 @@ async def store_encrypted_data(
 
         # Log the results for monitoring purposes.
         if self.config.neuron.verbose and self.config.neuron.log_responses:
-            bt.logging.debug(f"Initial store round 1.")
+            bt.logging.debug(f"Store round {retries + 1}.")
             [
-                bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                bt.logging.debug(f"Store response: {str(response)}")
                 for response in responses
             ]
 
@@ -176,7 +176,7 @@ async def store_encrypted_data(
                     ttl,
                 )
             bt.logging.debug(
-                f"Stored data in database with key: {hotkey} | {data_hash}"
+                f"Stored data in database with hotkey: {hotkey} | uid {uid} | {data_hash}"
             )
 
         def failure(uid):

@@ -51,8 +51,8 @@ async def ping_uids(self, uids):
         bt.logging.error(f"Dendrite ping failed: {e}")
         successful_uids = []
         failed_uids = uids
-    bt.logging.trace("ping() successful uids:", successful_uids)
-    bt.logging.trace("ping() failed uids    :", failed_uids)
+    bt.logging.debug("ping() successful uids:", successful_uids)
+    bt.logging.debug("ping() failed uids    :", failed_uids)
     return successful_uids, failed_uids
 
 
@@ -96,7 +96,7 @@ async def compute_and_ping_chunks(self, distributions):
             new_uids = await get_available_query_miners(
                 self, k=target_number_of_uids, exclude=successful_uids
             )
-            bt.logging.trace("new uids:", new_uids)
+            bt.logging.trace("compute_and_ping_chunks() new uids:", new_uids)
 
             # Update the distribution with new UIDs
             dist["uids"] = tuple(new_uids)
@@ -104,7 +104,9 @@ async def compute_and_ping_chunks(self, distributions):
 
         # Log if the maximum retries are reached without enough successful UIDs
         if len(successful_uids) < target_number_of_uids:
-            bt.logging.warning(f"Insufficient successful UIDs for distribution: {dist}")
+            bt.logging.warning(
+                f"compute_and_ping_chunks(): Insufficient successful UIDs for distribution: {dist}"
+            )
 
     # Continue with your logic using the updated distributions
     bt.logging.trace("new distributions:", distributions)

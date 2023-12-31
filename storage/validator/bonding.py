@@ -111,6 +111,7 @@ async def update_statistics(
     """
     # Check and see if this miner is registered.
     if not await miner_is_registered(ss58_address, database):
+        bt.logging.debug(f"Registering new miner {ss58_address}...")
         await register_miner(ss58_address, database)
 
     # Update statistics in the stats hash
