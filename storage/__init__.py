@@ -17,13 +17,41 @@
 # DEALINGS IN THE SOFTWARE.
 
 
+class StorageVersion:
+    def __init__(self, major, minor, patch):
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+
+    @classmethod
+    def from_string(cls, version_str):
+        parts = version_str.split(".")
+        if len(parts) != 3:
+            raise ValueError("Invalid version string format")
+        return cls(int(parts[0]), int(parts[1]), int(parts[2]))
+
+    def to_spec_version(self):
+        return (100 * self.major) + (10 * self.minor) + (1 * self.patch)
+
+    def __str__(self):
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    def __eq__(self, other):
+        return (
+            self.major == other.major and
+            self.minor == other.minor and
+            self.patch == other.patch
+        )
+
+    def __lt__(self, other):
+        return (
+            (self.major, self.minor, self.patch) <
+            (other.major, other.minor, other.patch)
+        )
+
 __version__ = "1.2.0"
-version_split = __version__.split(".")
-__spec_version__ = (
-    (1000 * int(version_split[0]))
-    + (10 * int(version_split[1]))
-    + (1 * int(version_split[2]))
-)
+version = StorageVersion.from_string(__version__)
+__spec_version__ = version.to_spec_version()
 
 # Import all submodules.
 from . import protocol
