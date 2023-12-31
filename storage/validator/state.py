@@ -163,7 +163,7 @@ def resync_metagraph(self: "validator.neuron.neuron"):
         )
 
         # Zero out all hotkeys that have been replaced.
-        for uid, hotkey in enumerate(self.metagraph.hotkeys):
+        for uid, hotkey in enumerate(previous_metagraph.hotkeys):
             if hotkey != self.metagraph.hotkeys[uid]:
                 bt.logging.debug(
                     f"resync_metagraph() old hotkey {hotkey} | uid {uid} has been replaced by {self.metagraph.hotkeys[uid]}"
