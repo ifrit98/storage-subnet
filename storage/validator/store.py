@@ -122,7 +122,7 @@ async def store_encrypted_data(
         max_retries=max_retries,
         exclude_uids=exclude_uids,
     )
-    bt.logging.debug(f"store uids: {uids}")
+    bt.logging.debug(f"store_encrypted_data() uids: {uids}")
 
     axons = [self.metagraph.axons[uid] for uid in uids]
     failed_uids = [None]

@@ -60,12 +60,14 @@ async def handle_retrieve(self, uid):
     keys = await self.database.hkeys(f"hotkey:{hotkey}")
 
     if keys == []:
-        bt.logging.warning(f"No data found for uid: {uid} | hotkey: {hotkey}")
+        bt.logging.warning(
+            f"handle_retrieve() No data found for uid: {uid} | hotkey: {hotkey}"
+        )
         # Create a dummy response to send back
         return None, ""
 
     data_hash = random.choice(keys).decode("utf-8")
-    bt.logging.trace(f"handle_retrieve data_hash: {data_hash}")
+    bt.logging.trace(f"handle_retrieve() data_hash: {data_hash}")
 
     data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
     axon = self.metagraph.axons[uid]
@@ -94,7 +96,9 @@ async def handle_retrieve(self, uid):
         # TODO: get a temp link from the server to send back to the client instead
 
     except Exception as e:
-        bt.logging.error(f"Failed to retrieve data from UID: {uid} with error: {e}")
+        bt.logging.error(
+            f"Failed to retrieve data from UID {uid} | hotkey {hotkey} with error: {e}"
+        )
 
     return response[0], data_hash, synapse.seed
 
@@ -141,9 +145,9 @@ async def retrieve_data(
         if await get_metadata_for_hotkey(self.metagraph.hotkeys[uid], self.database)
         != {}
     ]
-    bt.logging.debug(f"UIDs to query   : {uids}")
+    bt.logging.debug(f"retrieve() UIDs to query   : {uids}")
     bt.logging.debug(
-        f"Hotkeys to query: {[self.metagraph.hotkeys[uid][:5] for uid in uids]}"
+        f"retrieve() Hotkeys to query: {[self.metagraph.hotkeys[uid] for uid in uids]}"
     )
 
     tasks = []
@@ -241,6 +245,7 @@ async def retrieve_data(
         event.rewards.append(rewards[idx].item())
 
     bt.logging.trace("Applying retrieve rewards")
+    bt.logging.debug(f"retrieve() rewards: {rewards}")
     apply_reward_scores(
         self,
         uids,

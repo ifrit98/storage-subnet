@@ -213,12 +213,18 @@ def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
     normalized_times = min_max_normalize(process_times)
 
     # Create a dictionary mapping UIDs to normalized times
-    uid_to_normalized_time = {uid: normalized_time for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)}
-
+    uid_to_normalized_time = {
+        uid: normalized_time
+        for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)
+    }
+    bt.logging.debug(
+        f"scale_rewards_by_min_max() uid_to_normalized_time: {uid_to_normalized_time}"
+    )
     # Scale the rewards with normalized times
     for i, uid in enumerate(uids):
         normalized_time_for_uid = uid_to_normalized_time[uid]
         rewards[i] += rewards[i] * normalized_time_for_uid
+    bt.logging.debug(f"scale_rewards_by_min_max() rewards: {rewards}")
     return rewards
 
 
@@ -248,7 +254,7 @@ def apply_reward_scores(
         if mode == "sigmoid"
         else scale_rewards_by_min_max(uids, responses, rewards, timeout=timeout)
     )
-    bt.logging.debug(f"Scaled rewards: {scaled_rewards}")
+    bt.logging.debug(f"apply_reward_scores() Scaled rewards: {scaled_rewards}")
 
     # Compute forward pass rewards
     # shape: [ metagraph.n ]
@@ -305,11 +311,13 @@ async def create_reward_vector(
         success = verify_fn(synapse=response)
         if success:
             bt.logging.debug(
-                f"Successfully verified {synapse.__class__} commitment from UID: {uid}"
+                f"Successfully verified {synapse.__class__} commitment from UID: {uid} | hotkey: {hotkey}"
             )
             await callback(hotkey, idx, uid, response)
         else:
-            bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+            bt.logging.error(
+                f"create_reward_vector() Failed to verify store commitment from UID: {uid} | hotkey: {hotkey}"
+            )
             fail_callback(uid)
 
         # Update the storage statistics

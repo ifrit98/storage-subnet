@@ -90,14 +90,18 @@ def run(self):
             presence_message_seconds_count = 0
             while should_wait_until_next_epoch(
                 self.current_block,
-                self.last_epoch_block, 
-                self.config.miner.set_weights_epoch_length
+                self.last_epoch_block,
+                self.config.miner.set_weights_epoch_length,
             ):
                 # --- Wait for next bloc.
                 time.sleep(seconds_waiting_in_loop)
                 presence_message_seconds_count += seconds_waiting_in_loop
 
-                if presence_message_seconds_count % seconds_to_wait_to_log_presence_message == 0:
+                if (
+                    presence_message_seconds_count
+                    % seconds_to_wait_to_log_presence_message
+                    == 0
+                ):
                     self.current_block = self.subtensor.get_current_block()
 
                 bt.logging.info(f"Miner running at block {self.current_block}...")
@@ -154,8 +158,12 @@ def run(self):
             else:
                 self.current_block = self.subtensor.get_current_block()
                 num_blocks_to_wait = 3
-                bt.logging.info(f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again.")
-                time.sleep(num_blocks_to_wait*12) # It takes 12 secs to generate a block
+                bt.logging.info(
+                    f"Weights were not set. Waiting {num_blocks_to_wait} blocks to set weights again."
+                )
+                time.sleep(
+                    num_blocks_to_wait * 12
+                )  # It takes 12 secs to generate a block
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:

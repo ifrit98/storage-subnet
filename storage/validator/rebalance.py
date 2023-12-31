@@ -51,6 +51,7 @@ async def rebalance_data_for_hotkey(
     try:
         source_uid = self.metagraph.hotkeys.index(source_hotkey)
     except Exception as e:
+        source_uid = -1
         bt.logging.warning(
             f"Distribute source hotkey {source_hotkey} already replaced in metagraph."
         )
@@ -58,7 +59,7 @@ async def rebalance_data_for_hotkey(
     metadata = await get_metadata_for_hotkey(source_hotkey, self.database)
 
     miner_hashes = list(metadata)
-    bt.logging.trace(f"miner hashes {miner_hashes[:5]}")
+    bt.logging.debug(f"Rebalancing miner hashes {miner_hashes[:5]}")
 
     rebalance_hashes = []
     for _hash in miner_hashes:
@@ -69,23 +70,33 @@ async def rebalance_data_for_hotkey(
 
     if hotkey_replaced:
         # Reset miner statistics
+        bt.logging.debug(f"Resetting statistics for hotkey {source_hotkey}")
         await register_miner(source_hotkey, self.database)
         # Update index for full and chunk hashes for retrieve
         # Iterate through ordered metadata for all full hashses this miner had
+        bt.logging.debug(f"Removing all challenge metadata for hotkey {source_hotkey}")
         async for file_key in self.database.scan_iter("file:*"):
             file_key = file_key.decode("utf-8")
             file_hash = file_key.split(":")[1]
             # Get all ordered metadata for this file
             ordered_metadata = await get_ordered_metadata(file_hash, self.database)
+            bt.logging.debug(
+                f"Length of removed ordered metadata: {len(ordered_metadata)} for hotkey: {source_hotkey}"
+            )
             for chunk_metadata in ordered_metadata:
                 # Remove the dropped miner from the chunk metadata
                 await remove_hotkey_from_chunk(
                     chunk_metadata, source_hotkey, self.database
                 )
         # Purge challenge hashes so new miner doesn't get hosed
+        bt.logging.debug(f"Purging all challenge hashes for hotkey {source_hotkey}")
         await purge_challenges_for_hotkey(source_hotkey, self.database)
 
+    bt.logging.debug(
+        f"Rebalancing hashes: {rebalance_hashes[:5]} for hotkey {source_hotkey} | uid {source_uid}"
+    )
     for _hash in rebalance_hashes:
+        bt.logging.trace(f"Rebalancing hash {_hash} for hotkey {source_hotkey}")
         await rebalance_data_for_hash(self, data_hash=_hash, k=k)
 
 
@@ -103,6 +114,7 @@ async def rebalance_data(
     dropped_hotkeys: typing.List[str] = [],
     hotkey_replaced: bool = False,
 ):
+    bt.logging.debug(f"Rebalancing data for dropped hotkeys: {dropped_hotkeys}")
     if isinstance(dropped_hotkeys, str):
         dropped_hotkeys = [dropped_hotkeys]
 
