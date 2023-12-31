@@ -155,8 +155,11 @@ def resync_metagraph(self: "validator.neuron.neuron"):
         bt.logging.info("Metagraph updated, re-syncing moving averages")
 
         # Zero out all hotkeys that have been replaced.
-        for uid, hotkey in enumerate(self.metagraph.hotkeys):
+        for uid, hotkey in enumerate(previous_metagraph.hotkeys):
             if hotkey != self.metagraph.hotkeys[uid]:
+                bt.logging.debug(
+                    f"Hotkey {hotkey} has been replaced with {self.metagraph.hotkeys[uid]}"
+                )
                 self.moving_averaged_scores[uid] = 0  # hotkey has been replaced
 
         # Check to see if the metagraph has changed size.
