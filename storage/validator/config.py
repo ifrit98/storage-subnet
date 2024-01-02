@@ -207,7 +207,7 @@ def add_args(cls, parser):
         "--neuron.moving_average_alpha",
         type=float,
         help="Moving average alpha parameter, how much to add of the new observation.",
-        default=0.05,
+        default=0.02,
     )
     parser.add_argument(
         "--neuron.semaphore_size",
