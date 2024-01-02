@@ -215,7 +215,7 @@ async def challenge_data(self):
 
         # Apply reward for this challenge
         tier_factor = await get_tier_factor(hotkey, self.database)
-        rewards[idx] = 1.0 * tier_factor if verified else -0.02 * tier_factor
+        rewards[idx] = 1.0 * tier_factor if verified else -0.01 * tier_factor
 
         # Log the event data for this specific challenge
         event.uids.append(uid)
