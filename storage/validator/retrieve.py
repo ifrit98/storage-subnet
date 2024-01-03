@@ -60,14 +60,18 @@ async def handle_retrieve(self, uid):
     keys = await self.database.hkeys(f"hotkey:{hotkey}")
 
     if keys == []:
-        bt.logging.warning(f"No data found for uid: {uid} | hotkey: {hotkey}")
+        bt.logging.warning(
+            f"handle_retrieve() No data found for uid: {uid} | hotkey: {hotkey}"
+        )
         # Create a dummy response to send back
         return None, ""
 
     data_hash = random.choice(keys).decode("utf-8")
-    bt.logging.trace(f"handle_retrieve data_hash: {data_hash}")
+    bt.logging.trace(f"handle_retrieve() data_hash: {data_hash}")
 
-    data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+    data = await get_metadata_for_hotkey_and_hash(
+        hotkey, data_hash, self.database, self.config.neuron.verbose
+    )
     axon = self.metagraph.axons[uid]
 
     synapse = protocol.Retrieve(
@@ -85,7 +89,9 @@ async def handle_retrieve(self, uid):
         bt.logging.trace(f"Fetching AES payload from UID: {uid}")
 
         # Load the data for this miner from validator storage
-        data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+        data = await get_metadata_for_hotkey_and_hash(
+            hotkey, data_hash, self.database, self.config.neuron.verbose
+        )
 
         # If we reach here, this miner has passed verification. Update the validator storage.
         data["prev_seed"] = synapse.seed
@@ -94,7 +100,9 @@ async def handle_retrieve(self, uid):
         # TODO: get a temp link from the server to send back to the client instead
 
     except Exception as e:
-        bt.logging.error(f"Failed to retrieve data from UID: {uid} with error: {e}")
+        bt.logging.error(
+            f"Failed to retrieve data from UID {uid} | hotkey {hotkey} with error: {e}"
+        )
 
     return response[0], data_hash, synapse.seed
 
@@ -141,9 +149,9 @@ async def retrieve_data(
         if await get_metadata_for_hotkey(self.metagraph.hotkeys[uid], self.database)
         != {}
     ]
-    bt.logging.debug(f"UIDs to query   : {uids}")
+    bt.logging.debug(f"retrieve() UIDs to query   : {uids}")
     bt.logging.debug(
-        f"Hotkeys to query: {[self.metagraph.hotkeys[uid][:5] for uid in uids]}"
+        f"retrieve() Hotkeys to query: {[self.metagraph.hotkeys[uid] for uid in uids]}"
     )
 
     tasks = []
@@ -151,13 +159,11 @@ async def retrieve_data(
         tasks.append(asyncio.create_task(handle_retrieve(self, uid)))
     response_tuples = await asyncio.gather(*tasks)
 
-    if self.config.neuron.verbose and self.config.neuron.log_responses:
-        [
-            bt.logging.trace(
-                f"Retrieve response: {uid} | {pformat(response.dendrite.dict())}"
-            )
-            for uid, (response, _) in zip(uids, response_tuples)
-        ]
+    # if self.config.neuron.verbose and self.config.neuron.log_responses:
+    #     [
+    #         bt.logging.trace(f"Retrieve response: {uid} | {str(response)}")
+    #         for uid, (response, _, _) in zip(uids, response_tuples)
+    #     ]
     rewards: torch.FloatTensor = torch.zeros(
         len(response_tuples), dtype=torch.float32
     ).to(self.device)
@@ -241,6 +247,7 @@ async def retrieve_data(
         event.rewards.append(rewards[idx].item())
 
     bt.logging.trace("Applying retrieve rewards")
+    bt.logging.debug(f"retrieve() rewards: {rewards}")
     apply_reward_scores(
         self,
         uids,
@@ -392,19 +399,19 @@ async def retrieve_broadband(self, full_hash: str):
                             f"Adding chunk {i} to chunks, size: {sys.getsizeof(response.data)}"
                         )
                         chunks[i] = base64.b64decode(response.data)
-                        bt.logging.debug(f"chunk {i} | {chunks[i][:100]}")
+                        bt.logging.debug(f"chunk {i} | {chunks[i][:10]}")
                 else:
                     uid = self.metagraph.hotkeys.index(response.axon.hotkey)
                     bt.logging.error(
                         f"Failed to verify store commitment from UID: {uid}"
                     )
 
-    bt.logging.trace(f"chunks after: {[chunk[:100] for chunk in chunks.values()]}")
+    bt.logging.trace(f"chunks after: {[chunk[:12] for chunk in chunks.values()]}")
     bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
 
     # Reconstruct the data
     encrypted_data = b"".join(chunks.values())
-    bt.logging.trace(f"retrieved data: {encrypted_data[:100]}")
+    bt.logging.trace(f"retrieved data: {encrypted_data[:12]}")
 
     # Retrieve user encryption payload (if exists)
     encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
