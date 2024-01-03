@@ -90,11 +90,7 @@ def run(self):
             while should_wait_to_set_weights(
                 self.current_block,
                 self.last_epoch_block,
-<<<<<<< HEAD
                 tempo,
-=======
-                self.config.miner.set_weights_epoch_length,
->>>>>>> logging/monitor-dereg-hashes
             ):
                 # --- Wait for next bloc.
                 time.sleep(seconds_waiting_in_loop)
@@ -106,15 +102,9 @@ def run(self):
                     % seconds_to_wait_to_log_presence_message
                     == 0
                 ):
-<<<<<<< HEAD
                     bt.logging.info(
                         f"Miner UID {self.my_subnet_uid} running at block {self.current_block}..."
                     )
-=======
-                    self.current_block = self.subtensor.get_current_block()
-
-                bt.logging.info(f"Miner running at block {self.current_block}...")
->>>>>>> logging/monitor-dereg-hashes
 
                 # --- Check if we should exit.
                 if self.should_exit:
