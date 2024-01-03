@@ -209,7 +209,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"data verification failed! {pformat(response.axon.dict())}"
             )
-            rewards[idx] = -0.1  # Losing use data is unacceptable, harsh punishment
+            rewards[idx] = 0.0  # Losing use data is unacceptable, harsh punishment
 
             # Update the retrieve statistics
             await update_statistics(

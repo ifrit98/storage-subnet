@@ -207,7 +207,7 @@ async def monitor(self):
                 task_type="monitor",
                 database=self.database,
             )
-            rewards[i] = -0.01
+            rewards[i] = 0.0
 
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
             0, torch.tensor(down_uids).to(self.device), rewards
