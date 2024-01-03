@@ -178,7 +178,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"Failed to decode data from UID: {uids[idx]} with error {e}"
             )
-            rewards[idx] = -0.1
+            rewards[idx] = -0.02
 
             # Update the retrieve statistics
             await update_statistics(
@@ -209,7 +209,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"data verification failed! {pformat(response.axon.dict())}"
             )
-            rewards[idx] = -0.1  # Losing use data is unacceptable, harsh punishment
+            rewards[idx] = 0.0  # Losing use data is unacceptable, harsh punishment
 
             # Update the retrieve statistics
             await update_statistics(
