@@ -66,7 +66,6 @@ def run(self):
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
-    wait_factor_next_set_weights = 0
     try:
         while not self.should_exit:
             start_epoch = time.time()
