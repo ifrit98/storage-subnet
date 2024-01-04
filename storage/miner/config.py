@@ -150,6 +150,12 @@ def add_args(cls, parser):
         help="Wether to wait for the set_weights extrinsic to be finalized on the chain",
         default=False,
     )
+    parser.add_argument(
+        "--miner.seconds_to_wait_to_log_presence_message",
+        type=int,
+        help="How many seconds to wait before logging a presence message.",
+        default=5,
+    )
 
     # Blacklist.
     parser.add_argument(

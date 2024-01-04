@@ -88,7 +88,6 @@ def run(self):
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
             # with 'seconds_to_wait_to_log_presence_message' we control the logging factor in the wait
             seconds_waiting_in_loop = 1
-            seconds_to_wait_to_log_presence_message = 2
             presence_message_seconds_count = 0
 
             while should_wait_to_set_weights(
@@ -103,7 +102,7 @@ def run(self):
 
                 if (
                     presence_message_seconds_count
-                    % seconds_to_wait_to_log_presence_message
+                    % self.config.miner.seconds_to_wait_to_log_presence_message
                     == 0
                 ):
                     bt.logging.info(
