@@ -226,6 +226,8 @@ class miner:
         self.request_timestamps: Dict = {}
 
         self.step = 0
+        self.heartbeat_check_interval = 24  # check heartbeat every 2 blocks
+        self.heartbeat_threshold = 60  # if no heartbeat for 5 blocks, exit
 
         # Init the miner's storage request tracker
         self.request_count = 0
@@ -817,12 +819,70 @@ class miner:
             self.is_running = False
             bt.logging.debug("Stopped")
 
+    def update_heartbeat(self):
+        """
+        Updates the external heartbeat source to indicate the current running status of the thread.
+
+        This method writes the current time to a file named 'heartbeat.txt'. This file acts as an external
+        resource for monitoring the aliveness of the thread. The heartbeat file is updated with the latest
+        timestamp, reflecting that the thread is still active.
+        """
+        with open("heartbeat.txt", "w") as file:
+            file.write(str(time.time()))
+
+    def handle_thread_error(self, error):
+        """
+        Handles errors encountered within the thread by logging them to an external file.
+
+        Args:
+            error: The exception object that was raised within the thread.
+
+        This method logs the details of the encountered error to an external file named 'error_log.txt'.
+        This is useful for post-mortem analysis and debugging. The method can be extended to include error
+        recovery mechanisms or notification alerts as needed.
+        """
+        with open("error_log.txt", "a") as file:
+            file.write(f"Thread error: {error}\n")
+
+    def start_watchdog(self):
+        """
+        Initiates a watchdog thread to monitor the health of the main thread.
+
+        This method creates and starts a separate watchdog thread. The watchdog checks the 'heartbeat.txt' file
+        at regular intervals to ensure that the main thread is updating it consistently. If the heartbeat fails
+        (i.e., not updated within a certain threshold), the watchdog can take appropriate actions such as
+        exiting the program or restarting the thread.
+
+        The watchdog operates independently of the main thread and is designed to detect and respond to
+        situations where the main thread has become unresponsive.
+        """
+
+        def watchdog():
+            while self.is_running:
+                try:
+                    with open("heartbeat.txt", "r") as file:
+                        last_heartbeat = float(file.read())
+                    if time.time() - last_heartbeat > self.heartbeat_threshold:
+                        bt.logging.error("Heartbeat failed, exiting...")
+                        exit()
+                except FileNotFoundError:
+                    bt.logging.error("Heartbeat file not found, exiting...")
+                    exit()
+                except Exception as e:
+                    bt.logging.error(f"Error in watchdog: {e}")
+                time.sleep(self.heartbeat_check_interval)
+
+        self.watchdog_thread = threading.Thread(target=watchdog, daemon=True)
+        self.watchdog_thread.start()
+
     def __enter__(self):
         """
         Starts the miner's operations in a background thread upon entering the context.
-        This method facilitates the use of the miner in a 'with' statement.
+        This method facilitates the use of the miner in a 'with' statement. Also
+        starts the watchdog thread to check if the miner run thread is still alive.
         """
         self.run_in_background_thread()
+        self.start_watchdog()
 
     def __exit__(self, exc_type, exc_value, traceback):
         """

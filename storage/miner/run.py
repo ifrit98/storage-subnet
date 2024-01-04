@@ -74,11 +74,15 @@ def run(self):
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
             self.metagraph.sync(subtensor=self.subtensor)
-            self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
+            self.last_epoch_block = self.metagraph.last_update[
+                self.my_subnet_uid
+            ].item()
 
-            hyperparameters = self.subtensor.get_subnet_hyperparameters(self.config.netuid, self.current_block)
+            hyperparameters = self.subtensor.get_subnet_hyperparameters(
+                self.config.netuid, self.current_block
+            )
             tempo = hyperparameters.tempo
-            bt.logging.info(f'Tempo for subnet: {tempo}')
+            bt.logging.info(f"Tempo for subnet: {tempo}")
 
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
@@ -168,6 +172,9 @@ def run(self):
             # --- Update the miner storage information periodically.
             update_storage_stats(self)
 
+            # --- Update the heartbeat.
+            self.update_heartbeat()
+
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:
         self.axon.stop()
@@ -177,6 +184,7 @@ def run(self):
     # In case of unforeseen errors, the miner will log the error and continue operations.
     except Exception as e:
         bt.logging.error(traceback.format_exc())
+        self.handle_thread_error(e)  # in case thread dies and we don't know why
 
     finally:
         self.axon.stop()
