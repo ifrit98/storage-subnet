@@ -182,7 +182,7 @@ async def challenge_data(self):
     if self.config.neuron.verbose and self.config.neuron.log_responses:
         [
             bt.logging.trace(
-                f"Challenge response {uid} | {pformat(response[0].axon.dict())}"
+                f"Challenge response {uid} | {pformat(response[1].axon.dict())}"
             )
             for uid, response in zip(uids, responses)
         ]
