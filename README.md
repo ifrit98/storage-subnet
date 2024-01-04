@@ -331,6 +331,18 @@ The tier system classifies miners into five distinct categories, each with speci
 #### Maintaining and Advancing Tiers:
 - To advance to a higher tier, miners must consistently achieve the required success rates in their operations.
 - Periodic evaluations are conducted to ensure miners maintain the necessary performance standards to stay in their respective tiers.
+- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 sucessful requests, whether they are challenge requests, store requests, or retrie requests and must maintain a 95% success rate in all categories. 
+- Depending on how often a miner is queried, how many validators are operating at one given time, and primarily the performance of the miner, this can take several hours to several days. Assuming full 64 validator slots are occupied, this should take a matter of hours.
+
+Here is a distribution of UIDs queried over 1000 blocks based on block hash:
+![uid-dist](assets/uid_dist.png)
+
+Assuming perfect performance, that out of ~200 miner UIDs, each of which is queried rougly 34 times every 1000 rounds, namely a 3.4% chance every query round, one can expect to reach the next tier within 
+
+```bash
+hours = total_successes / prob_of_query_per_round * time_per_round / 3600
+hours = 98 # roughly 4 days at perfect performance (no challenge failures)
+```
 
 #### Conclusion:
 The tier system in FileTAO's decentralized storage network plays a pivotal role in ensuring the network's efficiency and reliability. By setting clear performance benchmarks and rewarding miners accordingly, the system fosters a competitive yet fair environment. This encourages continuous improvement among miners, ultimately leading to a robust and trustworthy decentralized storage solution.
@@ -616,7 +628,7 @@ pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/use
 - `--neuron.vpermit_tao_limit`: The maximum TAO allowed for querying a validator with a vpermit. Default: 500.
 - `--neuron.verbose`: If set, detailed verbose logs will be printed. Default: False.
 - `--neuron.log_responses`: If set, all responses will be logged. Note: These logs can be extensive. Default: False.
-- `--neuron.data_ttl`: The number of blocks before stored data expires. Default: 50000 (approximately 7 days).
+- `--neuron.data_ttl`: The number of blocks before stored challenge data expires. Default: 50000 (approximately 7 days).
 - `--neuron.profile`: If set, network and I/O actions will be profiled. Default: False.
 
 - `--database.host`: Hostname of the Redis database. Default: "localhost".
@@ -625,6 +637,7 @@ pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/use
 
 These options allow you to fine-tune the behavior, storage, and network interaction of the validator neuron. Adjust these settings based on your specific requirements and infrastructure.
 
+> Note: Challenge data lives by default for 5000 blocks in the validator index. This means after 7 days the data is removed and is no longer queried by the validator. This allows miners to recover who have lost challenge data
 
 ### Running the API
 Similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered hotkey on SN21. You can gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
@@ -646,7 +659,7 @@ python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 These options are crucial for managing the behavior and security of your API interactions. The timeouts ensure that operations do not hang indefinitely, while the whitelisted hotkeys provide a mechanism to restrict access to trusted entities. Adjust these settings based on your operational requirements and security considerations.
 
 
-### Setup WandB:
+### Setup WandB
 
 Weights & Biases (WANDB) is a popular tool for tracking and visualizing machine learning experiments. To use it effectively, you need to log into your WANDB account and set your API key on your system. Here's a step-by-step guide on how to do this on Ubuntu:
 
