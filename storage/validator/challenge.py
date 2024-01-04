@@ -179,14 +179,6 @@ async def challenge_data(self):
         tasks.append(asyncio.create_task(handle_challenge(self, uid)))
     responses = await asyncio.gather(*tasks)
 
-    if self.config.neuron.verbose and self.config.neuron.log_responses:
-        [
-            bt.logging.trace(
-                f"Challenge response {uid} | {pformat(response[1].axon.dict())}"
-            )
-            for uid, response in zip(uids, responses)
-        ]
-
     # Compute the rewards for the responses given the prompt.
     rewards: torch.FloatTensor = torch.zeros(len(responses), dtype=torch.float32).to(
         self.device
