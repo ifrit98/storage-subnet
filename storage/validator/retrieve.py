@@ -156,7 +156,7 @@ async def retrieve_data(
             bt.logging.trace(
                 f"Retrieve response: {uid} | {pformat(response.dendrite.dict())}"
             )
-            for uid, (response, _) in zip(uids, response_tuples)
+            for uid, (response, _, _) in zip(uids, response_tuples)
         ]
     rewards: torch.FloatTensor = torch.zeros(
         len(response_tuples), dtype=torch.float32
@@ -178,7 +178,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"Failed to decode data from UID: {uids[idx]} with error {e}"
             )
-            rewards[idx] = -0.02
+            rewards[idx] = 0.0
 
             # Update the retrieve statistics
             await update_statistics(
@@ -193,7 +193,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
             )
-            rewards[idx] = -0.1
+            rewards[idx] = 0.0
 
             # Update the retrieve statistics
             await update_statistics(
