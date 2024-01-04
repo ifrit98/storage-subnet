@@ -82,9 +82,8 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     data_hash = random.choice(keys).decode("utf-8")
     data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
 
-    if self.config.neuron.verbose:
-        bt.logging.trace(f"Challenge lookup key: {data_hash}")
-        # bt.logging.trace(f"Challenge data: {data}")
+    bt.logging.trace(f"Challenge lookup key: {data_hash}")
+    bt.logging.trace(f"Challenge data: {pformat(data)}")
 
     try:
         chunk_size = (
@@ -189,9 +188,10 @@ async def challenge_data(self):
 
     remove_reward_idxs = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-        # bt.logging.trace(
-        #     f"Challenge idx {idx} uid {uid} verified {verified} response {str(response)}"
-        # )
+        response_dict = response[0].axon.dict() if response[0] != None else None
+        bt.logging.trace(
+            f"Challenge idx {idx} uid {uid} verified {verified} response {str(response_dict)}"
+        )
 
         hotkey = self.metagraph.hotkeys[uid]
 

@@ -205,7 +205,6 @@ async def compute_tier(stats_key: str, database: aioredis.Redis):
     current_tier = await database.hget(stats_key, "tier")
     if tier != current_tier:
         await database.hset(stats_key, "tier", tier)
-        # bt.logging.trace(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
         if tier == b"Super Saiyan":
