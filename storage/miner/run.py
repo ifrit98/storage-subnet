@@ -177,3 +177,10 @@ def run(self):
     # In case of unforeseen errors, the miner will log the error and continue operations.
     except Exception as e:
         bt.logging.error(traceback.format_exc())
+
+    finally:
+        self.axon.stop()
+        bt.logging.success("Miner stopped.")
+        bt.logging.info((traceback.format_exc()))
+        # Ensure that the miner exits so pm2 can restart the process or the user knows something happened.
+        exit()
