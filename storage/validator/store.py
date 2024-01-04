@@ -141,14 +141,6 @@ async def store_encrypted_data(
             timeout=self.config.neuron.store_timeout,
         )
 
-        # Log the results for monitoring purposes.
-        # if self.config.neuron.verbose and self.config.neuron.log_responses:
-        #     bt.logging.debug(f"Store round {retries + 1}.")
-        #     [
-        #         bt.logging.debug(f"Store response: {str(response)}")
-        #         for response in responses
-        #     ]
-
         # Compute the rewards for the responses given proc time.
         rewards: torch.FloatTensor = torch.zeros(
             len(responses), dtype=torch.float32
