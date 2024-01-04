@@ -292,7 +292,7 @@ The tier system classifies miners into five distinct categories, each with speci
    - **Reward Factor:** 2.0 (200% rewards)
 
 2. 💎 **Diamond Tier:**
-   - **Storage Limit:** 1 Petabyte (PB)
+   - **Storage Limit:** 5 Petabyte (PB)
    - **Store Success Rate:** 99% (1/100 chance of failure)
    - **Retrieval Success Rate:** 99%
    - **Challenge Success Rate:** 99%
@@ -300,7 +300,7 @@ The tier system classifies miners into five distinct categories, each with speci
    - **Reward Factor:** 1.0 (100% rewards)
 
 3. 🥇 **Gold Tier:**
-   - **Storage Limit:** 100 Terabytes (TB)
+   - **Storage Limit:** 500 Terabytes (TB)
    - **Store Success Rate:** 97.5% (1/50 chance of failure)
    - **Retrieval Success Rate:** 97.5%
    - **Challenge Success Rate:** 97.5%
@@ -308,7 +308,7 @@ The tier system classifies miners into five distinct categories, each with speci
    - **Reward Factor:** 0.888 (88.8% rewards)
 
 4. 🥈 **Silver Tier:**
-   - **Storage Limit:** 10 Terabytes (TB)
+   - **Storage Limit:** 100 Terabytes (TB)
    - **Store Success Rate:** 95% (1/20 chance of failure)
    - **Retrieval Success Rate:** 95%
    - **Challenge Success Rate:** 95%
@@ -316,7 +316,7 @@ The tier system classifies miners into five distinct categories, each with speci
    - **Reward Factor:** 0.555 (55.5% rewards)
 
 5. 🥉 **Bronze Tier:**
-   - **Storage Limit:** 1 Terabyte (TB)
+   - **Storage Limit:** 10 Terabyte (TB)
    - **Store Success Rate:** Not specifically defined for this tier
    - **Retrieval Success Rate:** Not specifically defined for this tier
    - **Challenge Success Rate:** Not specifically defined for this tier
