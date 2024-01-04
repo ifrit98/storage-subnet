@@ -23,7 +23,7 @@ import bittensor as bt
 
 def should_wait_to_set_weights(current_block, last_epoch_block, tempo):
     diff_blocks = current_block - last_epoch_block
-    return diff_blocks <= tempo/2
+    return diff_blocks <= tempo / 2
 
 
 def set_weights(
@@ -90,7 +90,9 @@ def set_weights(
             if wandb_on:
                 wandb.log({"set_weights": 1})
         else:
-            bt.logging.info(f'Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}')
+            bt.logging.info(
+                f"Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}"
+            )
             success = False
 
         return success
