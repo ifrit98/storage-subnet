@@ -22,10 +22,10 @@ import bittensor as bt
 
 # Constants for storage limits in bytes
 STORAGE_LIMIT_SUPER_SAIYAN = 1024**6 * 1  # 1 EB
-STORAGE_LIMIT_DIAMOND = 1024**5 * 1  # 1 PB
-STORAGE_LIMIT_GOLD = 1024**4 * 100  # 100 TB
-STORAGE_LIMIT_SILVER = 1024**4 * 10  # 10 TB
-STORAGE_LIMIT_BRONZE = 1024**4 * 1  # 1 TB
+STORAGE_LIMIT_DIAMOND = 1024**5 * 5  # 5 PB
+STORAGE_LIMIT_GOLD = 1024**4 * 500  # 500 TB
+STORAGE_LIMIT_SILVER = 1024**4 * 50  # 50 TB
+STORAGE_LIMIT_BRONZE = 1024**4 * 5  # 5 TB
 
 # Requirements for each tier. These must be maintained for a miner to remain in that tier.
 SUPER_SAIYAN_STORE_SUCCESS_RATE = 0.999  # 1/1000 chance of failure
