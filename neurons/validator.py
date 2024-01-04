@@ -213,7 +213,7 @@ class neuron:
                     bt.logging.info(
                         f"NeuronRegistered Event {uid}! Rebalancing data..."
                     )
-                    with open(self.config.neuron.debug_logging_path, "w") as file:
+                    with open(self.config.neuron.debug_logging_path, "a") as file:
                         file.write(
                             f"NeuronRegistered Event {uid}! Rebalancing data..."
                             f"{pformat(event_dict)}\n"
