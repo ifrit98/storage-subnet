@@ -38,16 +38,18 @@ class StorageVersion:
 
     def __eq__(self, other):
         return (
-            self.major == other.major and
-            self.minor == other.minor and
-            self.patch == other.patch
+            self.major == other.major
+            and self.minor == other.minor
+            and self.patch == other.patch
         )
 
     def __lt__(self, other):
-        return (
-            (self.major, self.minor, self.patch) <
-            (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) < (
+            other.major,
+            other.minor,
+            other.patch,
         )
+
 
 __version__ = "1.2.0"
 version = StorageVersion.from_string(__version__)

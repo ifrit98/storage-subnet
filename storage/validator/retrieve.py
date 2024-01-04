@@ -159,11 +159,13 @@ async def retrieve_data(
         tasks.append(asyncio.create_task(handle_retrieve(self, uid)))
     response_tuples = await asyncio.gather(*tasks)
 
-    # if self.config.neuron.verbose and self.config.neuron.log_responses:
-    #     [
-    #         bt.logging.trace(f"Retrieve response: {uid} | {str(response)}")
-    #         for uid, (response, _, _) in zip(uids, response_tuples)
-    #     ]
+    if self.config.neuron.verbose and self.config.neuron.log_responses:
+        [
+            bt.logging.trace(
+                f"Retrieve response: {uid} | {pformat(response.dendrite.dict())}"
+            )
+            for uid, (response, _, _) in zip(uids, response_tuples)
+        ]
     rewards: torch.FloatTensor = torch.zeros(
         len(response_tuples), dtype=torch.float32
     ).to(self.device)
@@ -184,7 +186,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"Failed to decode data from UID: {uids[idx]} with error {e}"
             )
-            rewards[idx] = -0.1
+            rewards[idx] = 0.0
 
             # Update the retrieve statistics
             await update_statistics(
@@ -199,7 +201,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
             )
-            rewards[idx] = -0.1
+            rewards[idx] = 0.0
 
             # Update the retrieve statistics
             await update_statistics(
@@ -215,7 +217,7 @@ async def retrieve_data(
             bt.logging.error(
                 f"data verification failed! {pformat(response.axon.dict())}"
             )
-            rewards[idx] = -0.1  # Losing use data is unacceptable, harsh punishment
+            rewards[idx] = 0.0  # Losing use data is unacceptable, harsh punishment
 
             # Update the retrieve statistics
             await update_statistics(

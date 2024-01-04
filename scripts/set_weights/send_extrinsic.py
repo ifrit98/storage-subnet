@@ -25,20 +25,20 @@ async def main(args):
         wait_for_inclusion=False,
         wait_for_finalization=True,
     )
-    bt.logging.info(f'Were weights set? {weights_were_set}')
+    bt.logging.info(f"Were weights set? {weights_were_set}")
 
 
 if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--wallet", type=str, default='default')
-        parser.add_argument("--hotkey", type=str, default='default')
-        parser.add_argument("--network", type=str, default='local')
+        parser.add_argument("--wallet", type=str, default="default")
+        parser.add_argument("--hotkey", type=str, default="default")
+        parser.add_argument("--network", type=str, default="local")
         parser.add_argument("--netuid", type=int, default=21)
         args = parser.parse_args()
 
         asyncio.run(main(args))
     except KeyboardInterrupt:
-        print('KeyboardInterrupt')
+        print("KeyboardInterrupt")
     except ValueError as e:
-        print(f'ValueError: {e}')
+        print(f"ValueError: {e}")

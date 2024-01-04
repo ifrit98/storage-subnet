@@ -74,11 +74,15 @@ def run(self):
             # --- Wait until next epoch.
             self.current_block = self.subtensor.get_current_block()
             self.metagraph.sync(subtensor=self.subtensor)
-            self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
+            self.last_epoch_block = self.metagraph.last_update[
+                self.my_subnet_uid
+            ].item()
 
-            hyperparameters = self.subtensor.get_subnet_hyperparameters(self.config.netuid, self.current_block)
+            hyperparameters = self.subtensor.get_subnet_hyperparameters(
+                self.config.netuid, self.current_block
+            )
             tempo = hyperparameters.tempo
-            bt.logging.info(f'Tempo for subnet: {tempo}')
+            bt.logging.info(f"Tempo for subnet: {tempo}")
 
             # --- To control messages without changing time.sleep within the while-loop
             # we can increase/decrease 'seconds_waiting_in_loop' without problems
