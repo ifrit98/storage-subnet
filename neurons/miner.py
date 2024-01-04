@@ -330,11 +330,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.trace(
+            bt.logging.debug(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.trace(
+        bt.logging.debug(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -398,11 +398,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.trace(
+            bt.logging.debug(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.trace(
+        bt.logging.debug(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -466,11 +466,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.trace(
+            bt.logging.debug(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.trace(
+        bt.logging.debug(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -709,7 +709,7 @@ class miner:
         synapse.merkle_root = merkle_tree.get_merkle_root()
         bt.logging.trace(f"commitment: {str(synapse.commitment)[:24]}")
         bt.logging.trace(f"randomness: {str(synapse.randomness)[:24]}")
-        bt.logging.trace(f"merkle_proof[0]: {str(synapse.merkle_proof[0])}")
+        bt.logging.trace(f"merkle_proof: {str(synapse.merkle_proof[:24])}")
         bt.logging.trace(f"merkle_root: {str(synapse.merkle_root)[:24]}")
         bt.logging.info(f"returning challenge data {synapse.data_chunk[:24]}...")
         return synapse

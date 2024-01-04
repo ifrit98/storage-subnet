@@ -51,8 +51,8 @@ async def ping_uids(self, uids):
         bt.logging.error(f"Dendrite ping failed: {e}")
         successful_uids = []
         failed_uids = uids
-    bt.logging.trace("successful uids:", successful_uids)
-    bt.logging.trace("failed uids    :", failed_uids)
+    bt.logging.debug("ping() successful uids:", successful_uids)
+    bt.logging.debug("ping() failed uids    :", failed_uids)
     return successful_uids, failed_uids
 
 
@@ -96,7 +96,7 @@ async def compute_and_ping_chunks(self, distributions):
             new_uids = await get_available_query_miners(
                 self, k=target_number_of_uids, exclude=successful_uids
             )
-            bt.logging.trace("new uids:", new_uids)
+            bt.logging.trace("compute_and_ping_chunks() new uids:", new_uids)
 
             # Update the distribution with new UIDs
             dist["uids"] = tuple(new_uids)
@@ -104,7 +104,9 @@ async def compute_and_ping_chunks(self, distributions):
 
         # Log if the maximum retries are reached without enough successful UIDs
         if len(successful_uids) < target_number_of_uids:
-            bt.logging.warning(f"Insufficient successful UIDs for distribution: {dist}")
+            bt.logging.warning(
+                f"compute_and_ping_chunks(): Insufficient successful UIDs for distribution: {dist}"
+            )
 
     # Continue with your logic using the updated distributions
     bt.logging.trace("new distributions:", distributions)
@@ -145,6 +147,7 @@ async def ping_and_retry_uids(
     uids = await get_available_query_miners(
         self, k=k or self.config.neuron.store_redundancy, exclude=exclude_uids
     )
+    bt.logging.debug("initial ping_and_retry() uids:", uids)
 
     retries = 0
     successful_uids = set()
@@ -164,12 +167,14 @@ async def ping_and_retry_uids(
         new_uids = await get_available_query_miners(
             self, k=k, exclude=list(successful_uids.union(failed_uids))
         )
-        bt.logging.trace("new uids:", new_uids)
+        bt.logging.debug(f"ping_and_retry() new uids: {new_uids}")
         retries += 1
 
     # Log if the maximum retries are reached without enough successful UIDs
     if len(successful_uids) < k:
-        bt.logging.warning(f"Insufficient successful UIDs for k: {uids}")
+        bt.logging.warning(
+            f"Insufficient successful UIDs for k: {k} Success UIDs {successful_uids} Failed UIDs: {failed_uids}"
+        )
 
     return list(successful_uids)[:k], failed_uids
 
@@ -185,16 +190,16 @@ async def monitor(self):
     query_uids = await get_available_query_miners(
         self, k=self.config.neuron.monitor_sample_size
     )
+    bt.logging.debug(f"monitor() uids: {query_uids}")
     _, failed_uids = await ping_uids(self, query_uids)
 
     down_uids = []
     for uid in failed_uids:
-        uid = uid
         self.monitor_lookup[uid] += 1
         if self.monitor_lookup[uid] > self.config.neuron.max_failed_pings:
             self.monitor_lookup[uid] = 0
             down_uids.append(uid)
-    bt.logging.trace(f"down uids: {down_uids}")
+    bt.logging.debug(f"monitor() down uids: {down_uids}")
 
     if down_uids:
         # Negatively reward
@@ -209,6 +214,7 @@ async def monitor(self):
             )
             rewards[i] = 0.0
 
+        bt.logging.debug(f"monitor() rewards: {rewards}")
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
             0, torch.tensor(down_uids).to(self.device), rewards
         ).to(self.device)

@@ -111,6 +111,7 @@ async def update_statistics(
     """
     # Check and see if this miner is registered.
     if not await miner_is_registered(ss58_address, database):
+        bt.logging.debug(f"Registering new miner {ss58_address}...")
         await register_miner(ss58_address, database)
 
     # Update statistics in the stats hash
@@ -204,7 +205,6 @@ async def compute_tier(stats_key: str, database: aioredis.Redis):
     current_tier = await database.hget(stats_key, "tier")
     if tier != current_tier:
         await database.hset(stats_key, "tier", tier)
-        bt.logging.trace(f"Updated tier for {stats_key} from {current_tier} to {tier}.")
 
         # Update the storage limit
         if tier == b"Super Saiyan":

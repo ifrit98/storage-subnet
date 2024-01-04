@@ -211,9 +211,10 @@ def get_pseudorandom_uids(self, uids, k):
 
     # Ensure k is not larger than the number of uids
     k = min(k, len(uids))
-    bt.logging.trace(f"uids: {uids} k: {k}")
 
-    return pyrandom.sample(uids, k=k)
+    sampled = pyrandom.sample(uids, k=k)
+    bt.logging.debug(f"get_pseudorandom_uids() sampled: {k} | {sampled}")
+    return sampled
 
 
 def get_available_uids(self, exclude: list = None):
@@ -228,10 +229,9 @@ def get_available_uids(self, exclude: list = None):
         uid_is_available = check_uid_availability(
             self.metagraph, uid, self.config.neuron.vpermit_tao_limit
         )
-
         if uid_is_available and (exclude is None or uid not in exclude):
             avail_uids.append(uid)
-
+    bt.logging.debug(f"returning available uids: {avail_uids}")
     return avail_uids
 
 
@@ -278,6 +278,36 @@ def get_random_uids(
     uids = random.sample(candidate_uids, num_to_sample)
     bt.logging.debug(f"returning available uids: {uids}")
     return uids
+
+
+def get_all_validators_vtrust(
+    self,
+    vpermit_tao_limit: int,
+    vtrust_threshold: float = 0.0,
+    return_hotkeys: bool = False,
+):
+    """
+    Retrieves the hotkeys of all validators in the network. This method is used to
+    identify the validators and their corresponding hotkeys, which are essential
+    for various network operations, including blacklisting and peer validation.
+    Qualifications for validator peers:
+        - stake > threshold (e.g. 500, may vary per subnet)
+        - validator permit (implied with vtrust score)
+        - validator trust score > threshold (e.g. 0.5)
+    Returns:
+        List[str]: A list of hotkeys corresponding to all the validators in the network.
+    """
+    vtrusted_uids = [
+        uid for uid in torch.where(self.metagraph.validator_trust > vtrust_threshold)[0]
+    ]
+    stake_uids = [
+        uid for uid in vtrusted_uids if self.metagraph.S[uid] > vpermit_tao_limit
+    ]
+    return (
+        [self.metagraph.hotkeys[uid] for uid in stake_uids]
+        if return_hotkeys
+        else stake_uids
+    )
 
 
 def get_all_validators(self, return_hotkeys=False):
@@ -349,7 +379,9 @@ def get_query_validators(self, k=3):
     return get_pseudorandom_uids(self, uids=vuids, k=k)
 
 
-async def get_available_query_miners(self, k, exclude=None):
+async def get_available_query_miners(
+    self, k, exclude: List[int] = None, exclude_full: bool = False
+):
     """
     Obtain a list of available miner UIDs selected pseudorandomly based on the current block hash.
 
@@ -361,11 +393,14 @@ async def get_available_query_miners(self, k, exclude=None):
     """
     # Determine miner axons to query from metagraph with pseudorandom block_hash seed
     muids = get_available_uids(self, exclude=exclude)
-    muids_nonfull = [
-        uid
-        for uid in muids
-        if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
-    ]
+    bt.logging.debug(f"get_available_query_miners() available uids: {muids}")
+    if exclude_full:
+        muids_nonfull = [
+            uid
+            for uid in muids
+            if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+        ]
+        bt.logging.debug(f"available uids nonfull: {muids_nonfull}")
     return get_pseudorandom_uids(self, muids, k=k)
 
 

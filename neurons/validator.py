@@ -203,14 +203,21 @@ class neuron:
 
         block_no = obj["header"]["number"]
         block_hash = self.subtensor.get_block_hash(block_no)
-        bt.logging.debug(block_hash)
+        bt.logging.debug(f"subscription block hash: {block_hash}")
         events = self.subtensor.substrate.get_events(block_hash)
         for event in events:
             event_dict = event["event"].decode()
             if event_dict["event_id"] == "NeuronRegistered":
                 netuid, uid, hotkey = event_dict["attributes"]
                 if int(netuid) == 21:
-                    bt.logging.info(f"NeuronRegistered Event {uid}!")
+                    bt.logging.info(
+                        f"NeuronRegistered Event {uid}! Rebalancing data..."
+                    )
+                    with open(self.config.neuron.debug_logging_path, "a") as file:
+                        file.write(
+                            f"NeuronRegistered Event {uid}! Rebalancing data..."
+                            f"{pformat(event_dict)}\n"
+                        )
                     await rebalance_data(
                         self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
                     )

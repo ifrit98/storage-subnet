@@ -103,9 +103,9 @@ async def store_encrypted_data(
     b64_encrypted_data = base64.b64encode(encrypted_data).decode("utf-8")
 
     if self.config.neuron.verbose:
-        bt.logging.debug(f"storing user data: {encrypted_data[:200]}...")
+        bt.logging.debug(f"storing user data: {encrypted_data[:12]}...")
         bt.logging.debug(f"storing user hash: {data_hash}")
-        bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:200]}...")
+        bt.logging.debug(f"b64 encrypted data: {b64_encrypted_data[:12]}...")
 
     synapse = protocol.Store(
         encrypted_data=b64_encrypted_data,
@@ -122,7 +122,7 @@ async def store_encrypted_data(
         max_retries=max_retries,
         exclude_uids=exclude_uids,
     )
-    bt.logging.debug(f"store uids: {uids}")
+    bt.logging.debug(f"store_encrypted_data() uids: {uids}")
 
     axons = [self.metagraph.axons[uid] for uid in uids]
     failed_uids = [None]
@@ -140,14 +140,6 @@ async def store_encrypted_data(
             deserialize=False,
             timeout=self.config.neuron.store_timeout,
         )
-
-        # Log the results for monitoring purposes.
-        if self.config.neuron.verbose and self.config.neuron.log_responses:
-            bt.logging.debug(f"Initial store round 1.")
-            [
-                bt.logging.debug(f"Store response: {response.dendrite.dict()}")
-                for response in responses
-            ]
 
         # Compute the rewards for the responses given proc time.
         rewards: torch.FloatTensor = torch.zeros(
@@ -176,7 +168,7 @@ async def store_encrypted_data(
                     ttl,
                 )
             bt.logging.debug(
-                f"Stored data in database with key: {hotkey} | {data_hash}"
+                f"Stored data in database with hotkey: {hotkey} | uid {uid} | {data_hash}"
             )
 
         def failure(uid):
@@ -455,7 +447,7 @@ async def store_broadband(
                     f"Start index: {dist['start_idx']}, End index: {dist['end_idx']}"
                 )
                 chunk = encrypted_data[dist["start_idx"] : dist["end_idx"]]
-                bt.logging.trace(f"chunk: {chunk[:100]}")
+                bt.logging.trace(f"chunk: {chunk[:12]}")
                 dist["chunk_hash"] = hash_data(chunk)
                 bt.logging.debug(
                     f"Chunk {i} | uid distribution: {dist['uids']} | size: {dist['chunk_size']}"

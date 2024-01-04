@@ -77,6 +77,9 @@ async def get_metadata_for_hotkey(
     """
     # Fetch all fields (data hashes) and values (metadata) for the hotkey
     all_data_hashes = await database.hgetall(f"hotkey:{ss58_address}")
+    bt.logging.trace(
+        f"get_metadata_for_hotkey() # hashes found for hotkey {ss58_address}: {len(all_data_hashes)}"
+    )
 
     # Deserialize the metadata for each data hash
     return {
@@ -120,6 +123,9 @@ async def remove_hashes_for_hotkey(
     Returns:
         A dictionary where keys are data hashes and values are the associated metadata.
     """
+    bt.logging.trace(
+        f"remove_hashes_for_hotkey() removing {len(hashes)} hashes from hotkey {ss58_address}"
+    )
     for _hash in hashes:
         await remove_metadata_from_hotkey(ss58_address, _hash, database)
 
@@ -259,7 +265,9 @@ async def get_all_hotkeys_for_data_hash(
     return list(all_hotkeys)
 
 
-async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
+async def total_hotkey_storage(
+    hotkey: str, database: aioredis.Redis, verbose: bool = False
+) -> int:
     """
     Calculates the total storage used by a hotkey in the database.
 
@@ -274,14 +282,18 @@ async def total_hotkey_storage(hotkey: str, database: aioredis.Redis) -> int:
     keys = await database.hkeys(f"hotkey:{hotkey}")
     for data_hash in keys:
         # Get the metadata for the current data hash
-        metadata = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, database)
+        metadata = await get_metadata_for_hotkey_and_hash(
+            hotkey, data_hash, database, verbose
+        )
         if metadata:
             # Add the size of the data to the total storage
             total_storage += metadata["size"]
     return total_storage
 
 
-async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
+async def hotkey_at_capacity(
+    hotkey: str, database: aioredis.Redis, verbose: bool = False
+) -> bool:
     """
     Checks if the hotkey is at capacity.
 
@@ -293,28 +305,36 @@ async def hotkey_at_capacity(hotkey: str, database: aioredis.Redis) -> bool:
         True if the hotkey is at capacity, False otherwise.
     """
     # Get the total storage used by the hotkey
-    total_storage = await total_hotkey_storage(hotkey, database)
+    total_storage = await total_hotkey_storage(hotkey, database, verbose)
     # Check if the hotkey is at capacity
     byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
     if byte_limit is None:
-        bt.logging.trace(f"Could not find storage limit for {hotkey}.")
+        if verbose:
+            bt.logging.trace(f"Could not find storage limit for {hotkey}.")
         return False
     try:
         limit = int(byte_limit)
     except Exception as e:
-        bt.logging.trace(f"Could not parse storage limit for {hotkey} | {e}.")
+        if verbose:
+            bt.logging.trace(f"Could not parse storage limit for {hotkey} | {e}.")
         return False
     if total_storage >= limit:
-        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")
+        if verbose:
+            bt.logging.trace(
+                f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB."
+            )
         return True
     else:
-        bt.logging.trace(
-            f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
-        )
+        if verbose:
+            bt.logging.trace(
+                f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
+            )
         return False
 
 
-async def cache_hotkeys_capacity(hotkeys, database):
+async def cache_hotkeys_capacity(
+    hotkeys: List[str], database: aioredis.Redis, verbose: bool = False
+):
     """
     Caches the capacity information for a list of hotkeys.
 
@@ -329,7 +349,7 @@ async def cache_hotkeys_capacity(hotkeys, database):
 
     for hotkey in hotkeys:
         # Get the total storage used by the hotkey
-        total_storage = await total_hotkey_storage(hotkey, database)
+        total_storage = await total_hotkey_storage(hotkey, database, verbose)
         # Get the byte limit for the hotkey
         byte_limit = await database.hget(f"stats:{hotkey}", "storage_limit")
 
@@ -348,7 +368,7 @@ async def cache_hotkeys_capacity(hotkeys, database):
     return hotkeys_capacity
 
 
-async def check_hotkeys_capacity(hotkeys_capacity, hotkey):
+async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False):
     """
     Checks if a hotkey is at capacity using the cached information.
 
@@ -366,12 +386,16 @@ async def check_hotkeys_capacity(hotkeys_capacity, hotkey):
         return False
 
     if total_storage >= limit:
-        bt.logging.trace(f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB.")
+        if verbose:
+            bt.logging.trace(
+                f"Hotkey {hotkey} is at max capacity {limit // 1024**3} GB."
+            )
         return True
     else:
-        bt.logging.trace(
-            f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
-        )
+        if verbose:
+            bt.logging.trace(
+                f"Hotkey {hotkey} has {(limit - total_storage) // 1024**3} GB free."
+            )
         return False
 
 
@@ -616,7 +640,7 @@ async def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: aioredis.R
 
 
 async def remove_hotkey_from_chunk(
-    chunk_hash: str, hotkey: str, database: aioredis.Redis
+    chunk_hash: str, hotkey: str, database: aioredis.Redis, verbose: bool = False
 ):
     """
     Remove a hotkey from the metadata of a specific chunk.
@@ -642,11 +666,14 @@ async def remove_hotkey_from_chunk(
             await database.hset(
                 chunk_metadata_key, "hotkeys", ",".join(existing_hotkeys)
             )
-            bt.logging.trace(f"UID {hotkey} removed from chunk {chunk_hash}.")
+            if verbose:
+                bt.logging.trace(f"UID {hotkey} removed from chunk {chunk_hash}.")
         else:
-            bt.logging.trace(f"UID {hotkey} does not exist for chunk {chunk_hash}.")
+            if verbose:
+                bt.logging.trace(f"UID {hotkey} does not exist for chunk {chunk_hash}.")
     else:
-        bt.logging.trace(f"No UIDs associated with chunk {chunk_hash}.")
+        if verbose:
+            bt.logging.trace(f"No UIDs associated with chunk {chunk_hash}.")
 
 
 async def store_chunk_metadata(
@@ -871,7 +898,7 @@ async def purge_challenges_for_all_hotkeys(database: aioredis.Redis):
     Parameters:
     - database (aioredis.Redis): An instance of the Redis database used for data storage.
     """
-    bt.logging.trace(f"purging challenges for ALL hotkeys...")
+    bt.logging.debug(f"purging challenges for ALL hotkeys...")
     async for hotkey in database.scan_iter(match="hotkey:*"):
         hotkey = hotkey.decode().split(":")[1]
         await purge_challenges_for_hotkey(hotkey, database)

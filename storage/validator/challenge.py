@@ -64,6 +64,9 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     keys = await self.database.hkeys(f"hotkey:{hotkey}")
     bt.logging.trace(f"{len(keys)} hashes pulled for hotkey {hotkey}")
     if keys == []:
+        bt.logging.debug(
+            f"No hashes found for hotkey {hotkey} | uid {uid}. Returning dummy response."
+        )
         # Create a dummy response to send back
         dummy_response = protocol.Challenge(
             challenge_hash="",
@@ -79,9 +82,8 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
     data_hash = random.choice(keys).decode("utf-8")
     data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
 
-    if self.config.neuron.verbose:
-        bt.logging.trace(f"Challenge lookup key: {data_hash}")
-        bt.logging.trace(f"Challenge data: {data}")
+    bt.logging.trace(f"Challenge lookup key: {data_hash}")
+    bt.logging.trace(f"Challenge data: {pformat(data)}")
 
     try:
         chunk_size = (
@@ -186,14 +188,18 @@ async def challenge_data(self):
 
     remove_reward_idxs = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-        if self.config.neuron.verbose:
-            bt.logging.trace(
-                f"Challenge idx {idx} uid {uid} verified {verified} response {pformat(response[0].axon.dict())}"
-            )
+        response_dict = response[0].axon.dict() if response[0] != None else None
+        bt.logging.trace(
+            f"Challenge idx {idx} uid {uid} verified {verified} response {str(response_dict)}"
+        )
 
         hotkey = self.metagraph.hotkeys[uid]
 
         if verified == None:
+            # This hotkey was not found in the database, remove it from the rewards tensor
+            bt.logging.debug(
+                f"Hotkey {hotkey} | uid {uid} not found in database. Removing from rewards tensor."
+            )
             remove_reward_idxs.append(idx)
             continue  # We don't have any data for this hotkey, skip it.
 
@@ -217,6 +223,10 @@ async def challenge_data(self):
         event.task_status_codes.append(response[0].dendrite.status_code)
         event.rewards.append(rewards[idx].item())
 
+    bt.logging.debug(
+        f"challenge_data() rewards: {rewards} | uids {uids} hotkeys {[self.metagraph.hotkeys[uid] for uid in uids]}"
+    )
+
     # Calculate the total step length for all challenges
     event.step_length = time.time() - start_time
 
@@ -232,7 +242,11 @@ async def challenge_data(self):
             if verified != None
         ]
     )
+    bt.logging.debug(
+        f"challenge_data() full rewards: {rewards} | uids {uids} | uids to remove {remove_reward_idxs}"
+    )
     rewards = remove_indices_from_tensor(rewards, remove_reward_idxs)
+    bt.logging.debug(f"challenge_data() kept rewards: {rewards} | uids {uids}")
 
     bt.logging.trace("Applying challenge rewards")
     apply_reward_scores(
