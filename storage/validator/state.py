@@ -33,6 +33,7 @@ from functools import lru_cache, update_wrapper
 import storage
 import storage.validator as validator
 from storage.validator.event import EventSchema
+from storage.validator.database import purge_challenges_for_hotkey
 
 import bittensor as bt
 
@@ -168,6 +169,9 @@ def resync_metagraph(self: "validator.neuron.neuron"):
                     f"resync_metagraph() old hotkey {hotkey} | uid {uid} has been replaced by {self.metagraph.hotkeys[uid]}"
                 )
                 self.moving_averaged_scores[uid] = 0  # hotkey has been replaced
+                # Purge challenge data for hotkey that has been replaced.
+                bt.logging.debug(f"resync_metagraph() purging challenges for hotkey {hotkey}")
+                purge_challenges_for_hotkey(hotkey, self.database)
 
         # Check to see if the metagraph has changed size.
         # If so, we need to add new hotkeys and moving averages.
