@@ -256,7 +256,7 @@ async def retrieve_data(
         [response_tuple[0] for response_tuple in response_tuples],
         rewards,
         timeout=self.config.neuron.retrieve_timeout,
-        mode="minmax",
+        mode=self.config.neuron.reward_mode,
     )
 
     # Determine the best UID based on rewards
@@ -345,7 +345,7 @@ async def retrieve_broadband(self, full_hash: str):
             responses,
             rewards,
             timeout=self.config.neuron.retrieve_timeout,
-            mode="minmax",
+            mode=self.config.neuron.reward_mode,
         )
 
         # Determine the best UID based on rewards
