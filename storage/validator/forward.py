@@ -86,6 +86,11 @@ async def forward(self):
                 hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
             )
 
+    if self.step % self.config.neuron.purge_challenges_length == 0:
+        # Purge challenges periodically
+        bt.logging.info("initiating purge challenges")
+        await purge_challenges_for_all_hotkeys(self.database)
+
     if self.step % self.config.neuron.compute_stats_interval == 0:
         await compute_all_tiers(self.database)
 

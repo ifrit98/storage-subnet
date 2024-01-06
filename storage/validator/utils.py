@@ -229,6 +229,8 @@ def get_available_uids(self, exclude: list = None):
         uid_is_available = check_uid_availability(
             self.metagraph, uid, self.config.neuron.vpermit_tao_limit
         )
+        bt.logging.trace(f"uid {uid} is available: {uid_is_available}")
+
         if uid_is_available and (exclude is None or uid not in exclude):
             avail_uids.append(uid)
     bt.logging.debug(f"returning available uids: {avail_uids}")
