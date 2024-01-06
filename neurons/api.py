@@ -33,8 +33,9 @@ import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
+from storage.shared.subtensor import get_current_block
 from storage.validator.config import config, check_config, add_args
-from storage.validator.state import ttl_get_block, should_checkpoint
+from storage.validator.state import should_checkpoint
 from storage.validator.encryption import encrypt_data
 
 from storage.validator.store import store_broadband
@@ -194,7 +195,7 @@ class neuron:
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
-        self.prev_step_block = ttl_get_block(self)
+        self.prev_step_block = get_current_block(self.subtensor)
 
         # Instantiate runners
         self.should_exit: bool = False
@@ -242,7 +243,7 @@ class neuron:
             - This property employs lazy loading and caching to efficiently manage the retrieval of top N validators.
             - The cache is updated based on specific conditions, such as crossing a checkpoint in the network.
         """
-        if self._top_n_validators == None or should_checkpoint(self):
+        if self._top_n_validators == None or should_checkpoint(get_current_block(self.subtensor), self.prev_step_block, self.config.neuron.checkpoint_block_length):
             self._top_n_validators = self.get_top_n_validators()
         return self._top_n_validators
 

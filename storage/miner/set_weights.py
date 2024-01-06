@@ -17,25 +17,20 @@
 # DEALINGS IN THE SOFTWARE.
 
 import torch
-import wandb
-import bittensor as bt
+
+from storage.shared.weights import set_weights
 
 
-def should_wait_to_set_weights(current_block, last_epoch_block, tempo):
-    diff_blocks = current_block - last_epoch_block
-    return diff_blocks <= tempo / 2
-
-
-def set_weights(
+def set_weights_for_miner(
     subtensor: "bt.subtensor",
     netuid: int,
     uid: int,
     wallet: "bt.wallet",
     metagraph: "bt.metagraph",
-    wandb_on=False,
-    tempo=360,
-    wait_for_inclusion=False,
-    wait_for_finalization=False,
+    wandb_on: bool = False,
+    tempo: int = 360,
+    wait_for_inclusion: bool = False,
+    wait_for_finalization: bool = False,
 ) -> bool:
     """
     Sets the miner's weights on the Bittensor network.
@@ -57,6 +52,7 @@ def set_weights(
         wallet (bt.wallet): The miner's wallet holding cryptographic information.
         metagraph (bt.metagraph): Bittensor metagraph
         wandb_on (bool, optional): Flag to determine if logging to Weights & Biases is enabled. Defaults to False.
+        tempo (int): Tempo for 'netuid' subnet.
         wait_for_inclusion (bool, optional): Wether to wait for the extrinsic to enter a block
         wait_for_finalization (bool, optional): Wether to wait for the extrinsic to be finalized on the chain
 
@@ -68,35 +64,23 @@ def set_weights(
     Raises:
         Exception: If there's an error while setting weights, the exception is logged for diagnosis.
     """
-    try:
-        # --- query the chain for the most current number of peers on the network
-        chain_weights = torch.zeros(subtensor.subnetwork_n(netuid=netuid))
-        chain_weights[uid] = 1
+    # --- query the chain for the most current number of peers on the network
+    chain_weights = torch.zeros(subtensor.subnetwork_n(netuid=netuid))
+    chain_weights[uid] = 1
+    uids = torch.arange(0, len(chain_weights))
+    version_key = 1
 
-        # --- Set weights.
-        last_updated = metagraph.last_update[uid].item()
-        current_block = subtensor.get_current_block()
-
-        if not should_wait_to_set_weights(current_block, last_updated, tempo):
-            success = subtensor.set_weights(
-                uids=torch.arange(0, len(chain_weights)),
-                netuid=netuid,
-                weights=chain_weights,
-                wait_for_inclusion=wait_for_inclusion,
-                wait_for_finalization=wait_for_finalization,
-                wallet=wallet,
-                version_key=1,
-            )
-            if wandb_on:
-                wandb.log({"set_weights": 1})
-        else:
-            bt.logging.info(
-                f"Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}"
-            )
-            success = False
-
-        return success
-    except Exception as e:
-        if wandb_on:
-            wandb.log({"set_weights": 0})
-        bt.logging.error(f"Failed to set weights on chain with exception: { e }")
+    # --- Set weights.
+    return set_weights(
+        subtensor=subtensor,
+        wallet=wallet,
+        netuid=netuid,
+        uids=uids,
+        weights=chain_weights,
+        metagraph=metagraph,
+        wandb_on=wandb_on,
+        tempo=tempo,
+        wait_for_inclusion=wait_for_inclusion,
+        wait_for_finalization=wait_for_finalization,
+        version_key=version_key,
+    )

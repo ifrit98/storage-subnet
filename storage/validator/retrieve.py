@@ -39,7 +39,6 @@ from storage.shared.utils import (
 )
 from storage.validator.verify import verify_retrieve_with_seed
 from storage.validator.reward import apply_reward_scores
-from storage.validator.weights import should_set_weights, set_weights
 from storage.validator.database import (
     get_metadata_for_hotkey,
     get_metadata_for_hotkey_and_hash,
