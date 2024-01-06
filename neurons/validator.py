@@ -196,31 +196,36 @@ class neuron:
     async def neuron_registered_subscription_handler(
         self, obj, update_nr, subscription_id
     ):
-        bt.logging.debug(f"New block #{obj['header']['number']}")
-        self.current_block = obj["header"]["number"]
+        try:
+            bt.logging.debug(f"New block #{obj['header']['number']}")
+            self.current_block = obj["header"]["number"]
 
-        bt.logging.debug(obj)
+            bt.logging.debug(f"Header object: {obj}")
 
-        block_no = obj["header"]["number"]
-        block_hash = self.subtensor.get_block_hash(block_no)
-        bt.logging.debug(f"subscription block hash: {block_hash}")
-        events = self.subtensor.substrate.get_events(block_hash)
-        for event in events:
-            event_dict = event["event"].decode()
-            if event_dict["event_id"] == "NeuronRegistered":
-                netuid, uid, hotkey = event_dict["attributes"]
-                if int(netuid) == 21:
-                    bt.logging.info(
-                        f"NeuronRegistered Event {uid}! Rebalancing data..."
-                    )
-                    with open(self.config.neuron.debug_logging_path, "a") as file:
-                        file.write(
+            block_no = obj["header"]["number"]
+            block_hash = self.subtensor.get_block_hash(block_no)
+            bt.logging.debug(f"subscription block hash: {block_hash}")
+            events = self.subtensor.substrate.get_events(block_hash)
+            for event in events:
+                event_dict = event["event"].decode()
+                if event_dict["event_id"] == "NeuronRegistered":
+                    netuid, uid, hotkey = event_dict["attributes"]
+                    if int(netuid) == 21:
+                        bt.logging.info(
                             f"NeuronRegistered Event {uid}! Rebalancing data..."
-                            f"{pformat(event_dict)}\n"
                         )
-                    await rebalance_data(
-                        self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
-                    )
+                        with open(self.config.neuron.debug_logging_path, "a") as file:
+                            file.write(
+                                f"NeuronRegistered Event {uid}! Rebalancing data..."
+                                f"{pformat(event_dict)}\n"
+                            )
+                        await rebalance_data(
+                            self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
+                        )
+        except Exception as e:
+            bt.logging.error(
+                f"Error in neuron_registered_subscription_handler: {e} {traceback.format_exc()}"
+            )
 
     def start_neuron_event_subscription(self):
         asyncio.run(
