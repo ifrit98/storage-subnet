@@ -171,6 +171,7 @@ class neuron:
 
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
+        self.loop.set_debug(True)
 
         # Start the subscription handler
         bt.logging.debug(f"starting event handler")

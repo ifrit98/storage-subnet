@@ -30,6 +30,7 @@ from storage.validator.database import (
     total_validator_storage,
     get_all_chunk_hashes,
     get_miner_statistics,
+    purge_challenges_for_all_hotkeys,
 )
 
 from .challenge import challenge_data
@@ -86,7 +87,7 @@ async def forward(self):
                 hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
             )
 
-    if self.step % self.config.neuron.purge_challenges_length == 0:
+    if self.step % self.config.neuron.purge_challenges_length == 0 and self.step != 0:
         # Purge challenges periodically
         bt.logging.info("initiating purge challenges")
         await purge_challenges_for_all_hotkeys(self.database)

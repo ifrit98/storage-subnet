@@ -123,7 +123,7 @@ def should_checkpoint(self):
     a = self.subtensor.get_current_block() % self.config.neuron.checkpoint_block_length
     b = self.prev_step_block % self.config.neuron.checkpoint_block_length
     bt.logging.debug(
-        f"should_checkpoint() calculation:\nblock % checkpoint_block_length: {self.get_current_block()} % {self.config.neuron.checkpoint_block_length}\n"
+        f"should_checkpoint() calculation:\nblock % checkpoint_block_length: {self.subtensor.get_current_block()} % {self.config.neuron.checkpoint_block_length}\n"
         f"prev_step_block % checkpoint_block_length: {self.prev_step_block} % {self.config.neuron.checkpoint_block_length}\n"
         f"{a} < {b}: {a < b}"
     )
