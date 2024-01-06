@@ -123,16 +123,10 @@ def reinit_wandb(self):
     init_wandb(self, reinit=True)
 
 
-def should_checkpoint(self):
-    # Check if enough epoch blocks have elapsed since the last checkpoint.
-    a = ttl_get_block(self) % self.config.neuron.checkpoint_block_length
-    b = self.prev_step_block % self.config.neuron.checkpoint_block_length
-    bt.logging.debug(
-        f"should_checkpoint() calculation:\nblock % checkpoint_block_length: {ttl_get_block(self)} % {self.config.neuron.checkpoint_block_length}\n"
-        f"prev_step_block % checkpoint_block_length: {self.prev_step_block} % {self.config.neuron.checkpoint_block_length}\n"
-        f"{a} < {b}: {a < b}"
-    )
-    return a < b
+def should_checkpoint(current_block, prev_checkpoint_block, checkpoint_block_length):
+    """Checks if the current block is far enough from the previous checkpoint block to checkpoint."""
+    block_difference = current_block - prev_checkpoint_block
+    return block_difference >= checkpoint_block_length
 
 
 def checkpoint(self):
@@ -140,6 +134,7 @@ def checkpoint(self):
     bt.logging.info("checkpoint()")
     resync_metagraph(self)
     save_state(self)
+    self.prev_checkpoint_block = ttl_get_block(self)
 
 
 def resync_metagraph(self: "validator.neuron.neuron"):

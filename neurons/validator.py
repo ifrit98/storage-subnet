@@ -187,6 +187,7 @@ class neuron:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
         self.prev_step_block = ttl_get_block(self)
+        self.prev_checkpoint_block = ttl_get_block(self)
         self.step = 0
 
         # Start with 0 monitor pings
@@ -278,7 +279,11 @@ class neuron:
 
                 # Resync the network state
                 bt.logging.info("Checking if should checkpoint")
-                if should_checkpoint(self):
+                if should_checkpoint(
+                    ttl_get_block(self),
+                    self.prev_checkpoint_block,
+                    self.config.neuron.checkpoint_block_length,
+                ):
                     bt.logging.info(f"Checkpointing...")
                     checkpoint(self)
 
