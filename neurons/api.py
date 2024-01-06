@@ -34,7 +34,7 @@ import threading
 from storage import protocol
 from storage.shared.ecc import hash_data
 from storage.validator.config import config, check_config, add_args
-from storage.validator.state import ttl_get_block, should_checkpoint
+from storage.validator.state import should_checkpoint
 from storage.validator.encryption import encrypt_data
 
 from storage.validator.store import store_broadband
@@ -194,7 +194,7 @@ class neuron:
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
-        self.prev_step_block = ttl_get_block(self)
+        self.prev_step_block = self.subtensor.get_current_block()
 
         # Instantiate runners
         self.should_exit: bool = False

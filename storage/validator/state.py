@@ -33,7 +33,7 @@ from functools import lru_cache, update_wrapper
 import storage
 import storage.validator as validator
 from storage.validator.event import EventSchema
-from storage.validator.database import purge_challenges_for_hotkey
+from storage.validator.rebalance import rebalance_data
 
 import bittensor as bt
 
@@ -62,12 +62,6 @@ def _ttl_hash_gen(seconds: int):
     start_time = time.time()
     while True:
         yield floor((time.time() - start_time) / seconds)
-
-
-# 12 seconds updating block.
-@ttl_cache(maxsize=1, ttl=12)
-def ttl_get_block(self) -> int:
-    return self.subtensor.get_current_block()
 
 
 def should_reinit_wandb(self):
@@ -126,24 +120,24 @@ def reinit_wandb(self):
 
 def should_checkpoint(self):
     # Check if enough epoch blocks have elapsed since the last checkpoint.
-    a = ttl_get_block(self) % self.config.neuron.checkpoint_block_length
+    a = self.subtensor.get_current_block() % self.config.neuron.checkpoint_block_length
     b = self.prev_step_block % self.config.neuron.checkpoint_block_length
     bt.logging.debug(
-        f"should_checkpoint() calculation:\nblock % checkpoint_block_length: {ttl_get_block(self)} % {self.config.neuron.checkpoint_block_length}\n"
+        f"should_checkpoint() calculation:\nblock % checkpoint_block_length: {self.get_current_block()} % {self.config.neuron.checkpoint_block_length}\n"
         f"prev_step_block % checkpoint_block_length: {self.prev_step_block} % {self.config.neuron.checkpoint_block_length}\n"
         f"{a} < {b}: {a < b}"
     )
     return a < b
 
 
-def checkpoint(self):
+async def checkpoint(self):
     """Checkpoints the training process."""
     bt.logging.info("checkpoint()")
-    resync_metagraph(self)
+    await resync_metagraph(self)
     save_state(self)
 
 
-def resync_metagraph(self: "validator.neuron.neuron"):
+async def resync_metagraph(self: "validator.neuron.neuron"):
     """Resyncs the metagraph and updates the hotkeys and moving averages based on the new metagraph."""
     bt.logging.info("resync_metagraph()")
 
@@ -169,9 +163,13 @@ def resync_metagraph(self: "validator.neuron.neuron"):
                     f"resync_metagraph() old hotkey {hotkey} | uid {uid} has been replaced by {self.metagraph.hotkeys[uid]}"
                 )
                 self.moving_averaged_scores[uid] = 0  # hotkey has been replaced
-                # Purge challenge data for hotkey that has been replaced.
-                bt.logging.debug(f"resync_metagraph() purging challenges for hotkey {hotkey}")
-                purge_challenges_for_hotkey(hotkey, self.database)
+                # Purge challenge data and rebalance user data for hotkey that has been replaced.
+                bt.logging.debug(
+                    f"resync_metagraph() rebalancing and purging for hotkey {hotkey}"
+                )
+                await rebalance_data(
+                    self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
+                )
 
         # Check to see if the metagraph has changed size.
         # If so, we need to add new hotkeys and moving averages.

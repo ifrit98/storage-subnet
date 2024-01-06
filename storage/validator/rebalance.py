@@ -30,8 +30,8 @@ from storage.validator.database import (
 )
 from storage.validator.bonding import register_miner
 
-from .retrieve import retrieve_data
-from .store import store_encrypted_data
+from storage.validator.retrieve import retrieve_data
+from storage.validator.store import store_encrypted_data
 
 
 async def rebalance_data_for_hotkey(

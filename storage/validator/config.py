@@ -189,7 +189,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.purge_challenges_length",
         type=int,
-        default=7200, # ~24 hours
+        default=7200,  # ~24 hours
         help="Number of steps before purging all hotkey challenges.",
     )
     parser.add_argument(

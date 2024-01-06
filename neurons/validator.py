@@ -40,7 +40,6 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
-    ttl_get_block,
     log_event,
 )
 from storage.validator.weights import (
@@ -186,7 +185,7 @@ class neuron:
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
-        self.prev_step_block = ttl_get_block(self)
+        self.prev_step_block = self.subtensor.get_current_block()
         self.step = 0
 
         # Start with 0 monitor pings
@@ -229,20 +228,25 @@ class neuron:
             )
         )
 
-    def run(self):
+    async def run(self):
         bt.logging.info("run()")
 
         if self.config.database.purge_challenges:
             bt.logging.info("purging challenges")
 
             async def run_purge():
-                await asyncio.gather([purge_challenges_for_all_hotkeys(self.database)])
+                await asyncio.gather(purge_challenges_for_all_hotkeys(self.database))
 
             self.loop.run_until_complete(run_purge())
             bt.logging.info("purged challenges.")
 
         load_state(self)
-        checkpoint(self)
+
+        async def do_init_checkpoint():
+            await asyncio.gather(checkpoint(self))
+
+        # TODO: decide whether to do this or gut entirely
+        self.loop.run_until_complete(do_init_checkpoint())
 
         try:
             while True:
@@ -264,7 +268,9 @@ class neuron:
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
                     )
 
-                bt.logging.info(f"step({self.step}) block({ttl_get_block( self )})")
+                bt.logging.info(
+                    f"step({self.step}) block({self.subtensor.get_current_block()})"
+                )
 
                 # Run multiple forwards.
                 async def run_forward():
@@ -280,7 +286,7 @@ class neuron:
                 bt.logging.info("Checking if should checkpoint")
                 if should_checkpoint(self):
                     bt.logging.info(f"Checkpointing...")
-                    checkpoint(self)
+                    await checkpoint(self)
 
                 # Set the weights on chain.
                 bt.logging.info(f"Checking if should set weights")
@@ -294,7 +300,7 @@ class neuron:
                     bt.logging.info(f"Reinitializing wandb")
                     reinit_wandb(self)
 
-                self.prev_step_block = ttl_get_block(self)
+                self.prev_step_block = self.subtensor.get_current_block()
                 if self.config.neuron.verbose:
                     bt.logging.debug(f"block at end of step: {self.prev_step_block}")
                     bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
@@ -312,9 +318,9 @@ class neuron:
                 self.wandb.finish()
 
 
-def main():
-    neuron().run()
+async def main():
+    await neuron().run()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
