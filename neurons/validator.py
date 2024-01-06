@@ -40,7 +40,6 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
-    ttl_get_block,
     log_event,
 )
 from storage.validator.weights import (
@@ -172,6 +171,7 @@ class neuron:
 
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
+        self.loop.set_debug(True)
 
         # Start the subscription handler
         bt.logging.debug(f"starting event handler")
@@ -186,63 +186,61 @@ class neuron:
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
-        self.prev_step_block = ttl_get_block(self)
+        self.prev_step_block = self.subtensor.get_current_block()
         self.step = 0
 
         # Start with 0 monitor pings
         # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
 
-    async def neuron_registered_subscription_handler(
-        self, obj, update_nr, subscription_id
-    ):
-        bt.logging.debug(f"New block #{obj['header']['number']}")
-        self.current_block = obj["header"]["number"]
+    async def neuron_deregistration_watchdog(self):
+        while True:
+            current_block = self.subtensor.get_current_block()
+            block_hash = self.subtensor.get_block_hash(current_block)
+            events = self.subtensor.substrate.get_events(block_hash)
+            try:
+                for event in events:
+                    event_dict = event["event"].decode()
+                    if event_dict["event_id"] == "NeuronRegistered":
+                        netuid, uid, hotkey = event_dict["attributes"]
+                        if int(netuid) == 21:
+                            bt.logging.info(
+                                f"NeuronRegistered Event {uid}! Rebalancing data..."
+                            )
+                            with open(self.config.neuron.debug_logging_path, "a") as file:
+                                file.write(
+                                    f"NeuronRegistered Event {uid}! Rebalancing data..."
+                                    f"{pformat(event_dict)}\n"
+                                )
+                            await rebalance_data(
+                                self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
+                            )
+            except Exception as e:
+                bt.logging.error(
+                    f"Error in neuron_registered_subscription_handler: {e} {traceback.format_exc()}"
+                )
+            
+            asyncio.sleep(12) # block time
 
-        bt.logging.debug(obj)
-
-        block_no = obj["header"]["number"]
-        block_hash = self.subtensor.get_block_hash(block_no)
-        bt.logging.debug(f"subscription block hash: {block_hash}")
-        events = self.subtensor.substrate.get_events(block_hash)
-        for event in events:
-            event_dict = event["event"].decode()
-            if event_dict["event_id"] == "NeuronRegistered":
-                netuid, uid, hotkey = event_dict["attributes"]
-                if int(netuid) == 21:
-                    bt.logging.info(
-                        f"NeuronRegistered Event {uid}! Rebalancing data..."
-                    )
-                    with open(self.config.neuron.debug_logging_path, "a") as file:
-                        file.write(
-                            f"NeuronRegistered Event {uid}! Rebalancing data..."
-                            f"{pformat(event_dict)}\n"
-                        )
-                    await rebalance_data(
-                        self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
-                    )
-
-    def start_neuron_event_subscription(self):
-        asyncio.run(
-            self.subtensor.substrate.subscribe_block_headers(
-                self.neuron_registered_subscription_handler
-            )
-        )
-
-    def run(self):
+    async def run(self):
         bt.logging.info("run()")
 
         if self.config.database.purge_challenges:
             bt.logging.info("purging challenges")
 
             async def run_purge():
-                await asyncio.gather([purge_challenges_for_all_hotkeys(self.database)])
+                await asyncio.gather(purge_challenges_for_all_hotkeys(self.database))
 
             self.loop.run_until_complete(run_purge())
             bt.logging.info("purged challenges.")
 
         load_state(self)
-        checkpoint(self)
+
+        async def do_init_checkpoint():
+            await asyncio.gather(checkpoint(self))
+
+        # TODO: decide whether to do this or gut entirely
+        self.loop.run_until_complete(do_init_checkpoint())
 
         try:
             while True:
@@ -264,7 +262,9 @@ class neuron:
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
                     )
 
-                bt.logging.info(f"step({self.step}) block({ttl_get_block( self )})")
+                bt.logging.info(
+                    f"step({self.step}) block({self.subtensor.get_current_block()})"
+                )
 
                 # Run multiple forwards.
                 async def run_forward():
@@ -280,7 +280,7 @@ class neuron:
                 bt.logging.info("Checking if should checkpoint")
                 if should_checkpoint(self):
                     bt.logging.info(f"Checkpointing...")
-                    checkpoint(self)
+                    await checkpoint(self)
 
                 # Set the weights on chain.
                 bt.logging.info(f"Checking if should set weights")
@@ -294,7 +294,7 @@ class neuron:
                     bt.logging.info(f"Reinitializing wandb")
                     reinit_wandb(self)
 
-                self.prev_step_block = ttl_get_block(self)
+                self.prev_step_block = self.subtensor.get_current_block()
                 if self.config.neuron.verbose:
                     bt.logging.debug(f"block at end of step: {self.prev_step_block}")
                     bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
@@ -312,9 +312,9 @@ class neuron:
                 self.wandb.finish()
 
 
-def main():
-    neuron().run()
+async def main():
+    await neuron().run()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
