@@ -31,3 +31,4 @@ from . import retrieve
 from . import distribute
 from . import store
 from . import forward
+from . import cid
