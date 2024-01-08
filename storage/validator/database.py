@@ -220,8 +220,7 @@ async def get_all_full_hashes(database: aioredis.Redis) -> List[str]:
         A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
     """
     data_hashes = []
-    keys = await database.scan_iter("*")
-    for key in keys:
+    async for key in database.scan_iter("*"):
         if not key.startswith(b"file:"):
             continue
         data_hashes.append(key.decode("utf-8").split(":")[1])
