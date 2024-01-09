@@ -255,7 +255,7 @@ async def challenge_data(self):
         responses,
         rewards,
         timeout=self.config.neuron.challenge_timeout,
-        mode="minmax",
+        mode=self.config.neuron.reward_mode,
     )
 
     # Determine the best UID based on rewards

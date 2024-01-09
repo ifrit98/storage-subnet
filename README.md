@@ -729,7 +729,9 @@ It is *highly* recommended that all miners and validators run their own local su
 
 To start your miner/validator using your local node, include the flag `--subtensor.network local` into your startup parameters.
 
-### Docker installation
+Below are two methods to getting local subtensor up and running. Either use docker, or manually install on the hostmachine.
+
+#### Docker installation
 For easiest installation, run subtensor inside of the foundation-provided docker container.
 
 For official docker and docker-compose install instructions, see [here](https://docs.docker.com/engine/install/ubuntu/#installation-methods) and [here](https://docs.docker.com/compose/install/linux/#install-using-the-repository), respectively.
@@ -747,7 +749,7 @@ cd subtensor
 sudo docker compose up -d
 ```
 
-#### Quick Installation
+#### Manual Installation
 Provided are two scripts to build subtensor, and then to run it inside a pm2 process as a convenience. If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
 ```bash
 # Installs dependencies and builds the subtensor binary

@@ -193,7 +193,7 @@ async def store_encrypted_data(
             responses,
             rewards,
             timeout=self.config.neuron.store_timeout,
-            mode="minmax",
+            mode=self.config.neuron.reward_mode,
         )
 
         # Get a new set of UIDs to query for those left behind
@@ -373,7 +373,7 @@ async def store_broadband(
             responses,
             rewards,
             timeout=self.config.neuron.store_timeout,
-            mode="minmax",
+            mode=self.config.neuron.reward_mode,
         )
 
         bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
