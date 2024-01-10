@@ -243,7 +243,11 @@ class neuron:
             - This property employs lazy loading and caching to efficiently manage the retrieval of top N validators.
             - The cache is updated based on specific conditions, such as crossing a checkpoint in the network.
         """
-        if self._top_n_validators == None or should_checkpoint(get_current_block(self.subtensor), self.prev_step_block, self.config.neuron.checkpoint_block_length):
+        if self._top_n_validators == None or should_checkpoint(
+            get_current_block(self.subtensor),
+            self.prev_step_block,
+            self.config.neuron.checkpoint_block_length,
+        ):
             self._top_n_validators = self.get_top_n_validators()
         return self._top_n_validators
 

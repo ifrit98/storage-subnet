@@ -30,6 +30,7 @@ from storage.validator.database import (
     total_validator_storage,
     get_all_chunk_hashes,
     get_miner_statistics,
+    purge_challenges_for_all_hotkeys,
 )
 
 from .challenge import challenge_data
@@ -85,6 +86,11 @@ async def forward(self):
                 dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
                 hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
             )
+
+    if self.step % self.config.neuron.purge_challenges_length == 0 and self.step != 0:
+        # Purge challenges periodically
+        bt.logging.info("initiating periodic challenges purge")
+        await purge_challenges_for_all_hotkeys(self.database)
 
     if self.step % self.config.neuron.compute_stats_interval == 0:
         await compute_all_tiers(self.database)

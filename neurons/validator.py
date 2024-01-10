@@ -264,7 +264,9 @@ class neuron:
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
                     )
 
-                bt.logging.info(f"step({self.step}) block({get_current_block(self.subtensor)})")
+                bt.logging.info(
+                    f"step({self.step}) block({get_current_block(self.subtensor)})"
+                )
 
                 # Run multiple forwards.
                 async def run_forward():
@@ -282,7 +284,7 @@ class neuron:
                 should_checkpoint_validator = should_checkpoint(
                     current_block,
                     self.prev_step_block,
-                    self.config.neuron.checkpoint_block_length
+                    self.config.neuron.checkpoint_block_length,
                 )
                 bt.logging.debug(
                     f"should_checkpoint() params: (current block) {current_block} (prev block) {self.prev_step_block} (checkpoint_block_length) {self.config.neuron.checkpoint_block_length}\n"
@@ -298,7 +300,7 @@ class neuron:
                     get_current_block(self.subtensor),
                     self.prev_step_block,
                     self.config.neuron.set_weights_epoch_length,
-                    self.config.neuron.disable_set_weights
+                    self.config.neuron.disable_set_weights,
                 ):
                     bt.logging.info(f"Setting weights {self.moving_averaged_scores}")
                     set_weights_for_validator(

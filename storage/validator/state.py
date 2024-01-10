@@ -34,7 +34,6 @@ from storage.validator.event import EventSchema
 import bittensor as bt
 
 
-
 def should_reinit_wandb(self):
     # Check if wandb run needs to be rolled over.
     return (

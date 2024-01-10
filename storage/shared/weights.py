@@ -7,12 +7,19 @@ def should_wait_to_set_weights(current_block, last_epoch_block, tempo):
     return diff_blocks <= tempo / 2
 
 
-def should_set_weights(current_block, prev_step_block, set_weights_epoch_length, disable_set_weights: bool = False) -> bool:
+def should_set_weights(
+    current_block,
+    prev_step_block,
+    set_weights_epoch_length,
+    disable_set_weights: bool = False,
+) -> bool:
     # Check if enough epoch blocks have elapsed since the last epoch.
     if disable_set_weights:
         return False
 
-    return not should_wait_to_set_weights(current_block, prev_step_block, set_weights_epoch_length)
+    return not should_wait_to_set_weights(
+        current_block, prev_step_block, set_weights_epoch_length
+    )
 
 
 def set_weights(

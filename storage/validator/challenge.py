@@ -271,7 +271,5 @@ def _filter_verified_responses(uids, responses):
     if len(not_none_responses) == 0:
         return (), ()
 
-    uids, responses = zip(
-        *not_none_responses
-    )
+    uids, responses = zip(*not_none_responses)
     return uids, responses
