@@ -173,11 +173,6 @@ class neuron:
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
 
-        # Start the subscription handler
-        bt.logging.debug(f"starting event handler")
-        self.start_neuron_event_subscription()
-        bt.logging.debug(f"started event handler")
-
         # Init wandb.
         if not self.config.wandb.off:
             bt.logging.debug("loading wandb")
@@ -190,47 +185,53 @@ class neuron:
         self.step = 0
 
         # Start with 0 monitor pings
-        # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
 
-    async def neuron_registered_subscription_handler(
-        self, obj, update_nr, subscription_id
-    ):
-        bt.logging.debug(f"New block #{obj['header']['number']}")
-        self.current_block = obj["header"]["number"]
+    async def neuron_deregistration_watchdog(self):
+        while True:
+            try:
+                current_block = self.subtensor.get_current_block()
+                bt.logging.debug(f"current block {current_block}")
+                block_hash = self.subtensor.get_block_hash(current_block)
+                bt.logging.debug(f"current block hash {block_hash}")
+                events = self.subtensor.substrate.get_events(block_hash)
 
-        bt.logging.debug(obj)
-
-        block_no = obj["header"]["number"]
-        block_hash = self.subtensor.get_block_hash(block_no)
-        bt.logging.debug(f"subscription block hash: {block_hash}")
-        events = self.subtensor.substrate.get_events(block_hash)
-        for event in events:
-            event_dict = event["event"].decode()
-            if event_dict["event_id"] == "NeuronRegistered":
-                netuid, uid, hotkey = event_dict["attributes"]
-                if int(netuid) == 21:
-                    bt.logging.info(
-                        f"NeuronRegistered Event {uid}! Rebalancing data..."
+                with open("watchdog_background_log.txt", "a") as file:
+                    file.write(
+                        f"New block #: {current_block}\n"
                     )
-                    with open(self.config.neuron.debug_logging_path, "a") as file:
-                        file.write(
-                            f"NeuronRegistered Event {uid}! Rebalancing data..."
-                            f"{pformat(event_dict)}\n"
-                        )
-                    await rebalance_data(
-                        self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
+                try:
+                    for event in events:
+                        event_dict = event["event"].decode()
+                        bt.logging.trace(f"event_id {event_dict['event_id']}")
+                        if event_dict["event_id"] == "NeuronRegistered":
+                            netuid, uid, hotkey = event_dict["attributes"]
+                            if int(netuid) == 21:
+                                bt.logging.info(
+                                    f"NeuronRegistered Event {uid}! Rebalancing data..."
+                                )
+                                with open("watchdog_background_log.txt", "a") as file:
+                                    file.write(
+                                        f"NeuronRegistered Event {uid}! Rebalancing data..."
+                                        f"{pformat(event_dict)}\n"
+                                    )
+                                bt.logging.info("Rebalance data would be triggered here!")
+                except Exception as e:
+                    bt.logging.error(
+                        f"Error in neuron_registered_subscription_handler: {e} {traceback.format_exc()}"
                     )
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                bt.logging.error(f"Error in watchdog: {e}")
+            await asyncio.sleep(12)
 
-    def start_neuron_event_subscription(self):
-        asyncio.run(
-            self.subtensor.substrate.subscribe_block_headers(
-                self.neuron_registered_subscription_handler
-            )
-        )
-
-    def run(self):
+    async def run(self):
         bt.logging.info("run()")
+
+        # Start the watchdog task as a non-blocking background task
+        bt.logging.debug(f"starting dereigstration watchdog handler")
+        watchdog_task = asyncio.create_task(self.neuron_deregistration_watchdog())
 
         if self.config.database.purge_challenges:
             bt.logging.info("purging challenges")
@@ -336,9 +337,9 @@ class neuron:
                 self.wandb.finish()
 
 
-def main():
-    neuron().run()
-
+async def main():
+    neuron_instance = neuron()
+    await neuron_instance.run()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
