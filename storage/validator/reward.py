@@ -82,35 +82,6 @@ def calculate_sigmoid_params(timeout):
     return steepness, shift
 
 
-def scale_rewards_with_adjusted_sigmoid(process_times, rewards, timeout):
-    """
-    Applies an adjusted sigmoid function to scale rewards based on the processing times of axons.
-    This function modifies the rewards based on an adjusted sigmoid function, where the steepness and
-    shift of the sigmoid curve are determined by the timeout value. This scaling method rewards faster
-    processing times with higher rewards, while slower times are penalized by reducing the rewards.
-    Args:
-        process_times (List[float]): A list of processing times for each axon.
-        rewards (List[float]): A list of initial reward values for each axon.
-        timeout (float): The timeout value used to determine the steepness and shift of the sigmoid function.
-    Returns:
-        List[float]: A list of rewards scaled according to the adjusted sigmoid function.
-    """
-    # Center the completion times around 0 for effective sigmoid scaling
-    centered_times = process_times - np.mean(process_times)
-
-    # Calculate steepness and shift based on timeout
-    steepness, shift = calculate_sigmoid_params(timeout)
-
-    # Apply adjusted sigmoid function to scale the times
-    scaled_scores = adjusted_sigmoid(centered_times, steepness, shift)
-
-    # Scale the rewards with sigmoid scores
-    for i in range(len(rewards)):
-        rewards[i] += rewards[i] * scaled_scores[i]
-
-    return rewards
-
-
 def get_sorted_response_times(uids, responses, timeout: float):
     """
     Sorts a list of axons based on their response times.
@@ -144,34 +115,15 @@ def get_sorted_response_times(uids, responses, timeout: float):
     return sorted_axon_times
 
 
-def scale_rewards_by_response_time(uids, responses, rewards, timeout: float):
-    """
-    Scales the rewards for each axon based on their response times using an adjusted sigmoid function.
-    This function first sorts the axons based on their response times and then applies a sigmoid scaling
-    to the rewards. This scaling rewards faster response times while penalizing slower ones, based on the
-    timeout parameter.
-    Args:
-        uids (List[int]): A list of unique identifiers for each axon.
-        responses (List[Response]): A list of Response objects corresponding to each axon.
-        rewards (List[float]): A list of initial reward values for each axon.
-        timeout (float): The timeout value used to calculate sigmoid scaling parameters.
-    Returns:
-        List[float]: A list of scaled rewards for each axon.
-    """
-    sorted_axon_times = get_sorted_response_times(uids, responses, timeout=timeout)
+def sigmoid_normalize(process_times, timeout):
+    # Center the completion times around 0 for effective sigmoid scaling
+    centered_times = process_times - np.mean(process_times)
 
-    # Extract only the process times
-    process_times = [proc_time for _, proc_time in sorted_axon_times]
+    # Calculate steepness and shift based on timeout
+    steepness, shift = calculate_sigmoid_params(timeout)
 
-    bt.logging.trace(f"rewards before sigmoid: {rewards}")
-
-    # Scale the rewards by these normalized scores
-    scaled_rewards = scale_rewards_with_adjusted_sigmoid(
-        process_times, rewards, timeout
-    )
-
-    bt.logging.trace(f"rewards after sigmoid : {rewards}")
-    return scaled_rewards
+    # Apply adjusted sigmoid function to scale the times
+    return adjusted_sigmoid_inverse(centered_times, steepness, shift)
 
 
 def min_max_normalize(times):
@@ -190,17 +142,18 @@ def min_max_normalize(times):
     if range_time == 0:
         # Avoid division by zero in case all times are the same
         return [0.5 for _ in times]
-    return [(time - min_time) / range_time for time in times]
+    return [(time - max_time) / range_time for time in times]
 
 
-def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
+def scale_rewards(uids, responses, rewards, timeout: float, mode: str):
     """
-    Scales the rewards for each axon based on their response times using Min-Max normalization.
+    Scales the rewards for each axon based on their response times using `mode` normalization.
     Args:
         uids (List[int]): A list of unique identifiers for each axon.
         responses (List[Response]): A list of Response objects corresponding to each axon.
         rewards (List[float]): A list of initial reward values for each axon.
         timeout (float): The timeout value used for response time calculations.
+        mode (str): The normalization mode to use. Can be either 'sigmoid' or 'minmax'.
     Returns:
         List[float]: A list of scaled rewards for each axon.
     """
@@ -210,7 +163,11 @@ def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
     process_times = [proc_time for _, proc_time in sorted_axon_times]
 
     # Normalize the response times
-    normalized_times = min_max_normalize(process_times)
+    normalized_times = (
+        min_max_normalize(process_times)
+        if mode == "minmax"
+        else sigmoid_normalize(process_times, timeout)
+    )
 
     # Create a dictionary mapping UIDs to normalized times
     uid_to_normalized_time = {
@@ -218,13 +175,13 @@ def scale_rewards_by_min_max(uids, responses, rewards, timeout: float):
         for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)
     }
     bt.logging.debug(
-        f"scale_rewards_by_min_max() uid_to_normalized_time: {uid_to_normalized_time}"
+        f"scale_rewards_by_{mode}() uid_to_normalized_time: {uid_to_normalized_time}"
     )
     # Scale the rewards with normalized times
     for i, uid in enumerate(uids):
         normalized_time_for_uid = uid_to_normalized_time[uid]
         rewards[i] += rewards[i] * normalized_time_for_uid
-    bt.logging.debug(f"scale_rewards_by_min_max() rewards: {rewards}")
+    bt.logging.debug(f"scale_rewards_by_{mode}() rewards: {rewards}")
     return rewards
 
 
@@ -249,11 +206,7 @@ def apply_reward_scores(
         bt.logging.debug(f"Reward shape: {rewards.shape}")
         bt.logging.debug(f"UIDs: {uids}")
 
-    scaled_rewards = (
-        scale_rewards_by_response_time(uids, responses, rewards, timeout=timeout)
-        if mode == "sigmoid"
-        else scale_rewards_by_min_max(uids, responses, rewards, timeout=timeout)
-    )
+    scaled_rewards = scale_rewards(uids, responses, rewards, timeout=timeout, mode=mode)
     bt.logging.debug(f"apply_reward_scores() Scaled rewards: {scaled_rewards}")
 
     # Compute forward pass rewards

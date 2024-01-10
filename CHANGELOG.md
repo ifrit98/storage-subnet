@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1 / 2024-01-07
+
+## What's Changed
+* update to sigmoid reward scaling for latency by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/64
+
+
+**Full Changelog**: https://github.com/ifrit98/storage-subnet/commits/v1.2.1...v1.2.0
+
+
 ## 1.2.0 / 2023-12-29
 
 ## What's Changed

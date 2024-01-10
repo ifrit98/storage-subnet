@@ -172,6 +172,8 @@ class miner:
             host=self.config.database.host,
             port=self.config.database.port,
             db=self.config.database.index,
+            socket_keepalive=True,
+            socket_connect_timeout=300,
         )
 
         self.my_subnet_uid = self.metagraph.hotkeys.index(
