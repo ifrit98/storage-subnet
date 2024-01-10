@@ -638,7 +638,9 @@ class miner:
         bt.logging.info(f"received challenge hash: {synapse.challenge_hash}")
         self.request_count += 1
 
+        bt.logging.info(f"entering get_chunk_metadata()")
         data = await get_chunk_metadata(self.database, synapse.challenge_hash)
+        bt.logging.info(f"exited get_chunk_metadata()")
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
             return synapse
@@ -651,6 +653,7 @@ class miner:
             bt.logging.error(f"No file found for {synapse.challenge_hash}")
             return synapse
 
+        bt.logging.info(f"entering load_from_filesystem()")
         try:
             encrypted_data_bytes = load_from_filesystem(filepath)
         except Exception as e:
@@ -658,18 +661,22 @@ class miner:
             synapse.axon.status_code = 404
             synapse.axon.status_message = "File not found"
             return synapse
+        bt.logging.info(f"exited load_from_filesystem()")
 
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time
+        bt.logging.info("extracting seed...")
         prev_seed = data.get(b"seed", "").encode()
         if prev_seed == None:
             bt.logging.error(f"No seed found for {synapse.challenge_hash}")
             return synapse
 
+        bt.logging.info(f"entering comput_subsequent_commitment()...")
         new_seed = synapse.seed.encode()
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
         )
+        bt.logging.info(f"exited compute_subsequent_commitment()")
         bt.logging.trace(f"prev seed : {prev_seed}")
         bt.logging.trace(f"new seed  : {new_seed}")
         bt.logging.trace(f"proof     : {proof}")
@@ -678,35 +685,47 @@ class miner:
         synapse.commitment_proof = proof
 
         # update the commitment seed challenge hash in storage
+        bt.logging.info(f"udpating challenge miner storage: {pformat(data)}")
         await update_seed_info(
             self.database, synapse.challenge_hash, new_seed.decode("utf-8")
         )
-        bt.logging.debug(f"udpated miner storage seed: {new_seed}")
+        bt.logging.info(f"udpated miner storage seed: {new_seed}")
 
         # Chunk the data according to the provided chunk_size
+        bt.logging.info(f"entering chunk_data()")
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
+        bt.logging.info(f"exited chunk_data()")
 
         # Extract setup params
+        bt.logging.info(f"extracting hex_to_ecc_point()")
         g = hex_to_ecc_point(synapse.g, synapse.curve)
         h = hex_to_ecc_point(synapse.h, synapse.curve)
+        bt.logging.info(f"exited hex_to_ecc_point()")
 
         # Commit the data chunks based on the provided curve points
+        bt.logging.info(f"entering ECCcommitment()")
         committer = ECCommitment(g, h)
+        bt.logging.info(f"entering commit_data_with_seed()")
         randomness, chunks, commitments, merkle_tree = commit_data_with_seed(
             committer,
             data_chunks,
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
+        bt.logging.info(f"exited commit_data_with_seed()")
 
         # Prepare return values to validator
+        bt.logging.info(f"entering b64_encode()")
         synapse.commitment = commitments[synapse.challenge_index]
         synapse.data_chunk = base64.b64encode(chunks[synapse.challenge_index])
         synapse.randomness = randomness[synapse.challenge_index]
         synapse.merkle_proof = b64_encode(
             merkle_tree.get_proof(synapse.challenge_index)
         )
+        bt.logging.info(f"exited b64_encode()")
+        bt.logging.info(f"getting merkle root...")
         synapse.merkle_root = merkle_tree.get_merkle_root()
+        bt.logging.info(f"exited merkle root...")
         bt.logging.trace(f"commitment: {str(synapse.commitment)[:24]}")
         bt.logging.trace(f"randomness: {str(synapse.randomness)[:24]}")
         bt.logging.trace(f"merkle_proof: {str(synapse.merkle_proof[:24])}")
