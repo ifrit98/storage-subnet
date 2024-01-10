@@ -542,19 +542,25 @@ class miner:
         self.request_count += 1
 
         # Decode the data from base64 to raw bytes
+        bt.logging.info(f"decrypting b64 data")
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
 
-        bt.logging.debug(f"store b64decrypted data: {encrypted_byte_data[:24]}")
+        bt.logging.info(f"store b64decrypted data: {encrypted_byte_data[:24]}")
 
         # Store the data with the hash as the key in the filesystem
+        bt.logging.info(f"entering hash_data()")
         data_hash = hash_data(encrypted_byte_data)
+        bt.logging.info(f"exited hash_data()")
 
         # If already storing this hash, simply update the validator seeds and return challenge
+        bt.logging.info(f"checking if data already exists...")
         if await self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
+            bt.logging.info(f"entering updating_seed_info()...")
             await update_seed_info(self.database, data_hash, synapse.seed)
         else:
             # Store the data in the filesystem
+            bt.logging.info(f"entering save_data_to_filesystem()")
             filepath = save_data_to_filesystem(
                 encrypted_byte_data, self.config.database.directory, str(data_hash)
             )
@@ -567,12 +573,16 @@ class miner:
                 sys.getsizeof(encrypted_byte_data),
                 synapse.seed,
             )
+            bt.logging.info(f"stored metadata for {data_hash} in database")
 
         # Commit to the entire data block
+        bt.logging.info(f"entering ECCommitment()")
         committer = ECCommitment(
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
+        bt.logging.info(f"exited ECCommitment()")
+        bt.logging.info(f"entering commit()")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
         if self.config.miner.verbose:
             bt.logging.debug(f"committer: {committer}")
@@ -580,13 +590,16 @@ class miner:
             bt.logging.debug(f"c: {c}")
             bt.logging.debug(f"m_val: {m_val}")
             bt.logging.debug(f"r: {r}")
+        bt.logging.info(f"exited commit()")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
         synapse.commitment = ecc_point_to_hex(c)
+        bt.logging.info(f"signed commitment: {synapse.commitment}")
 
         # Initialize the commitment hash with the initial commitment for chained proofs
         synapse.commitment_hash = str(m_val)
+        bt.logging.info(f"initial commitment_hash: {synapse.commitment_hash}")
         if self.config.miner.verbose:
             bt.logging.trace(f"signed m_val: {synapse.signature.hex()}")
             bt.logging.trace(f"type(seed): {type(synapse.seed)}")
@@ -597,7 +610,9 @@ class miner:
         )
 
         # Don't send data back, no need.
+        bt.logging.info(f"emptying data...")
         synapse.encrypted_data = base64.b64encode(b"").decode()  # Empty b64 response
+        bt.logging.info(f"returning empty data...")
         return synapse
 
     async def challenge(
@@ -770,6 +785,7 @@ class miner:
         self.request_count += 1
 
         # Fetch the data from the miner database
+        bt.logging.info(f"entering get_chunk_metadata()")
         data = await get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
@@ -781,6 +797,7 @@ class miner:
             bt.logging.error(f"No file found for {synapse.data_hash}")
             return synapse
 
+        bt.logging.info(f"entering load_from_filesystem()")
         try:
             encrypted_data_bytes = load_from_filesystem(filepath)
         except Exception as e:
@@ -788,8 +805,10 @@ class miner:
             synapse.axon.status_code = 404
             synapse.axon.status_message = "File not found"
             return synapse
+        bt.logging.info(f"exited load_from_filesystem()")
 
         # incorporate a final seed challenge to verify they still have the data at retrieval time
+        bt.logging.info(f"entering compute_subsequent_commitment()")
         commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes,
             data[b"seed"].encode(),
@@ -798,14 +817,17 @@ class miner:
         )
         synapse.commitment_hash = commitment
         synapse.commitment_proof = proof
+        bt.logging.info(f"exited compute_subsequent_commitment()")
 
         # store new seed
+        bt.logging.info(f"entering update_seed_info()")
         await update_seed_info(self.database, synapse.data_hash, synapse.seed)
         bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
 
         # Return base64 data
+        bt.logging.info(f"entering b64_encode()")
         synapse.data = base64.b64encode(encrypted_data_bytes)
-
+        bt.logging.info(f"exited b64_encode()")
         bt.logging.info(f"returning retrieved data {synapse.data[:24]}...")
         return synapse
 
