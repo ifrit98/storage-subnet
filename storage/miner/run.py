@@ -55,27 +55,28 @@ def run(self):
         type_registry=bt.__type_registry__,
     )
 
+    netuid = self.config.netuid
+
     # --- Check for registration.
     if not self.subtensor.is_hotkey_registered(
-        netuid=self.config.netuid,
+        netuid=netuid,
         hotkey_ss58=self.wallet.hotkey.ss58_address,
     ):
         bt.logging.error(
-            f"Wallet: {self.wallet} is not registered on netuid {self.config.netuid}"
+            f"Wallet: {self.wallet} is not registered on netuid {netuid}"
             f"Please register the hotkey using `btcli subnets register` before trying again"
         )
         exit()
 
-    network_created_at = substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid]).value
-    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]).value
+    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[netuid]).value
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj['header']['number']
         bt.logging.debug(f"New block #{current_block}")
 
-        bt.logging.debug(f"Blocks since epoch: {(current_block - network_created_at) % tempo}")
+        bt.logging.debug(f"Blocks since epoch: {tempo - (current_block + netuid + 1) % (tempo + 1)}")
 
-        if (current_block - network_created_at) % tempo == 0:
+        if tempo - (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(f"New epoch started, setting weights at block {current_block}")
 
             success = self.subtensor.set_weights(
