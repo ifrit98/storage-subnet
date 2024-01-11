@@ -59,6 +59,68 @@ def run(self):
         )
         exit()
 
+    with self.subtensor.substrate as substrate:
+        def neuron_registered_subscription_handler(
+            obj, update_nr, subscription_id
+        ):
+            bt.logging.debug(f"New block #{obj['header']['number']}")
+            current_block = obj["header"]["number"]
+
+            last_epoch = substrate.query_map(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21])
+            if current_block - last_epoch == 0:
+                success = self.subtensor.set_weights(
+                    uids=[self.my_subnet_uid],
+                    netuid=21,
+                    weights=[1],
+                    wait_for_inclusion=False,
+                    wait_for_finalization=False,
+                    wallet=self.wallet,
+                    version_key=1,
+                )
+                
+                if success:
+                    bt.logging.info("Setting self-weights on chain successful")
+
+        substrate.subscribe_block_headers(
+            neuron_registered_subscription_handler
+        )
+
+def old_run(self):
+    """
+    Initiates and manages the main loop for the miner on the Bittensor network.
+
+    This function performs the following primary tasks:
+    1. Check for registration on the Bittensor network.
+    2. Attaches the miner's forward, blacklist, and priority functions to its axon.
+    3. Starts the miner's axon, making it active on the network.
+    4. Regularly updates the metagraph with the latest network state.
+    5. Optionally sets weights on the network, defining how much trust to assign to other nodes.
+    6. Handles graceful shutdown on keyboard interrupts and logs unforeseen errors.
+
+    The miner continues its operations until `should_exit` is set to True or an external interruption occurs.
+    During each epoch of its operation, the miner waits for new blocks on the Bittensor network, updates its
+    knowledge of the network (metagraph), and sets its weights. This process ensures the miner remains active
+    and up-to-date with the network's latest state.
+
+    Note:
+        - The function leverages the global configurations set during the initialization of the miner.
+        - The miner's axon serves as its interface to the Bittensor network, handling incoming and outgoing requests.
+
+    Raises:
+        KeyboardInterrupt: If the miner is stopped by a manual interruption.
+        Exception: For unforeseen errors during the miner's operation, which are logged for diagnosis.
+    """
+    # --- Check for registration.
+    if not self.subtensor.is_hotkey_registered(
+        netuid=self.config.netuid,
+        hotkey_ss58=self.wallet.hotkey.ss58_address,
+    ):
+        bt.logging.error(
+            f"Wallet: {self.wallet} is not registered on netuid {self.config.netuid}"
+            f"Please register the hotkey using `btcli subnets register` before trying again"
+        )
+        exit()
+
     # --- Run until should_exit = True.
     self.last_epoch_block = self.metagraph.last_update[self.my_subnet_uid].item()
     bt.logging.info(f"Miner starting at block: {self.last_epoch_block}")
