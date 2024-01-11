@@ -74,9 +74,9 @@ def run(self):
         current_block = obj['header']['number']
         bt.logging.debug(f"New block #{current_block}")
 
-        bt.logging.debug(f"Blocks since epoch: {tempo - (current_block + netuid + 1) % (tempo + 1)}")
+        bt.logging.debug(f"Blocks since epoch: {(current_block + netuid + 1) % (tempo + 1)}")
 
-        if tempo - (current_block + netuid + 1) % (tempo + 1) == 0:
+        if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(f"New epoch started, setting weights at block {current_block}")
 
             success = self.subtensor.set_weights(
