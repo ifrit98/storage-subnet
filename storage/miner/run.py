@@ -66,8 +66,8 @@ def run(self):
         )
         exit()
 
-    network_created_at = substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid]).process()
-    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]).process()
+    network_created_at = substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid]).value
+    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]).value
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj['header']['number']
