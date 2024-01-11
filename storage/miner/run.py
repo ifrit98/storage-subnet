@@ -83,7 +83,7 @@ def run(self):
                 uids=[self.my_subnet_uid],
                 netuid=self.config.netuid,
                 weights=[1],
-                wait_for_inclusion=True,
+                wait_for_inclusion=False,
                 wait_for_finalization=False,
                 wallet=self.wallet,
                 version_key=1,
