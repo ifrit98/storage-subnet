@@ -71,12 +71,16 @@ def run(self):
             start_epoch = time.time()
 
             # --- Wait until next epoch.
+            bt.logging.debug("Getting current block...")
             self.current_block = self.subtensor.get_current_block()
+            bt.logging.debug("Syncing metagraph...")
             self.metagraph.sync(subtensor=self.subtensor)
+            bt.logging.debug("Getting last active block...")
             self.last_epoch_block = self.metagraph.last_update[
                 self.my_subnet_uid
             ].item()
 
+            bt.logging.debug("Getting hyperparameters...")
             hyperparameters = self.subtensor.get_subnet_hyperparameters(
                 self.config.netuid, self.current_block
             )
@@ -89,6 +93,7 @@ def run(self):
             seconds_waiting_in_loop = 1
             presence_message_seconds_count = 0
 
+            bt.logging.debug("Figuring out if we can set weights...")
             while should_wait_to_set_weights(
                 self.current_block,
                 self.last_epoch_block,
@@ -97,6 +102,7 @@ def run(self):
                 # --- Wait for next bloc.
                 time.sleep(seconds_waiting_in_loop)
                 presence_message_seconds_count += seconds_waiting_in_loop
+                bt.logging.debug("Getting current block...")
                 self.current_block = self.subtensor.get_current_block()
 
                 if (
@@ -110,8 +116,10 @@ def run(self):
 
                 # --- Check if we should exit.
                 if self.should_exit:
+                    bt.logging.debug("Exiting weight setting loop...")
                     break
 
+            bt.logging.debug("Resetting message seconds count...")
             presence_message_seconds_count = 0
 
             # --- Set weights.
@@ -169,6 +177,7 @@ def run(self):
 
             # --- Update the miner storage information periodically.
             update_storage_stats(self)
+            bt.logging.debug("Storage statistics updated...")
 
     # If someone intentionally stops the miner, it'll safely terminate operations.
     except KeyboardInterrupt:
