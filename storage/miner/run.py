@@ -58,7 +58,7 @@ def run(self):
         )
         exit()
 
-    def epoch_occurred():
+    def epoch_occurred(obj, times_updated, subscription_id):
         bt.logging.info("New epoch started, setting weights...")
         success = self.subtensor.set_weights(
             uids=[self.my_subnet_uid],
