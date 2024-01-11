@@ -67,16 +67,21 @@ def run(self):
         exit()
 
     def epoch_occurred(obj, times_updated, subscription_id):
-        bt.logging.info("New epoch started, setting weights...")
+        bt.logging.info(f"New epoch started, setting weights at block {obj.value}")
+        if times_updated > 0:
+            bt.logging.info("Subscription called after creation")
+
         success = self.subtensor.set_weights(
             uids=[self.my_subnet_uid],
             netuid=21,
             weights=[1],
-            wait_for_inclusion=False,
+            wait_for_inclusion=True,
             wait_for_finalization=False,
             wallet=self.wallet,
             version_key=1,
         )
+
+        bt.logging.debug(success)
 
         if success:
             bt.logging.info("Setting self-weights on chain successful")
