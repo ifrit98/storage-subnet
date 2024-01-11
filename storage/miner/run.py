@@ -19,6 +19,7 @@ import time
 import wandb
 import bittensor as bt
 import traceback
+from substrateinterface import SubstrateInterface
 from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
 
@@ -47,6 +48,13 @@ def run(self):
         KeyboardInterrupt: If the miner is stopped by a manual interruption.
         Exception: For unforeseen errors during the miner's operation, which are logged for diagnosis.
     """
+    substrate = SubstrateInterface(
+        ss58_format=bt.__ss58_format__,
+        use_remote_preset=True,
+        url=self.subtensor.chain_endpoint,
+        type_registry=bt.__type_registry__,
+    )
+
     # --- Check for registration.
     if not self.subtensor.is_hotkey_registered(
         netuid=self.config.netuid,
@@ -73,8 +81,7 @@ def run(self):
         if success:
             bt.logging.info("Setting self-weights on chain successful")
 
-    with self.subtensor.substrate as substrate:
-        substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
+    substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
 
 def old_run(self):
     """
