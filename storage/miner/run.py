@@ -55,13 +55,6 @@ def run(self):
         type_registry=bt.__type_registry__,
     )
 
-    def handler(obj, update_nr, subscription_id):
-        bt.logging.debug(f"New block #{obj['header']['number']}")
-
-    substrate.subscribe_block_headers(
-        handler
-    )
-
     # --- Check for registration.
     if not self.subtensor.is_hotkey_registered(
         netuid=self.config.netuid,
@@ -73,27 +66,34 @@ def run(self):
         )
         exit()
 
-"""     def epoch_occurred(obj, times_updated, subscription_id):
-        bt.logging.info(f"New epoch started, setting weights at block {obj.value}")
-        if times_updated > 0:
-            bt.logging.info("Subscription called after creation")
+    network_created_at = substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid])
+    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid])
 
-        success = self.subtensor.set_weights(
-            uids=[self.my_subnet_uid],
-            netuid=21,
-            weights=[1],
-            wait_for_inclusion=True,
-            wait_for_finalization=False,
-            wallet=self.wallet,
-            version_key=1,
-        )
+    def handler(obj, update_nr, subscription_id):
+        current_block = obj['header']['number']
+        bt.logging.debug(f"New block #{current_block}")
 
-        bt.logging.debug(success)
+        if current_block - network_created_at % tempo == 0:
+            bt.logging.info(f"New epoch started, setting weights at block {obj.value}")
 
-        if success:
-            bt.logging.info("Setting self-weights on chain successful") """
+            success = self.subtensor.set_weights(
+                uids=[self.my_subnet_uid],
+                netuid=self.config.netuid,
+                weights=[1],
+                wait_for_inclusion=True,
+                wait_for_finalization=False,
+                wallet=self.wallet,
+                version_key=1,
+            )
 
-    #substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
+            bt.logging.debug(success)
+
+            if success:
+                bt.logging.info("Setting self-weights on chain successful")
+
+    substrate.subscribe_block_headers(
+        handler
+    )
 
 def old_run(self):
     """
