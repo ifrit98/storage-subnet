@@ -22,7 +22,6 @@ import traceback
 from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
 
-
 def run(self):
     """
     Initiates and manages the main loop for the miner on the Bittensor network.
@@ -59,31 +58,23 @@ def run(self):
         )
         exit()
 
-    with self.subtensor.substrate as substrate:
-        def neuron_registered_subscription_handler(
-            obj, update_nr, subscription_id
-        ):
-            bt.logging.debug(f"New block #{obj['header']['number']}")
-            current_block = obj["header"]["number"]
-
-            last_epoch = substrate.query_map(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21])
-            if current_block - last_epoch == 0:
-                success = self.subtensor.set_weights(
-                    uids=[self.my_subnet_uid],
-                    netuid=21,
-                    weights=[1],
-                    wait_for_inclusion=False,
-                    wait_for_finalization=False,
-                    wallet=self.wallet,
-                    version_key=1,
-                )
-                
-                if success:
-                    bt.logging.info("Setting self-weights on chain successful")
-
-        substrate.subscribe_block_headers(
-            neuron_registered_subscription_handler
+    def epoch_occurred():
+        bt.logging.info("New epoch started, setting weights...")
+        success = self.subtensor.set_weights(
+            uids=[self.my_subnet_uid],
+            netuid=21,
+            weights=[1],
+            wait_for_inclusion=False,
+            wait_for_finalization=False,
+            wallet=self.wallet,
+            version_key=1,
         )
+
+        if success:
+            bt.logging.info("Setting self-weights on chain successful")
+
+    with self.subtensor.substrate as substrate:
+        substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
 
 def old_run(self):
     """
