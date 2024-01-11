@@ -890,6 +890,9 @@ def main():
     """
     miner().run_in_background_thread()
 
+    while True:
+        time.sleep(1)
+
 
 if __name__ == "__main__":
     main()
