@@ -30,6 +30,7 @@ from loguru import logger
 from pprint import pformat
 from traceback import print_exception
 from substrateinterface.base import SubstrateInterface
+from copy import deepcopy
 
 from storage import protocol
 from storage.shared.subtensor import get_current_block
@@ -193,7 +194,8 @@ class neuron:
         self.should_exit: bool = False
         self.subscription_is_running: bool = False
         self.subscription_thread: threading.Thread = None
-        self.rebalance_mutex = False
+        self.last_registered_block = 0
+        self.rebalance_queue = []
 
     def run(self):
         bt.logging.info("run()")
@@ -304,6 +306,12 @@ class neuron:
                 )
                 self.wandb.finish()
 
+    def log(self, log: str):
+        bt.logging.debug(log)
+
+        with open(self.config.neuron.subscription_logging_path, "a") as file:
+            file.write(log)
+
     def start_event_subscription(self):
         """
         Starts the subscription handler in a background thread.
@@ -315,18 +323,10 @@ class neuron:
             type_registry=bt.__type_registry__,
         )
 
-        rebalance_queue = []
-
         def neuron_registered_subscription_handler(
             obj, update_nr, subscription_id
         ):
-            with open(self.config.neuron.subscription_logging_path, "a") as file:
-                file.write(
-                    f"New block #: {obj['header']['number']}\n"
-                )
-            bt.logging.debug(f"New block #{obj['header']['number']}")
-            current_block = obj["header"]["number"]
-
+            self.log(f"New block #: {obj['header']['number']}\n")
             bt.logging.debug(obj)
 
             block_no = obj["header"]["number"]
@@ -334,25 +334,29 @@ class neuron:
             bt.logging.debug(f"subscription block hash: {block_hash}")
             events = substrate.get_events(block_hash)
 
-            with open(self.config.neuron.subscription_logging_path, "a") as file:
-                file.write(f"Events: {pformat(events)}\n")
+            self.log(f"Events: {pformat(events)}\n")
 
             for event in events:
                 event_dict = event["event"].decode()
                 if event_dict["event_id"] == "NeuronRegistered":
                     netuid, uid, hotkey = event_dict["attributes"]
                     if int(netuid) == 21:
-                        bt.logging.info(
-                            f"NeuronRegistered Event {uid}! Rebalancing data..."
+                        self.log(
+                            f"NeuronRegistered Event {uid}! Rebalancing data...\n"
+                            f"{pformat(event_dict)}\n"
                         )
-                        with open(self.config.neuron.subscription_logging_path, "a") as file:
-                            file.write(
-                                f"NeuronRegistered Event {uid}! Rebalancing data..."
-                                f"{pformat(event_dict)}\n"
-                            )
-                        add_to_rebalance_queue = True
-                        rebalance_queue.append(hotkey)
-                        # TODO: add to rebalance queue and flush over time or at scheduled intervals
+
+                        self.last_registered_block = block_no
+                        self.rebalance_queue.append(hotkey)
+
+            # If we have some hotkeys deregistered, and it's been 5 blocks since we've caught a registration: rebalance
+            if len(self.rebalance_queue) > 0 and self.last_registered_block + 5 <= block_no:
+                hotkeys = deepcopy(self.rebalance_queue)
+                self.rebalance_queue.clear()
+
+                self.loop.run_until_complete(
+                    rebalance_data(self, k=2, dropped_hotkeys=hotkeys, hotkey_replaced=True)
+                )
 
         substrate.subscribe_block_headers(
             neuron_registered_subscription_handler
