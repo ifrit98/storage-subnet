@@ -888,7 +888,7 @@ def main():
     This function initializes and runs the neuron. It handles the main loop, state management, and interaction
     with the Bittensor network.
     """
-    miner().run()
+    miner().run_in_background_thread()
 
 
 if __name__ == "__main__":
