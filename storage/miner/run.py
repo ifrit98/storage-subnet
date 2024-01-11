@@ -55,6 +55,13 @@ def run(self):
         type_registry=bt.__type_registry__,
     )
 
+    def handler(obj, update_nr, subscription_id):
+        bt.logging.debug(f"New block #{obj['header']['number']}")
+
+    substrate.subscribe_block_headers(
+        handler
+    )
+
     # --- Check for registration.
     if not self.subtensor.is_hotkey_registered(
         netuid=self.config.netuid,
@@ -66,7 +73,7 @@ def run(self):
         )
         exit()
 
-    def epoch_occurred(obj, times_updated, subscription_id):
+"""     def epoch_occurred(obj, times_updated, subscription_id):
         bt.logging.info(f"New epoch started, setting weights at block {obj.value}")
         if times_updated > 0:
             bt.logging.info("Subscription called after creation")
@@ -84,9 +91,9 @@ def run(self):
         bt.logging.debug(success)
 
         if success:
-            bt.logging.info("Setting self-weights on chain successful")
+            bt.logging.info("Setting self-weights on chain successful") """
 
-    substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
+    #substrate.query(module="SubtensorModule", storage_function="LastMechansimStepBlock", params=[21], subscription_handler=epoch_occurred)
 
 def old_run(self):
     """
