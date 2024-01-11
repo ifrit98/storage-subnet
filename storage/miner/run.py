@@ -66,11 +66,11 @@ def run(self):
         )
         exit()
 
-    network_created_at = int(substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid]))
-    tempo = int(substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]))
+    network_created_at = substrate.query(module="SubtensorModule", storage_function="NetworkRegisteredAt", params=[self.config.netuid]).process()
+    tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]).process()
 
     def handler(obj, update_nr, subscription_id):
-        current_block = int(obj['header']['number'])
+        current_block = obj['header']['number'].process()
         bt.logging.debug(f"New block #{current_block}")
 
         if current_block - network_created_at % tempo == 0:
