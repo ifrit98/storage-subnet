@@ -70,7 +70,7 @@ def run(self):
     tempo = substrate.query(module="SubtensorModule", storage_function="Tempo", params=[self.config.netuid]).process()
 
     def handler(obj, update_nr, subscription_id):
-        current_block = obj['header']['number'].process()
+        current_block = obj['header']['number']
         bt.logging.debug(f"New block #{current_block}")
 
         if current_block - network_created_at % tempo == 0:
