@@ -194,7 +194,7 @@ class neuron:
         self.should_exit: bool = False
         self.subscription_is_running: bool = False
         self.subscription_thread: threading.Thread = None
-        self.last_registered_block = 0
+        self.last_registered_block = bt.subtensor.get_current_block()
         self.rebalance_queue = []
 
     def run(self):
