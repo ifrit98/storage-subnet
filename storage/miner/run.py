@@ -73,7 +73,7 @@ def run(self):
         current_block = obj['header']['number']
         bt.logging.debug(f"New block #{current_block}")
 
-        bt.logging.debug(f"{current_block} {network_created_at} {tempo}")
+        bt.logging.debug(f"Blocks since epoch: {(current_block - network_created_at) % tempo}")
 
         if (current_block - network_created_at) % tempo == 0:
             bt.logging.info(f"New epoch started, setting weights at block {current_block}")
