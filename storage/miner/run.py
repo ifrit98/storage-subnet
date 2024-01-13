@@ -93,7 +93,7 @@ def run(self):
 
                 last_extrinsic_hash = None
             except Exception as e:
-                print(e)
+                bt.logging.debug(f"An error occurred: {e.args}")
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
