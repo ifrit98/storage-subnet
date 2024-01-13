@@ -74,9 +74,8 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
-    tempo = 10
-
     last_extrinsic_hash = None
+    checked_extrinsics_count = 0
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
@@ -87,30 +86,22 @@ def run(self):
         )
 
         nonlocal last_extrinsic_hash
+        nonlocal checked_extrinsics_count
 
         if last_extrinsic_hash != None:
             try:
                 receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
+
+                last_extrinsic_hash = None
+                checked_extrinsics_count = 0
             except Exception as e:
+                checked_extrinsics_count += 1
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
 
-                substrate.init_runtime()
-
-                result_data = substrate.rpc_request("author_pendingExtrinsics", [])
-                bt.logging.debug(result_data)
-
-                extrinsics = []
-
-                for extrinsic_data in result_data['result']:
-                    extrinsic = substrate.runtime_config.create_scale_object('Extrinsic', metadata=substrate.metadata)
-                    extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=substrate.config.get('strict_scale_decode'))
-                    extrinsics.append(extrinsic)
-
-                for bytes in extrinsics:
-                    bt.logging.debug(f"{bytes}")
-            finally:
+            if checked_extrinsics_count >= 5 and last_extrinsic_hash != None:
                 last_extrinsic_hash = None
+                checked_extrinsics_count = 0
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
