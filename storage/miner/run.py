@@ -86,19 +86,29 @@ def run(self):
                 f"New epoch started, setting weights at block {current_block}"
             )
 
-            success = self.subtensor.set_weights(
-                uids=[self.my_subnet_uid],
-                netuid=self.config.netuid,
-                weights=[1],
+            call = substrate.compose_call(
+                call_module="SubtensorModule",
+                call_function="set_weights",
+                call_params={
+                    "dests": [self.my_subnet_uid],
+                    "weights": [65535],
+                    "netuid": netuid,
+                    "version_key": 1,
+                },
+            )
+            # Period dictates how long the extrinsic will stay as part of waiting pool
+            extrinsic = substrate.create_signed_extrinsic(
+                call=call, keypair=self.wallet.hotkey, era={"period": 100}
+            )
+            response = substrate.submit_extrinsic(
+                extrinsic,
                 wait_for_inclusion=False,
                 wait_for_finalization=False,
-                wallet=self.wallet,
-                version_key=1,
             )
 
-            bt.logging.debug(success)
+            bt.logging.debug(response)
 
-            if success:
+            if response:
                 bt.logging.info("Setting self-weights on chain successful")
 
             # --- Update the miner storage information periodically.
