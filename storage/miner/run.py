@@ -93,7 +93,7 @@ def run(self):
             receipt = substrate.retrieve_extrinsic_by_hash(last_block_hash_submitted, last_extrinsic_hash)
             last_block_hash_submitted = None
             last_extrinsic_hash = None
-            bt.logging.debug(receipt)
+            bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}\n\t\t{receipt.total_fee_amount}")
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
@@ -122,9 +122,6 @@ def run(self):
 
             last_block_hash_submitted = substrate.get_block_hash(current_block)
             last_extrinsic_hash = response.extrinsic_hash
-
-            if response:
-                bt.logging.info("Setting self-weights on chain successful")
 
             # --- Update the miner storage information periodically.
             update_storage_stats(self)
