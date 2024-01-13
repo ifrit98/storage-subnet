@@ -73,6 +73,8 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
+    tempo = 10
+
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
         bt.logging.debug(f"New block #{current_block}")
