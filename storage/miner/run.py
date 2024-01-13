@@ -20,6 +20,7 @@ import wandb
 import bittensor as bt
 import traceback
 from substrateinterface import SubstrateInterface
+from scalecodec import ScaleBytes
 from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
 
@@ -94,8 +95,18 @@ def run(self):
             except Exception as e:
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
 
-                pending = substrate.retrieve_pending_extrinsics()
-                for bytes in pending:
+                substrate.init_runtime()
+
+                result_data = substrate.rpc_request("author_pendingExtrinsics", [])
+
+                extrinsics = []
+
+                for extrinsic_data in result_data['result']:
+                    extrinsic = substrate.runtime_config.create_scale_object('Extrinsic', metadata=self.metadata)
+                    extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=self.config.get('strict_scale_decode'))
+                    extrinsics.append(extrinsic)
+
+                for bytes in extrinsics:
                     bt.logging.debug(f"{bytes}")
             finally:
                 last_extrinsic_hash = None
