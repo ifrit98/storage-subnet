@@ -73,6 +73,9 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
+    last_block_hash_submitted = None
+    last_extrinsic_hash = None
+
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
         bt.logging.debug(f"New block #{current_block}")
@@ -80,6 +83,12 @@ def run(self):
         bt.logging.debug(
             f"Blocks since epoch: {(current_block + netuid + 1) % (tempo + 1)}"
         )
+
+        if last_extrinsic_hash != None and last_block_hash_submitted != None:
+            receipt = substrate.retrieve_extrinsic_by_hash(last_block_hash_submitted, last_extrinsic_hash)
+            last_block_hash_submitted = None
+            last_extrinsic_hash = None
+            bt.logging.debug(receipt)
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
@@ -106,7 +115,8 @@ def run(self):
                 wait_for_finalization=False,
             )
 
-            bt.logging.debug(response)
+            last_block_hash_submitted = obj["header"]["hash"]
+            last_extrinsic_hash = response.extrinsic_hash
 
             if response:
                 bt.logging.info("Setting self-weights on chain successful")
