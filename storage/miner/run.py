@@ -89,11 +89,11 @@ def run(self):
         if last_extrinsic_hash != None:
             try:
                 receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
-                bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}\n\t\t{receipt.total_fee_amount}")
+                print(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}\n\t\t{receipt.total_fee_amount}")
 
                 last_extrinsic_hash = None
             except Exception as e:
-                bt.logging.debug(e)
+                print(e)
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
