@@ -76,6 +76,7 @@ def run(self):
 
     last_extrinsic_hash = None
     checked_extrinsics_count = 0
+    should_retry = False
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
@@ -87,6 +88,7 @@ def run(self):
 
         nonlocal last_extrinsic_hash
         nonlocal checked_extrinsics_count
+        nonlocal should_retry
 
         if last_extrinsic_hash != None:
             try:
@@ -97,13 +99,15 @@ def run(self):
                 checked_extrinsics_count = 0
             except Exception as e:
                 checked_extrinsics_count += 1
+                should_retry = True
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
 
             if checked_extrinsics_count >= 5 and last_extrinsic_hash != None:
                 last_extrinsic_hash = None
                 checked_extrinsics_count = 0
+                should_retry = False
 
-        if (current_block + netuid + 1) % (tempo + 1) == 0:
+        if ((current_block + netuid + 1) % (tempo + 1) == 0) or should_retry:
             bt.logging.info(
                 f"New epoch started, setting weights at block {current_block}"
             )
@@ -131,8 +135,9 @@ def run(self):
             last_extrinsic_hash = response.extrinsic_hash
 
             # --- Update the miner storage information periodically.
-            update_storage_stats(self)
-            bt.logging.debug("Storage statistics updated...")
+            if not should_retry:
+                update_storage_stats(self)
+                bt.logging.debug("Storage statistics updated...")
 
             if self.should_exit:
                 return True
