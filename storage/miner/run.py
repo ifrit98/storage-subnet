@@ -120,7 +120,7 @@ def run(self):
                 wait_for_finalization=False,
             )
 
-            last_block_hash_submitted = obj["header"]["hash"]
+            last_block_hash_submitted = substrate.get_block_hash(current_block)
             last_extrinsic_hash = response.extrinsic_hash
 
             if response:
