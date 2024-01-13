@@ -91,6 +91,10 @@ def run(self):
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
             except Exception as e:
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
+
+                pending = substrate.retrieve_pending_extrinsics()
+                for bytes in pending:
+                    bt.logging.debug(f"{bytes}")
             finally:
                 last_extrinsic_hash = None
 
