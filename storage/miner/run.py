@@ -102,8 +102,8 @@ def run(self):
                 extrinsics = []
 
                 for extrinsic_data in result_data['result']:
-                    extrinsic = substrate.runtime_config.create_scale_object('Extrinsic', metadata=self.metadata)
-                    extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=self.config.get('strict_scale_decode'))
+                    extrinsic = substrate.runtime_config.create_scale_object('Extrinsic', metadata=substrate.metadata)
+                    extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=substrate.config.get('strict_scale_decode'))
                     extrinsics.append(extrinsic)
 
                 for bytes in extrinsics:
