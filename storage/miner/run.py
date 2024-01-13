@@ -74,8 +74,6 @@ def run(self):
     ).value
 
     tempo = 10
-
-    last_block_hash_submitted = None
     last_extrinsic_hash = None
 
     def handler(obj, update_nr, subscription_id):
@@ -86,14 +84,16 @@ def run(self):
             f"Blocks since epoch: {(current_block + netuid + 1) % (tempo + 1)}"
         )
 
-        nonlocal last_block_hash_submitted
         nonlocal last_extrinsic_hash
 
-        if last_extrinsic_hash != None and last_block_hash_submitted != None:
-            receipt = substrate.retrieve_extrinsic_by_hash(last_block_hash_submitted, last_extrinsic_hash)
-            last_block_hash_submitted = None
-            last_extrinsic_hash = None
-            bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}\n\t\t{receipt.total_fee_amount}")
+        if last_extrinsic_hash != None:
+            try:
+                receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
+                bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}\n\t\t{receipt.total_fee_amount}")
+
+                last_extrinsic_hash = None
+            except Exception as e:
+                bt.logging.debug(e)
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
@@ -120,7 +120,6 @@ def run(self):
                 wait_for_finalization=False,
             )
 
-            last_block_hash_submitted = substrate.get_block_hash(current_block)
             last_extrinsic_hash = response.extrinsic_hash
 
             # --- Update the miner storage information periodically.
