@@ -84,6 +84,9 @@ def run(self):
             f"Blocks since epoch: {(current_block + netuid + 1) % (tempo + 1)}"
         )
 
+        nonlocal last_block_hash_submitted
+        nonlocal last_extrinsic_hash
+
         if last_extrinsic_hash != None and last_block_hash_submitted != None:
             receipt = substrate.retrieve_extrinsic_by_hash(last_block_hash_submitted, last_extrinsic_hash)
             last_block_hash_submitted = None
