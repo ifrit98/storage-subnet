@@ -88,7 +88,7 @@ def run(self):
         if last_extrinsic_hash != None:
             try:
                 receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
-                bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}")
+                bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
             except Exception as e:
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
             finally:
