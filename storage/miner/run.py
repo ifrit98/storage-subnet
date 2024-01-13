@@ -101,10 +101,10 @@ def run(self):
                 checked_extrinsics_count = 0
             except Exception as e:
                 checked_extrinsics_count += 1
-                should_retry = True
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
 
             if checked_extrinsics_count >= 5 and last_extrinsic_hash != None:
+                should_retry = True
                 last_extrinsic_hash = None
                 checked_extrinsics_count = 0
                 should_retry = False
@@ -131,6 +131,7 @@ def run(self):
                     "version_key": 1,
                 },
             )
+
             # Period dictates how long the extrinsic will stay as part of waiting pool
             extrinsic = new_substrate.create_signed_extrinsic(
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
