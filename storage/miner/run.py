@@ -98,6 +98,7 @@ def run(self):
                 substrate.init_runtime()
 
                 result_data = substrate.rpc_request("author_pendingExtrinsics", [])
+                bt.logging.debug(result_data)
 
                 extrinsics = []
 
