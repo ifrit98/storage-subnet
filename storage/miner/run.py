@@ -73,7 +73,6 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
-    tempo = 10
     last_extrinsic_hash = None
 
     def handler(obj, update_nr, subscription_id):
@@ -89,11 +88,11 @@ def run(self):
         if last_extrinsic_hash != None:
             try:
                 receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
-                print(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}")
-
-                last_extrinsic_hash = None
+                bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else 'Failure'}")
             except Exception as e:
-                bt.logging.debug(f"An error occurred: {str(e)}")
+                bt.logging.debug(f"An error occurred, extrinsic not found in block.")
+            finally:
+                last_extrinsic_hash = None
 
         if (current_block + netuid + 1) % (tempo + 1) == 0:
             bt.logging.info(
