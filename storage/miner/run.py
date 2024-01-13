@@ -73,6 +73,8 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
+    tempo = 10
+
     last_block_hash_submitted = None
     last_extrinsic_hash = None
 
