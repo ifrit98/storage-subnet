@@ -166,8 +166,6 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
-    tempo = 30
-
     last_extrinsic_hash = None
     checked_extrinsics_count = 0
     should_retry = False
@@ -187,7 +185,6 @@ def run(self):
 
         if last_extrinsic_hash != None:
             try:
-                print(last_extrinsic_hash)
                 receipt = substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
 
