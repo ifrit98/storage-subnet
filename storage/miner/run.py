@@ -23,6 +23,7 @@ from substrateinterface import SubstrateInterface
 from scalecodec import ScaleBytes
 from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
+from copy import deepcopy
 
 
 def run(self):
@@ -121,6 +122,8 @@ def run(self):
                 url=self.subtensor.chain_endpoint,
                 type_registry=bt.__type_registry__,
             )
+            new_substrate.reload_type_registry()
+            new_substrate.runtime_config.update_type_registry(bt.__type_registry__)
 
             call = new_substrate.compose_call(
                 call_module="SubtensorModule",
@@ -137,6 +140,8 @@ def run(self):
             extrinsic = new_substrate.create_signed_extrinsic(
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
+
+            print(new_substrate.runtime_config.type_registry)
 
             bt.logging.debug(str(extrinsic.data))
             bt.logging.debug(str(block_hash))
