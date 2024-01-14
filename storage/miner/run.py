@@ -136,6 +136,9 @@ def run(self):
             extrinsic = new_substrate.create_signed_extrinsic(
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
+            dry_run = new_substrate.rpc_request("system_dryRun", [str(extrinsic.data)])
+            bt.logging.debug(dry_run)
+
             response = new_substrate.submit_extrinsic(
                 extrinsic,
                 wait_for_inclusion=False,
