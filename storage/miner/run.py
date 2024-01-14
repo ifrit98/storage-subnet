@@ -166,6 +166,8 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
+    tempo = 30
+
     last_extrinsic_hash = None
     checked_extrinsics_count = 0
     should_retry = False
