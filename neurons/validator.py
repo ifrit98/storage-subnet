@@ -360,9 +360,7 @@ class neuron:
                 hotkeys = deepcopy(self.rebalance_queue)
                 self.rebalance_queue.clear()
 
-                self.log(
-                    f"Running rebalance in background on hotkeys {hotkeys}"
-                )
+                self.log(f"Running rebalance in background on hotkeys {hotkeys}")
                 self.loop.run_until_complete(
                     rebalance_data(
                         self, k=2, dropped_hotkeys=hotkeys, hotkey_replaced=True
