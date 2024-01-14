@@ -90,6 +90,65 @@ tagged_tx_queue_registry = {
 }
 
 def runtime_call(substrate: SubstrateInterface, api: str, method: str, params: list, block_hash: str):
+    substrate.runtime_config.type_registry["runtime_api"]["TaggedTransactionQueue"] = {
+        "methods": {
+            "validate_transaction": {
+                "params": [
+                    {
+                        "name": "source",
+                        "type": "TransactionSource",
+                    },
+                    {
+                        "name": "tx",
+                        "type": "Extrinsic",
+                    },
+                    {
+                        "name": "block_hash",
+                        "type": "Hash"
+                    }
+                ],
+                "type": "TransactionValidity",
+            },
+        },
+        "types": {
+            "TransactionTag": "Vec<u8>",
+            "TransactionPriority": "u64",
+            "TransactionLongevity": "u64",
+            "TransactionValidity": {
+                "type": "struct",
+                "type_mapping": [
+                    [
+                        "priority",
+                        "TransactionPriority"
+                    ],
+                    [
+                        "requires",
+                        "Vec<TransactionTag>"
+                    ],
+                    [
+                        "provides",
+                        "Vec<TransactionTag>"
+                    ],
+                    [
+                        "longevity",
+                        "TransactionLongevity"
+                    ],
+                    [
+                        "propagate",
+                        "bool"
+                    ]
+                ]
+            },
+            "TransactionSource": {
+                "type": "enum",
+                "value_list": [
+                    "InBlock",
+                    "Local",
+                    "External"
+                ]
+            },
+        },
+    }
     print(substrate.runtime_config.type_registry["runtime_api"])
     runtime_call_def = substrate.runtime_config.type_registry["runtime_api"][api]['methods'][method]
     runtime_api_types = substrate.runtime_config.type_registry["runtime_api"][api].get("types", {})
