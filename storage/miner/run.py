@@ -190,6 +190,8 @@ def run(self):
             new_substrate.runtime_config.update_type_registry(bt.__type_registry__)
             new_substrate.runtime_config.update_type_registry(tagged_tx_queue_registry)
 
+            print(new_substrate.runtime_config)
+
             call = new_substrate.compose_call(
                 call_module="SubtensorModule",
                 call_function="set_weights",
