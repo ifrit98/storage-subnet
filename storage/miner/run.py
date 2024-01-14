@@ -234,7 +234,7 @@ def run(self):
 
             bt.logging.debug(str(extrinsic.data))
             bt.logging.debug(str(block_hash))
-            dry_run = runtime_call(substrate=new_substrate, api="TaggedTransactionQueue", method="validate_transaction", params=[0, str(extrinsic.data), block_hash], block_hash=block_hash)
+            dry_run = runtime_call(substrate=new_substrate, api="TaggedTransactionQueue", method="validate_transaction", params=["InBlock", str(extrinsic.data), block_hash], block_hash=block_hash)
             bt.logging.debug(dry_run)
 
             response = new_substrate.submit_extrinsic(
