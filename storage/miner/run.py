@@ -26,44 +26,6 @@ from .utils import update_storage_stats
 from copy import deepcopy
 
 tagged_tx_queue_registry = {
-    "types": {
-        "TransactionTag": "Vec<u8>",
-        "TransactionPriority": "u64",
-        "TransactionLongevity": "u64",
-        "TransactionValidity": {
-            "type": "struct",
-            "type_mapping": [
-                [
-                    "priority",
-                    "TransactionPriority"
-                ],
-                [
-                    "requires",
-                    "Vec<TransactionTag>"
-                ],
-                [
-                    "provides",
-                    "Vec<TransactionTag>"
-                ],
-                [
-                    "longevity",
-                    "TransactionLongevity"
-                ],
-                [
-                    "propagate",
-                    "bool"
-                ]
-            ]
-        },
-        "TransactionSource": {
-            "type": "enum",
-            "value_list": [
-                "InBlock",
-                "Local",
-                "External"
-            ]
-        },
-    },
     "runtime_api": {
         "TaggedTransactionQueue": {
             "methods": {
@@ -84,10 +46,73 @@ tagged_tx_queue_registry = {
                     ],
                     "type": "TransactionValidity",
                 },
-            }
+            },
+            "types": {
+                "TransactionTag": "Vec<u8>",
+                "TransactionPriority": "u64",
+                "TransactionLongevity": "u64",
+                "TransactionValidity": {
+                    "type": "struct",
+                    "type_mapping": [
+                        [
+                            "priority",
+                            "TransactionPriority"
+                        ],
+                        [
+                            "requires",
+                            "Vec<TransactionTag>"
+                        ],
+                        [
+                            "provides",
+                            "Vec<TransactionTag>"
+                        ],
+                        [
+                            "longevity",
+                            "TransactionLongevity"
+                        ],
+                        [
+                            "propagate",
+                            "bool"
+                        ]
+                    ]
+                },
+                "TransactionSource": {
+                    "type": "enum",
+                    "value_list": [
+                        "InBlock",
+                        "Local",
+                        "External"
+                    ]
+                },
+            },
         }
     }
 }
+
+def runtime_call(substrate: SubstrateInterface, api: str, method: str, params: list, block_hash: str):
+    runtime_call_def = substrate.runtime_config.type_registry["runtime_api"][api]['methods'][method]
+    runtime_api_types = substrate.runtime_config.type_registry["runtime_api"][api].get("types", {})
+
+    # Encode params
+    param_data = ScaleBytes(bytes())
+    for idx, param in enumerate(runtime_call_def['params']):
+        scale_obj = substrate.runtime_config.create_scale_object(param['type'])
+        if type(params) is list:
+            param_data += scale_obj.encode(params[idx])
+        else:
+            if param['name'] not in params:
+                raise ValueError(f"Runtime Call param '{param['name']}' is missing")
+
+            param_data += scale_obj.encode(params[param['name']])
+
+    # RPC request
+    result_data = substrate.rpc_request("state_call", [f'{api}_{method}', str(param_data), block_hash])
+
+    # Decode result
+    result_obj = substrate.runtime_config.create_scale_object(runtime_call_def['type'])
+    result_obj.decode(ScaleBytes(result_data['result']), check_remaining=substrate.config.get('strict_scale_decode'))
+
+    return result_obj
 
 
 def run(self):
@@ -190,8 +215,6 @@ def run(self):
             new_substrate.runtime_config.update_type_registry(bt.__type_registry__)
             new_substrate.runtime_config.update_type_registry(tagged_tx_queue_registry)
 
-            print(new_substrate.runtime_config.type_registry["runtime_api"]["TaggedTransactionQueue"])
-
             call = new_substrate.compose_call(
                 call_module="SubtensorModule",
                 call_function="set_weights",
@@ -210,7 +233,7 @@ def run(self):
 
             bt.logging.debug(str(extrinsic.data))
             bt.logging.debug(str(block_hash))
-            dry_run = new_substrate.runtime_call(api="TaggedTransactionQueue", method="validate_transaction", params=[0, str(extrinsic.data), block_hash])
+            dry_run = runtime_call(substrate=new_substrate, api="TaggedTransactionQueue", method="validate_transaction", params=[0, str(extrinsic.data), block_hash])
             bt.logging.debug(dry_run)
 
             response = new_substrate.submit_extrinsic(
