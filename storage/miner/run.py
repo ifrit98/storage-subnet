@@ -166,8 +166,6 @@ def run(self):
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
-    tempo = 1
-
     last_extrinsic_hash = None
     checked_extrinsics_count = 0
     should_retry = False
@@ -233,8 +231,6 @@ def run(self):
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
 
-            bt.logging.debug(str(extrinsic.data))
-            bt.logging.debug(str(block_hash))
             dry_run = runtime_call(substrate=new_substrate, api="TaggedTransactionQueue", method="validate_transaction", params=["InBlock", extrinsic, block_hash], block_hash=block_hash)
             bt.logging.debug(dry_run)
 
