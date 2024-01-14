@@ -240,6 +240,8 @@ def run(self):
                 wait_for_finalization=False,
             )
 
+            print(response, call, self.wallet.hotkey)
+
             result_data = new_substrate.rpc_request("author_pendingExtrinsics", [])
             for extrinsic_data in result_data['result']:
                 extrinsic = new_substrate.runtime_config.create_scale_object('Extrinsic', metadata=new_substrate.metadata)
