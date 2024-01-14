@@ -179,7 +179,7 @@ class miner:
         bt.logging.info(f"Running miner on uid: {self.my_subnet_uid}")
 
         # Init wandb.
-        if not self.config.wandb.off:
+        if self.config.wandb.on:
             bt.logging.debug("loading wandb")
             init_wandb(self)
 

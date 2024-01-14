@@ -547,7 +547,7 @@ pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/mi
 
 - `--miner.mock_subtensor`: If True, uses a mock subtensor for testing. Default: False.
 
-- `--wandb.off`: Disables Weight and Biases logging. Default: False.
+- `--wandb.on`: Enables Weight and Biases logging. Default: False.
 - `--wandb.project_name`: Project name for WandB logging. Default: "philanthropic-thunder".
 - `--wandb.entity`: WandB entity (username or team name) for the run. Default: "philanthrope".
 - `--wandb.offline`: Runs WandB in offline mode. Default: False.

@@ -248,7 +248,7 @@ def add_args(cls, parser):
 
     # Wandb args
     parser.add_argument(
-        "--wandb.off", action="store_true", help="Turn off wandb.", default=False
+        "--wandb.on", action="store_true", help="Turn off wandb.", default=False
     )
     parser.add_argument(
         "--wandb.project_name",
