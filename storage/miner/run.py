@@ -244,15 +244,14 @@ def run(self):
             )
 
             result_data = new_substrate.rpc_request("author_pendingExtrinsics", [])
-
-            extrinsics = []
-
             for extrinsic_data in result_data['result']:
                 extrinsic = new_substrate.runtime_config.create_scale_object('Extrinsic', metadata=new_substrate.metadata)
                 extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=new_substrate.config.get('strict_scale_decode'))
                 
+                print(extrinsic.value)
+
                 if extrinsic.extrinsic_hash == response.extrinsic_hash:
-                    print(extrinsic)
+                    bt.logging.debug("Weights transaction is in the pending transaction pool")
 
             last_extrinsic_hash = response.extrinsic_hash
 
