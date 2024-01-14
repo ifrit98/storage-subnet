@@ -240,6 +240,9 @@ def run(self):
                 wait_for_finalization=False,
             )
 
+            pending_txs = new_substrate.retrieve_pending_extrinsics()
+            print(pending_txs)
+
             last_extrinsic_hash = response.extrinsic_hash
 
             # --- Update the miner storage information periodically.
