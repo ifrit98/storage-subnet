@@ -187,6 +187,7 @@ def run(self):
 
         if last_extrinsic_hash != None:
             try:
+                print(last_extrinsic_hash)
                 receipt = substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
 
@@ -249,10 +250,9 @@ def run(self):
             for extrinsic_data in result_data['result']:
                 extrinsic = new_substrate.runtime_config.create_scale_object('Extrinsic', metadata=new_substrate.metadata)
                 extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=new_substrate.config.get('strict_scale_decode'))
-                extrinsics.append(extrinsic)
-
                 
-            print(extrinsics)
+                if extrinsic.extrinsic_hash == response.extrinsic_hash:
+                    print(extrinsic)
 
             last_extrinsic_hash = response.extrinsic_hash
 
