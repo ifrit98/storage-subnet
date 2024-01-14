@@ -82,6 +82,7 @@ def run(self):
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
+        block_hash = substrate.get_block_hash(current_block)
         bt.logging.debug(f"New block #{current_block}")
 
         bt.logging.debug(
@@ -94,7 +95,7 @@ def run(self):
 
         if last_extrinsic_hash != None:
             try:
-                receipt = substrate.retrieve_extrinsic_by_hash(substrate.get_block_hash(current_block), last_extrinsic_hash)
+                receipt = substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
 
                 last_extrinsic_hash = None
@@ -136,7 +137,7 @@ def run(self):
             extrinsic = new_substrate.create_signed_extrinsic(
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
-            dry_run = new_substrate.rpc_request("system_dryRun", [str(extrinsic.data)])
+            dry_run = new_substrate.runtime_call(api="taggedTransactionQueue", method="validate_transaction", params=[0, str(extrinsic.data), block_hash])
             bt.logging.debug(dry_run)
 
             response = new_substrate.submit_extrinsic(
