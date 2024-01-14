@@ -90,6 +90,7 @@ tagged_tx_queue_registry = {
 }
 
 def runtime_call(substrate: SubstrateInterface, api: str, method: str, params: list, block_hash: str):
+    print(substrate.runtime_config.type_registry["runtime_api"])
     runtime_call_def = substrate.runtime_config.type_registry["runtime_api"][api]['methods'][method]
     runtime_api_types = substrate.runtime_config.type_registry["runtime_api"][api].get("types", {})
 
