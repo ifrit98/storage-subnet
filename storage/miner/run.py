@@ -242,8 +242,17 @@ def run(self):
                 wait_for_finalization=False,
             )
 
-            pending_txs = new_substrate.retrieve_pending_extrinsics()
-            print(pending_txs)
+            result_data = new_substrate.rpc_request("author_pendingExtrinsics", [])
+
+            extrinsics = []
+
+            for extrinsic_data in result_data['result']:
+                extrinsic = new_substrate.runtime_config.create_scale_object('Extrinsic', metadata=new_substrate.metadata)
+                extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=new_substrate.config.get('strict_scale_decode'))
+                extrinsics.append(extrinsic)
+
+                
+            print(extrinsics)
 
             last_extrinsic_hash = response.extrinsic_hash
 
