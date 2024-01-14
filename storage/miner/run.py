@@ -25,6 +25,70 @@ from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
 from copy import deepcopy
 
+tagged_tx_queue_registry = {
+    "types": {
+        "TransactionTag": "Vec<u8>",
+        "TransactionPriority": "u64",
+        "TransactionLongevity": "u64",
+        "TransactionValidity": {
+            "type": "struct",
+            "type_mapping": [
+                [
+                    "priority",
+                    "TransactionPriority"
+                ],
+                [
+                    "requires",
+                    "Vec<TransactionTag>"
+                ],
+                [
+                    "provides",
+                    "Vec<TransactionTag>"
+                ],
+                [
+                    "longevity",
+                    "TransactionLongevity"
+                ],
+                [
+                    "propagate",
+                    "bool"
+                ]
+            ]
+        },
+        "TransactionSource": {
+            "type": "enum",
+            "value_list": [
+                "InBlock",
+                "Local",
+                "External"
+            ]
+        },
+    },
+    "runtime_api": {
+        "TaggedTransactionQueue": {
+            "methods": {
+                "validate_transaction": {
+                    "params": [
+                        {
+                            "name": "source",
+                            "type": "TransactionSource",
+                        },
+                        {
+                            "name": "tx",
+                            "type": "Extrinsic",
+                        },
+                        {
+                            "name": "block_hash",
+                            "type": "Hash"
+                        }
+                    ],
+                    "type": "TransactionValidity",
+                },
+            }
+        }
+    }
+}
+
 
 def run(self):
     """
@@ -124,6 +188,7 @@ def run(self):
             )
             new_substrate.reload_type_registry()
             new_substrate.runtime_config.update_type_registry(bt.__type_registry__)
+            new_substrate.runtime_config.update_type_registry(tagged_tx_queue_registry)
 
             call = new_substrate.compose_call(
                 call_module="SubtensorModule",
@@ -140,8 +205,6 @@ def run(self):
             extrinsic = new_substrate.create_signed_extrinsic(
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
-
-            print(new_substrate.runtime_config.type_registry)
 
             bt.logging.debug(str(extrinsic.data))
             bt.logging.debug(str(block_hash))
