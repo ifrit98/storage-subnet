@@ -30,7 +30,7 @@ tagged_tx_queue_registry = {
         "TransactionTag": "Vec<u8>",
         "TransactionPriority": "u64",
         "TransactionLongevity": "u64",
-        "TransactionValidity": {
+        "ValidTransaction": {
             "type": "struct",
             "type_mapping": [
                 [
@@ -55,6 +55,7 @@ tagged_tx_queue_registry = {
                 ]
             ]
         },
+        "TransactionValidity": "Result<ValidTransaction, TransactionValidityError>",
         "TransactionSource": {
             "type": "enum",
             "value_list": [
