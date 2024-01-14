@@ -138,6 +138,8 @@ def run(self):
                 call=call, keypair=self.wallet.hotkey, era={"period": 100}
             )
             dry_run = new_substrate.runtime_call(api="TaggedTransactionQueue", method="validate_transaction", params=[0, str(extrinsic.data), block_hash])
+            bt.logging.debug(str(extrinsic.data))
+            bt.logging.debug(str(block_hash))
             bt.logging.debug(dry_run)
 
             response = new_substrate.submit_extrinsic(
