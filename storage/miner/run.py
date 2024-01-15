@@ -142,7 +142,7 @@ def run(self):
         KeyboardInterrupt: If the miner is stopped by a manual interruption.
         Exception: For unforeseen errors during the miner's operation, which are logged for diagnosis.
     """
-    substrate = SubstrateInterface(
+    block_handler_substrate = SubstrateInterface(
         ss58_format=bt.__ss58_format__,
         use_remote_preset=True,
         url=self.subtensor.chain_endpoint,
@@ -162,7 +162,7 @@ def run(self):
         )
         exit()
 
-    tempo = substrate.query(
+    tempo = block_handler_substrate.query(
         module="SubtensorModule", storage_function="Tempo", params=[netuid]
     ).value
 
@@ -172,7 +172,7 @@ def run(self):
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
-        block_hash = substrate.get_block_hash(current_block)
+        block_hash = block_handler_substrate.get_block_hash(current_block)
         bt.logging.debug(f"New block #{current_block}")
 
         bt.logging.debug(
@@ -185,7 +185,7 @@ def run(self):
 
         if last_extrinsic_hash != None:
             try:
-                receipt = substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
+                receipt = block_handler_substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
 
                 last_extrinsic_hash = None
