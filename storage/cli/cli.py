@@ -33,6 +33,7 @@ from tqdm import tqdm
 from .retrievecommand import RetrieveData
 from .storecommand import StoreData
 from .listcommand import ListLocalHashes
+from .statscommand import ListMinerStats
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -43,8 +44,10 @@ console = bittensor.__console__
 ALIAS_TO_COMMAND = {
     "s": "store",
     "r": "retrieve",
+    "m": "miner",
     "retrieve": "retrieve",
     "store": "store",
+    "miner": "miner",
 }
 
 COMMANDS = {
@@ -63,6 +66,14 @@ COMMANDS = {
         "commands": {
             "list": ListLocalHashes,  # lists all data storage available on the network associated with coldkey
             "get": RetrieveData,  # Retrieve and decrypt data stored on the network
+        },
+    },
+    "miner": {
+        "name": "miner",
+        "aliases": ["m", "miner"],
+        "help": "Commands for retrieving statistics from the Bittensor network.",
+        "commands": {
+            "stats": ListMinerStats,  # lists all miner stats associated with hotkey
         },
     },
 }

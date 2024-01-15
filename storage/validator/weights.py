@@ -21,37 +21,65 @@
 import wandb
 import torch
 import bittensor as bt
-from storage.validator.state import ttl_get_block
+
 from storage import __spec_version__ as spec_version
+from storage.shared.subtensor import get_current_block
+from storage.shared.weights import set_weights
 
 
-def should_set_weights(self) -> bool:
-    # Check if enough epoch blocks have elapsed since the last epoch.
-    if self.config.neuron.disable_set_weights:
-        return False
-    return (
-        ttl_get_block(self) % self.config.neuron.set_weights_epoch_length
-        < self.prev_step_block % self.config.neuron.set_weights_epoch_length
-    )
+def set_weights_for_validator(
+    subtensor: "bt.subtensor",
+    wallet: "bt.wallet",
+    netuid: int,
+    metagraph: "bt.metagraph",
+    moving_averaged_scores: "torch.Tensor",
+    wandb_on: bool = False,
+    wait_for_inclusion: bool = False,
+    wait_for_finalization: bool = False,
+):
+    """
+    Sets miners' weights on the Bittensor network.
 
+    This function assigns a weight of 1 to the current miner (identified by its UID) and
+    a weight of 0 to all other peers in the network. The weights determine the trust level
+    the miner assigns to other nodes on the network.
 
-def set_weights(self):
+    Args:
+        subtensor (bt.subtensor): The Bittensor object managing the blockchain connection.
+        wallet (bt.wallet): The miner's wallet holding cryptographic information.
+        netuid (int): The unique identifier for the chain subnet.
+        uids (torch.Tensor): miners UIDs on the network.
+        metagraph (bt.metagraph): Bittensor metagraph.
+        moving_averaged_scores (torch.Tensor): .
+        wandb_on (bool, optional): Flag to determine if logging to Weights & Biases is enabled. Defaults to False.
+        tempo (int): Tempo for 'netuid' subnet.
+        wait_for_inclusion (bool, optional): Wether to wait for the extrinsic to enter a block
+        wait_for_finalization (bool, optional): Wether to wait for the extrinsic to be finalized on the chain
+
+    Returns:
+        success (bool):
+            flag is true if extrinsic was finalized or uncluded in the block.
+            If we did not wait for finalization / inclusion, the response is true.
+
+    Raises:
+        Exception: If there's an error while setting weights, the exception is logged for diagnosis.
+    """
     # Calculate the average reward for each uid across non-zero values.
     # Replace any NaN values with 0.
-    raw_weights = torch.nn.functional.normalize(self.moving_averaged_scores, p=1, dim=0)
+    raw_weights = torch.nn.functional.normalize(moving_averaged_scores, p=1, dim=0)
 
     bt.logging.debug("raw_weights", raw_weights)
-    bt.logging.debug("raw_weight_uids", self.metagraph.uids.to("cpu"))
+    bt.logging.debug("raw_weight_uids", metagraph.uids.to("cpu"))
     # Process the raw weights to final_weights via subtensor limitations.
     (
         processed_weight_uids,
         processed_weights,
     ) = bt.utils.weight_utils.process_weights_for_netuid(
-        uids=self.metagraph.uids.to("cpu"),
+        uids=metagraph.uids.to("cpu"),
         weights=raw_weights.to("cpu"),
-        netuid=self.config.netuid,
-        subtensor=self.subtensor,
-        metagraph=self.metagraph,
+        netuid=netuid,
+        subtensor=subtensor,
+        metagraph=metagraph,
     )
     bt.logging.debug("processed_weights", processed_weights)
     bt.logging.debug("processed_weight_uids", processed_weight_uids)
@@ -64,16 +92,19 @@ def set_weights(self):
     bt.logging.debug("uint_uids", uint_uids)
 
     # Set the weights on chain via our subtensor connection.
-    result = self.subtensor.set_weights(
-        wallet=self.wallet,
-        netuid=self.config.netuid,
+    success = set_weights(
+        subtensor=subtensor,
+        wallet=wallet,
+        netuid=netuid,
         uids=uint_uids,
         weights=uint_weights,
+        wandb_on=wandb_on,
+        version_key=spec_version,
         wait_for_finalization=False,
         wait_for_inclusion=False,
-        version_key=spec_version,
     )
-    if result is True:
+
+    if success is True:
         bt.logging.info("set_weights on chain successfully!")
     else:
         bt.logging.error("set_weights failed")

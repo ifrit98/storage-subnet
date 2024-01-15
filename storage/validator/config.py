@@ -202,7 +202,7 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.compute_stats_interval",
         type=int,
-        default=100,
+        default=200,
         help="Number of steps before computing and logging all stats.",
     )
     parser.add_argument(
@@ -234,6 +234,12 @@ def add_args(cls, parser):
         action="store_true",
         help="Disable all reward logging, suppresses reward functions and their values from being logged to wandb.",
         default=False,
+    )
+    parser.add_argument(
+        "--neuron.subscription_logging_path",
+        type=str,
+        help="The path to save subscription logs.",
+        default="subscription_logs.txt",
     )
     parser.add_argument(
         "--neuron.chunk_factor",

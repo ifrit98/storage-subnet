@@ -23,14 +23,14 @@ import aioredis
 import bittensor as bt
 
 
-async def store_chunk_metadata(r, chunk_hash, filepath, size, seed):
+async def store_chunk_metadata(r, chunk_hash, hotkey, size, seed):
     """
     Stores the metadata of a chunk in a Redis database.
 
     Args:
         r (redis.Redis): The Redis connection instance.
         chunk_hash (str): The unique hash identifying the chunk.
-        filepath (str): The file path associated with the chunk.
+        hotkey (str): Miner hotkey associated with the chunk.
         size (int): The size of the chunk.
         seed (str): The seed associated with the chunk.
 
@@ -38,7 +38,7 @@ async def store_chunk_metadata(r, chunk_hash, filepath, size, seed):
     """
     # Ensure that all data are in the correct format
     metadata = {
-        "filepath": filepath,
+        "hotkey": hotkey,
         "size": str(size),  # Convert size to string
         "seed": seed,  # Store seed directly
     }
@@ -48,14 +48,13 @@ async def store_chunk_metadata(r, chunk_hash, filepath, size, seed):
         await r.hset(chunk_hash, key, value)
 
 
-async def store_or_update_chunk_metadata(r, chunk_hash, filepath, size, seed):
+async def store_or_update_chunk_metadata(r, chunk_hash, hotkey, size, seed):
     """
     Stores or updates the metadata of a chunk in a Redis database.
 
     Args:
         r (redis.Redis): The Redis connection instance.
         chunk_hash (str): The unique hash identifying the chunk.
-        filepath (str): The file path associated with the chunk.
         size (int): The size of the chunk.
         seed (str): The seed associated with the chunk.
 
@@ -67,7 +66,7 @@ async def store_or_update_chunk_metadata(r, chunk_hash, filepath, size, seed):
         await update_seed_info(r, chunk_hash, seed)
     else:
         # Add new entry
-        await store_chunk_metadata(r, chunk_hash, filepath, size, seed)
+        await store_chunk_metadata(r, chunk_hash, hotkey, size, seed)
 
 
 async def update_seed_info(r, chunk_hash, seed):
@@ -138,26 +137,3 @@ async def get_total_storage_used(r):
         if size:
             total_size += int(size)
     return total_size
-
-
-async def migrate_data_directory(r, new_base_directory, return_failures=False):
-    failed_filepaths = []
-
-    async for key in r.scan_iter("*"):
-        filepath = await r.hget(key, b"filepath")
-
-        if filepath:
-            filepath = filepath.decode("utf-8")
-            data_hash = key.decode("utf-8")
-            new_filepath = os.path.join(new_base_directory, data_hash)
-
-            if not os.path.exists(new_filepath):
-                bt.logging.debug(
-                    f"Data does not exist in new path {new_filepath}. Skipping..."
-                )
-                failed_filepaths.append(new_filepath)
-                continue
-
-            await r.hset(key, "filepath", new_filepath)
-
-    return failed_filepaths if return_failures else None

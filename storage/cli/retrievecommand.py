@@ -140,14 +140,23 @@ class RetrieveData:
                 "Reverting to hash value as filename {outpath}",
             )
 
+        try:
+            sub = bittensor.subtensor(network=cli.config.subtensor.network)
+            bittensor.logging.debug("subtensor:", sub)
+            RetrieveData.run(cli, sub)
+        finally:
+            if "subtensor" in locals():
+                subtensor.close()
+                bittensor.logging.debug("closing subtensor connection")
+
+    @staticmethod
+    def _run(cli, sub):
+        r"""Retrieve data from the Bittensor network for the given data_hash."""
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
 
         synapse = storage.protocol.RetrieveUser(data_hash=cli.config.data_hash)
         bittensor.logging.debug("synapse:", synapse)
-
-        sub = bittensor.subtensor(network=cli.config.subtensor.network)
-        bittensor.logging.debug("subtensor:", sub)
 
         mg = sub.metagraph(cli.config.netuid)
         bittensor.logging.debug("metagraph:", mg)

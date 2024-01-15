@@ -22,6 +22,7 @@ import json
 import time
 import bittensor as bt
 
+from pprint import pformat
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import log_event
 from storage.validator.bonding import compute_all_tiers
@@ -87,10 +88,12 @@ async def forward(self):
             )
 
     if self.step % self.config.neuron.compute_stats_interval == 0:
+        bt.logging.info("initiating compute stats")
         await compute_all_tiers(self.database)
 
         # Update miner statistics and usage data.
         stats = await get_miner_statistics(self.database)
+        bt.logging.debug(f"miner stats: {pformat(stats)}")
 
         # Log all chunk hash <> hotkey pairs
         chunk_hash_map = await get_all_chunk_hashes(self.database)

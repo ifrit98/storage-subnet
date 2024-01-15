@@ -21,7 +21,6 @@ import bittensor as bt
 import traceback
 from substrateinterface import SubstrateInterface
 from scalecodec import ScaleBytes
-from .set_weights import set_weights, should_wait_to_set_weights
 from .utils import update_storage_stats
 from copy import deepcopy
 
@@ -204,7 +203,6 @@ def run(self):
             bt.logging.info(
                 f"New epoch started, setting weights at block {current_block}"
             )
-
             with self.subtensor.substrate as substrate:
                 call = substrate.compose_call(
                     call_module="SubtensorModule",

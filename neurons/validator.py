@@ -22,14 +22,18 @@ import base64
 import typing
 import asyncio
 import aioredis
+import threading
 import traceback
 import bittensor as bt
-
+from copy import deepcopy
 from loguru import logger
 from pprint import pformat
 from traceback import print_exception
+from substrateinterface.base import SubstrateInterface
 
 from storage import protocol
+from storage.shared.subtensor import get_current_block
+from storage.shared.weights import should_set_weights
 from storage.validator.utils import get_current_validtor_uid_round_robin
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import (
@@ -40,12 +44,10 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
-    ttl_get_block,
     log_event,
 )
 from storage.validator.weights import (
-    should_set_weights,
-    set_weights,
+    set_weights_for_validator,
 )
 from storage.validator.database import purge_challenges_for_all_hotkeys
 from storage.validator.forward import forward
@@ -173,11 +175,6 @@ class neuron:
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
 
-        # Start the subscription handler
-        bt.logging.debug(f"starting event handler")
-        self.start_neuron_event_subscription()
-        bt.logging.debug(f"started event handler")
-
         # Init wandb.
         if not self.config.wandb.off:
             bt.logging.debug("loading wandb")
@@ -186,48 +183,19 @@ class neuron:
         if self.config.neuron.challenge_sample_size == 0:
             self.config.neuron.challenge_sample_size = self.metagraph.n
 
-        self.prev_step_block = ttl_get_block(self)
+        self.prev_step_block = get_current_block(self.subtensor)
         self.step = 0
 
         # Start with 0 monitor pings
         # TODO: load this from disk instead of reset on restart
         self.monitor_lookup = {uid: 0 for uid in self.metagraph.uids.tolist()}
 
-    async def neuron_registered_subscription_handler(
-        self, obj, update_nr, subscription_id
-    ):
-        bt.logging.debug(f"New block #{obj['header']['number']}")
-        self.current_block = obj["header"]["number"]
-
-        bt.logging.debug(obj)
-
-        block_no = obj["header"]["number"]
-        block_hash = self.subtensor.get_block_hash(block_no)
-        bt.logging.debug(f"subscription block hash: {block_hash}")
-        events = self.subtensor.substrate.get_events(block_hash)
-        for event in events:
-            event_dict = event["event"].decode()
-            if event_dict["event_id"] == "NeuronRegistered":
-                netuid, uid, hotkey = event_dict["attributes"]
-                if int(netuid) == 21:
-                    bt.logging.info(
-                        f"NeuronRegistered Event {uid}! Rebalancing data..."
-                    )
-                    with open(self.config.neuron.debug_logging_path, "a") as file:
-                        file.write(
-                            f"NeuronRegistered Event {uid}! Rebalancing data..."
-                            f"{pformat(event_dict)}\n"
-                        )
-                    await rebalance_data(
-                        self, k=2, dropped_hotkeys=[hotkey], hotkey_replaced=True
-                    )
-
-    def start_neuron_event_subscription(self):
-        asyncio.run(
-            self.subtensor.substrate.subscribe_block_headers(
-                self.neuron_registered_subscription_handler
-            )
-        )
+        # Instantiate runners
+        self.should_exit: bool = False
+        self.subscription_is_running: bool = False
+        self.subscription_thread: threading.Thread = None
+        self.last_registered_block = 0
+        self.rebalance_queue = []
 
     def run(self):
         bt.logging.info("run()")
@@ -236,13 +204,16 @@ class neuron:
             bt.logging.info("purging challenges")
 
             async def run_purge():
-                await asyncio.gather([purge_challenges_for_all_hotkeys(self.database)])
+                await asyncio.gather(purge_challenges_for_all_hotkeys(self.database))
 
             self.loop.run_until_complete(run_purge())
             bt.logging.info("purged challenges.")
 
         load_state(self)
         checkpoint(self)
+
+        bt.logging.info("starting subscription handler")
+        self.run_subscription_thread()
 
         try:
             while True:
@@ -264,7 +235,9 @@ class neuron:
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
                     )
 
-                bt.logging.info(f"step({self.step}) block({ttl_get_block( self )})")
+                bt.logging.info(
+                    f"step({self.step}) block({get_current_block(self.subtensor)})"
+                )
 
                 # Run multiple forwards.
                 async def run_forward():
@@ -278,15 +251,41 @@ class neuron:
 
                 # Resync the network state
                 bt.logging.info("Checking if should checkpoint")
-                if should_checkpoint(self):
+                current_block = get_current_block(self.subtensor)
+                should_checkpoint_validator = should_checkpoint(
+                    current_block,
+                    self.prev_step_block,
+                    self.config.neuron.checkpoint_block_length,
+                )
+                bt.logging.debug(
+                    f"should_checkpoint() params: (current block) {current_block} (prev block) {self.prev_step_block} (checkpoint_block_length) {self.config.neuron.checkpoint_block_length}\n"
+                    f"should checkpoint ? {should_checkpoint_validator}"
+                )
+                if should_checkpoint_validator:
                     bt.logging.info(f"Checkpointing...")
                     checkpoint(self)
 
                 # Set the weights on chain.
                 bt.logging.info(f"Checking if should set weights")
-                if should_set_weights(self):
+                validator_should_set_weights = should_set_weights(
+                    get_current_block(self.subtensor),
+                    self.prev_step_block,
+                    self.config.neuron.set_weights_epoch_length,
+                    self.config.neuron.disable_set_weights,
+                )
+                bt.logging.info(
+                    f"Should validator check weights? -> {validator_should_set_weights}"
+                )
+                if validator_should_set_weights:
                     bt.logging.info(f"Setting weights {self.moving_averaged_scores}")
-                    set_weights(self)
+                    set_weights_for_validator(
+                        subtensor=self.subtensor,
+                        wallet=self.wallet,
+                        metagraph=self.metagraph,
+                        netuid=self.config.netuid,
+                        moving_averaged_scores=self.moving_averaged_scores,
+                        wandb_on=self.config.wandb.on,
+                    )
                     save_state(self)
 
                 # Rollover wandb to a new run.
@@ -294,7 +293,7 @@ class neuron:
                     bt.logging.info(f"Reinitializing wandb")
                     reinit_wandb(self)
 
-                self.prev_step_block = ttl_get_block(self)
+                self.prev_step_block = get_current_block(self.subtensor)
                 if self.config.neuron.verbose:
                     bt.logging.debug(f"block at end of step: {self.prev_step_block}")
                     bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
@@ -310,6 +309,96 @@ class neuron:
                     "KeyboardInterrupt caught, gracefully closing the wandb run..."
                 )
                 self.wandb.finish()
+
+        # After all we have to ensure subtensor connection is closed properly
+        finally:
+            if hasattr(self, "subtensor"):
+                bittensor.logging.debug("Closing subtensor connection")
+                self.subtensor.close()
+
+    def log(self, log: str):
+        bt.logging.debug(log)
+
+        with open(self.config.neuron.subscription_logging_path, "a") as file:
+            file.write(log)
+
+    def start_event_subscription(self):
+        """
+        Starts the subscription handler in a background thread.
+        """
+        substrate = SubstrateInterface(
+            ss58_format=bt.__ss58_format__,
+            use_remote_preset=True,
+            url=self.subtensor.chain_endpoint,
+            type_registry=bt.__type_registry__,
+        )
+
+        def neuron_registered_subscription_handler(obj, update_nr, subscription_id):
+            block_no = obj["header"]["number"]
+            block_hash = substrate.get_block_hash(block_id=block_no)
+            bt.logging.debug(f"subscription block hash: {block_hash}")
+            events = substrate.get_events(block_hash)
+
+            for event in events:
+                event_dict = event["event"].decode()
+                if event_dict["event_id"] == "NeuronRegistered":
+                    netuid, uid, hotkey = event_dict["attributes"]
+                    if int(netuid) == 21:
+                        self.log(
+                            f"NeuronRegistered Event {uid}! Rebalancing data...\n"
+                            f"{pformat(event_dict)}\n"
+                        )
+
+                        self.last_registered_block = block_no
+                        self.rebalance_queue.append(hotkey)
+
+            # If we have some hotkeys deregistered, and it's been 5 blocks since we've caught a registration: rebalance
+            if (
+                len(self.rebalance_queue) > 0
+                and self.last_registered_block + 5 <= block_no
+            ):
+                hotkeys = deepcopy(self.rebalance_queue)
+                self.rebalance_queue.clear()
+
+                self.log(
+                    f"Running rebalance in background on hotkeys {hotkeys}"
+                )
+                self.loop.run_until_complete(
+                    rebalance_data(
+                        self, k=2, dropped_hotkeys=hotkeys, hotkey_replaced=True
+                    )
+                )
+
+        substrate.subscribe_block_headers(neuron_registered_subscription_handler)
+
+    def run_subscription_thread(self):
+        """
+        Start the block header subscription handler in a separate thread.
+        """
+        if not self.subscription_is_running:
+            self.subscription_thread = threading.Thread(
+                target=self.start_event_subscription, daemon=True
+            )
+            self.subscription_thread.start()
+            self.subscription_is_running = True
+            bt.logging.debug("Started subscription handler.")
+
+    def stop_subscription_thread(self):
+        """
+        Stops the subscription handler that is running in the background thread.
+        """
+        if self.subscription_is_running:
+            bt.logging.debug("Stopping subscription in background thread.")
+            self.should_exit = True
+            self.subscription_thread.join(5)
+            self.subscription_is_running = False
+            bt.logging.debug("Stopped")
+
+    def __del__(self):
+        """
+        Stops the subscription handler thread.
+        """
+        self.stop_subscription_thread()
 
 
 def main():

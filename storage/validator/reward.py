@@ -24,6 +24,7 @@ import bittensor as bt
 from bittensor import Synapse
 from pprint import pformat
 from typing import Union, List
+from functools import partial
 
 from .verify import (
     verify_store_with_seed,
@@ -34,6 +35,11 @@ from .database import add_metadata_to_hotkey
 from .bonding import update_statistics, get_tier_factor
 from .event import EventSchema
 
+from storage.constants import (
+    STORE_FAILURE_REWARD,
+    RETRIEVAL_FAILURE_REWARD,
+    CHALLENGE_FAILURE_REWARD,
+)
 from storage.protocol import Store, Retrieve, Challenge
 
 
@@ -225,9 +231,6 @@ def apply_reward_scores(
     bt.logging.trace(f"Updated moving avg scores: {self.moving_averaged_scores}")
 
 
-from functools import partial
-
-
 async def create_reward_vector(
     self,
     synapse: Union[Store, Retrieve, Challenge],
@@ -247,12 +250,15 @@ async def create_reward_vector(
             seed=synapse.seed,
         )
         task_type = "store"
+        failure_reward = STORE_FAILURE_REWARD
     elif isinstance(synapse, Retrieve):
         verify_fn = partial(verify_retrieve_with_seed, seed=synapse.seed)
         task_type = "retrieve"
+        failure_reward = RETRIEVAL_FAILURE_REWARD
     elif isinstance(synapse, Challenge):
         verify_fn = partial(verify_challenge_with_seed, seed=synapse.seed)
         task_type = "challenge"
+        failure_reward = CHALLENGE_FAILURE_REWARD
     else:
         raise ValueError(f"Invalid synapse type: {type(synapse)}")
 
@@ -283,7 +289,7 @@ async def create_reward_vector(
 
         # Apply reward for this task
         tier_factor = await get_tier_factor(hotkey, self.database)
-        rewards[idx] = 1.0 * tier_factor if success else 0.0
+        rewards[idx] = 1.0 * tier_factor if success else failure_reward * tier_factor
 
         event.successful.append(success)
         event.uids.append(uid)

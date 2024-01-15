@@ -29,6 +29,7 @@ from pprint import pformat
 from Crypto.Random import get_random_bytes, random
 
 from storage import protocol
+from storage.constants import RETRIEVAL_FAILURE_REWARD
 from storage.validator.event import EventSchema
 from storage.shared.ecc import hash_data
 from storage.shared.utils import (
@@ -39,7 +40,6 @@ from storage.shared.utils import (
 )
 from storage.validator.verify import verify_retrieve_with_seed
 from storage.validator.reward import apply_reward_scores
-from storage.validator.weights import should_set_weights, set_weights
 from storage.validator.database import (
     get_metadata_for_hotkey,
     get_metadata_for_hotkey_and_hash,
@@ -184,9 +184,9 @@ async def retrieve_data(
             decoded_data = base64.b64decode(response.data)
         except Exception as e:
             bt.logging.error(
-                f"Failed to decode data from UID: {uids[idx]} with error {e}"
+                f"retrieve() Failed to decode data from UID: {uids[idx]} with error {e}"
             )
-            rewards[idx] = 0.0
+            rewards[idx] = RETRIEVAL_FAILURE_REWARD
 
             # Update the retrieve statistics
             await update_statistics(
@@ -199,9 +199,9 @@ async def retrieve_data(
 
         if str(hash_data(decoded_data)) != data_hash:
             bt.logging.error(
-                f"Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
+                f"retrieve() Hash of received data does not match expected hash! {str(hash_data(decoded_data))} != {data_hash}"
             )
-            rewards[idx] = 0.0
+            rewards[idx] = RETRIEVAL_FAILURE_REWARD
 
             # Update the retrieve statistics
             await update_statistics(
@@ -217,29 +217,24 @@ async def retrieve_data(
             bt.logging.error(
                 f"data verification failed! {pformat(response.axon.dict())}"
             )
-            rewards[idx] = 0.0  # Losing use data is unacceptable, harsh punishment
-
-            # Update the retrieve statistics
-            await update_statistics(
-                ss58_address=hotkey,
-                success=False,
-                task_type="retrieve",
-                database=self.database,
-            )
-            continue  # skip trying to decode the data
+            rewards[
+                idx
+            ] = RETRIEVAL_FAILURE_REWARD  # Losing use data is unacceptable, harsh punishment
         else:
             # Success. Reward based on miner tier
             bt.logging.trace("Getting tier factor for hotkey {}".format(hotkey))
             tier_factor = await get_tier_factor(hotkey, self.database)
             rewards[idx] = 1.0 * tier_factor
 
-            bt.logging.trace("Updating success retreival for hotkey {}".format(hotkey))
-            await update_statistics(
-                ss58_address=hotkey,
-                success=True,
-                task_type="retrieve",
-                database=self.database,
-            )
+        bt.logging.trace(
+            f"retrieve() Updating retreival success=={success} for hotkey {hotkey}"
+        )
+        await update_statistics(
+            ss58_address=hotkey,
+            success=success,
+            task_type="retrieve",
+            database=self.database,
+        )
 
         event.uids.append(uid)
         event.successful.append(success)
@@ -248,7 +243,6 @@ async def retrieve_data(
         event.task_status_codes.append(response.dendrite.status_code)
         event.rewards.append(rewards[idx].item())
 
-    bt.logging.trace("Applying retrieve rewards")
     bt.logging.debug(f"retrieve() rewards: {rewards}")
     apply_reward_scores(
         self,

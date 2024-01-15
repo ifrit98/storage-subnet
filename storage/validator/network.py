@@ -22,6 +22,7 @@ import bittensor as bt
 
 from storage.validator.utils import get_available_query_miners
 from storage.validator.bonding import update_statistics
+from storage.constants import MONITOR_FAILURE_REWARD
 
 
 async def ping_uids(self, uids):
@@ -212,7 +213,7 @@ async def monitor(self):
                 task_type="monitor",
                 database=self.database,
             )
-            rewards[i] = 0.0
+            rewards[i] = MONITOR_FAILURE_REWARD
 
         bt.logging.debug(f"monitor() rewards: {rewards}")
         scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(

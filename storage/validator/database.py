@@ -882,7 +882,7 @@ async def purge_challenges_for_hotkey(ss58_address: str, database: aioredis.Redi
     challenge_hashes = await get_challenges_for_hotkey(ss58_address, database)
     bt.logging.trace(f"purging challenges for {ss58_address}...")
     for ch in challenge_hashes:
-        await database.delete(ch)
+        await database.hdel(f"hotkey:{ss58_address}", ch)
 
 
 async def purge_challenges_for_all_hotkeys(database: aioredis.Redis):

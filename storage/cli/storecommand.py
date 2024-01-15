@@ -169,11 +169,20 @@ class StoreData:
         hash_filepath = os.path.join(hash_basepath, wallet.name + ".json")
         bittensor.logging.debug("store hashes path:", hash_filepath)
 
+        try:
+            sub = bittensor.subtensor(network=cli.config.subtensor.network)
+            bittensor.logging.debug("subtensor:", sub)
+            StoreData.run(cli, sub)
+        finally:
+            if "subtensor" in locals():
+                subtensor.close()
+                bittensor.logging.debug("closing subtensor connection")
+
+    @staticmethod
+    def _run(cli, sub):
+        r"""Store data from local disk on the Bittensor network."""
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
-
-        sub = bittensor.subtensor(network=cli.config.subtensor.network)
-        bittensor.logging.debug("subtensor:", sub)
 
         mg = sub.metagraph(cli.config.netuid)
         bittensor.logging.debug("metagraph:", mg)

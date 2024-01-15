@@ -13,5 +13,4 @@ DB_INDEX=$3
 
 # Use rsync to synchronize contents of OLD_PATH to NEW_PATH
 echo Migrating database from "$OLD_PATH" to "$NEW_PATH"...
-rsync -a "${OLD_PATH}/" "${NEW_PATH}" && \
-    python scripts/migrate_redis_index.py --database_index "$DB_INDEX" --new_data_directory "$NEW_PATH"
+rsync -a "${OLD_PATH}/" "${NEW_PATH}"
