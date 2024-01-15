@@ -57,7 +57,7 @@ def chunk_data_generator(data, chunk_size):
 
 
 def generate_file_size_with_lognormal(
-    mu: float = np.log(1 * 1024**2), sigma: float = 1.5
+    mu: float = np.log(5 * 1024**2), sigma: float = 1.5
 ) -> float:
     """
     Generate a single file size using a lognormal distribution.
