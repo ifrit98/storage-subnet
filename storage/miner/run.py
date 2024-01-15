@@ -188,17 +188,17 @@ def run(self):
                 receipt = block_handler_substrate.retrieve_extrinsic_by_hash(block_hash, last_extrinsic_hash)
                 bt.logging.debug(f"Last set-weights call: {'Success' if receipt.is_success else format('Failure, reason: %s', receipt.error_message['name'] if receipt.error_message != None else 'nil')}")
 
+                should_retry = False
                 last_extrinsic_hash = None
                 checked_extrinsics_count = 0
             except Exception as e:
                 checked_extrinsics_count += 1
                 bt.logging.debug(f"An error occurred, extrinsic not found in block.")
-
-            if checked_extrinsics_count >= 20 and last_extrinsic_hash != None:
-                should_retry = True
-                last_extrinsic_hash = None
-                checked_extrinsics_count = 0
-                should_retry = False
+            finally:
+                if checked_extrinsics_count >= 20:
+                    should_retry = True
+                    last_extrinsic_hash = None
+                    checked_extrinsics_count = 0
 
         if ((current_block + netuid + 1) % (tempo + 1) == 0) or should_retry:
             bt.logging.info(
@@ -242,6 +242,7 @@ def run(self):
                         bt.logging.debug("Weights transaction is in the pending transaction pool")
 
                 last_extrinsic_hash = response.extrinsic_hash
+                should_retry = False
 
             # --- Update the miner storage information periodically.
             if not should_retry:
