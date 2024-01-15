@@ -251,4 +251,4 @@ def run(self):
             if self.should_exit:
                 return True
 
-    substrate.subscribe_block_headers(handler)
+    block_handler_substrate.subscribe_block_headers(handler)
