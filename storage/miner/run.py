@@ -205,52 +205,43 @@ def run(self):
                 f"New epoch started, setting weights at block {current_block}"
             )
 
-            new_substrate = SubstrateInterface(
-                ss58_format=bt.__ss58_format__,
-                use_remote_preset=True,
-                url=self.subtensor.chain_endpoint,
-                type_registry=bt.__type_registry__,
-            )
-            new_substrate.reload_type_registry()
-            new_substrate.runtime_config.update_type_registry(bt.__type_registry__)
-            new_substrate.runtime_config.update_type_registry(tagged_tx_queue_registry)
+            with self.subtensor.substrate as substrate:
+                call = substrate.compose_call(
+                    call_module="SubtensorModule",
+                    call_function="set_weights",
+                    call_params={
+                        "dests": [self.my_subnet_uid],
+                        "weights": [65535],
+                        "netuid": netuid,
+                        "version_key": 1,
+                    },
+                )
 
-            call = new_substrate.compose_call(
-                call_module="SubtensorModule",
-                call_function="set_weights",
-                call_params={
-                    "dests": [self.my_subnet_uid],
-                    "weights": [65535],
-                    "netuid": netuid,
-                    "version_key": 1,
-                },
-            )
+                # Period dictates how long the extrinsic will stay as part of waiting pool
+                extrinsic = substrate.create_signed_extrinsic(
+                    call=call, keypair=self.wallet.hotkey, era={"period": 1000}
+                )
 
-            # Period dictates how long the extrinsic will stay as part of waiting pool
-            extrinsic = new_substrate.create_signed_extrinsic(
-                call=call, keypair=self.wallet.hotkey, era={"period": 100}
-            )
+                dry_run = runtime_call(substrate=substrate, api="TaggedTransactionQueue", method="validate_transaction", params=["InBlock", extrinsic, block_hash], block_hash=block_hash)
+                bt.logging.debug(dry_run)
 
-            dry_run = runtime_call(substrate=new_substrate, api="TaggedTransactionQueue", method="validate_transaction", params=["InBlock", extrinsic, block_hash], block_hash=block_hash)
-            bt.logging.debug(dry_run)
+                response = substrate.submit_extrinsic(
+                    extrinsic,
+                    wait_for_inclusion=False,
+                    wait_for_finalization=False,
+                )
 
-            response = new_substrate.submit_extrinsic(
-                extrinsic,
-                wait_for_inclusion=False,
-                wait_for_finalization=False,
-            )
+                print(response, call, self.wallet.hotkey)
 
-            print(response, call, self.wallet.hotkey)
+                result_data = substrate.rpc_request("author_pendingExtrinsics", [])
+                for extrinsic_data in result_data['result']:
+                    extrinsic = substrate.runtime_config.create_scale_object('Extrinsic', metadata=substrate.metadata)
+                    extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=substrate.config.get('strict_scale_decode'))
 
-            result_data = new_substrate.rpc_request("author_pendingExtrinsics", [])
-            for extrinsic_data in result_data['result']:
-                extrinsic = new_substrate.runtime_config.create_scale_object('Extrinsic', metadata=new_substrate.metadata)
-                extrinsic.decode(ScaleBytes(extrinsic_data), check_remaining=new_substrate.config.get('strict_scale_decode'))
+                    if extrinsic.value["extrinsic_hash"] == response.extrinsic_hash:
+                        bt.logging.debug("Weights transaction is in the pending transaction pool")
 
-                if extrinsic.value["extrinsic_hash"] == response.extrinsic_hash:
-                    bt.logging.debug("Weights transaction is in the pending transaction pool")
-
-            last_extrinsic_hash = response.extrinsic_hash
+                last_extrinsic_hash = response.extrinsic_hash
 
             # --- Update the miner storage information periodically.
             if not should_retry:
