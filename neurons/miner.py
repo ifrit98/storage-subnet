@@ -329,11 +329,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.debug(
+            bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.debug(
+        bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -397,11 +397,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.debug(
+            bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.debug(
+        bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -465,11 +465,11 @@ class miner:
         """
         if synapse.dendrite.hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.debug(
+            bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        bt.logging.debug(
+        bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
@@ -541,25 +541,20 @@ class miner:
         self.request_count += 1
 
         # Decode the data from base64 to raw bytes
-        bt.logging.trace(f"decrypting b64 data")
         encrypted_byte_data = base64.b64decode(synapse.encrypted_data)
-
         bt.logging.trace(f"store b64decrypted data: {encrypted_byte_data[:24]}")
 
         # Store the data with the hash as the key in the filesystem
         bt.logging.trace(f"entering hash_data()")
         data_hash = hash_data(encrypted_byte_data)
-        bt.logging.trace(f"exited hash_data()")
 
         # If already storing this hash, simply update the validator seeds and return challenge
         bt.logging.trace(f"checking if data already exists...")
         if await self.database.exists(data_hash):
             # update the validator seed challenge hash in storage
-            bt.logging.trace(f"entering updating_seed_info()...")
             await update_seed_info(self.database, data_hash, synapse.seed)
         else:
             # Store the data in the filesystem
-            bt.logging.trace(f"entering save_data_to_filesystem()")
             filepath = save_data_to_filesystem(
                 encrypted_byte_data, self.config.database.directory, str(data_hash)
             )
@@ -572,7 +567,6 @@ class miner:
                 sys.getsizeof(encrypted_byte_data),
                 synapse.seed,
             )
-            bt.logging.trace(f"stored metadata for {data_hash} in database")
 
         # Commit to the entire data block
         bt.logging.trace(f"entering ECCommitment()")
@@ -580,7 +574,6 @@ class miner:
             hex_to_ecc_point(synapse.g, synapse.curve),
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
-        bt.logging.trace(f"exited ECCommitment()")
         bt.logging.trace(f"entering commit()")
         c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
         if self.config.miner.verbose:
@@ -589,7 +582,6 @@ class miner:
             bt.logging.debug(f"c: {c}")
             bt.logging.debug(f"m_val: {m_val}")
             bt.logging.debug(f"r: {r}")
-        bt.logging.trace(f"exited commit()")
 
         # Send back some proof that we stored the data
         synapse.randomness = r
@@ -609,9 +601,7 @@ class miner:
         )
 
         # Don't send data back, no need.
-        bt.logging.trace(f"emptying data...")
         synapse.encrypted_data = base64.b64encode(b"").decode()  # Empty b64 response
-        bt.logging.trace(f"returning empty data...")
         return synapse
 
     async def challenge(
@@ -654,7 +644,6 @@ class miner:
 
         bt.logging.trace(f"entering get_chunk_metadata()")
         data = await get_chunk_metadata(self.database, synapse.challenge_hash)
-        bt.logging.trace(f"exited get_chunk_metadata()")
         if data is None:
             bt.logging.error(f"No data found for {synapse.challenge_hash}")
             return synapse
@@ -677,11 +666,9 @@ class miner:
             synapse.axon.status_code = 404
             synapse.axon.status_message = "File not found"
             return synapse
-        bt.logging.trace(f"exited load_from_filesystem()")
 
         # Construct the next commitment hash using previous commitment and hash
         # of the data to prove storage over time
-        bt.logging.trace("extracting seed...")
         prev_seed = data.get(b"seed", "").encode()
         if prev_seed == None:
             bt.logging.error(f"No seed found for {synapse.challenge_hash}")
@@ -692,11 +679,11 @@ class miner:
         next_commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
         )
-        bt.logging.trace(f"exited compute_subsequent_commitment()")
-        bt.logging.debug(f"prev seed : {prev_seed}")
-        bt.logging.debug(f"new seed  : {new_seed}")
-        bt.logging.debug(f"proof     : {proof}")
-        bt.logging.debug(f"commitment: {next_commitment}\n")
+        if self.config.miner.verbose:
+            bt.logging.debug(f"prev seed : {prev_seed}")
+            bt.logging.debug(f"new seed  : {new_seed}")
+            bt.logging.debug(f"proof     : {proof}")
+            bt.logging.debug(f"commitment: {next_commitment}\n")
         synapse.commitment_hash = next_commitment
         synapse.commitment_proof = proof
 
@@ -705,18 +692,14 @@ class miner:
         await update_seed_info(
             self.database, synapse.challenge_hash, new_seed.decode("utf-8")
         )
-        bt.logging.trace(f"udpated miner storage seed: {new_seed}")
 
         # Chunk the data according to the provided chunk_size
         bt.logging.trace(f"entering chunk_data()")
         data_chunks = chunk_data(encrypted_data_bytes, synapse.chunk_size)
-        bt.logging.trace(f"exited chunk_data()")
 
         # Extract setup params
-        bt.logging.trace(f"extracting hex_to_ecc_point()")
         g = hex_to_ecc_point(synapse.g, synapse.curve)
         h = hex_to_ecc_point(synapse.h, synapse.curve)
-        bt.logging.trace(f"exited hex_to_ecc_point()")
 
         # Commit the data chunks based on the provided curve points
         bt.logging.trace(f"entering ECCcommitment()")
@@ -728,7 +711,6 @@ class miner:
             sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
             synapse.seed,
         )
-        bt.logging.trace(f"exited commit_data_with_seed()")
 
         # Prepare return values to validator
         bt.logging.trace(f"entering b64_encode()")
@@ -738,14 +720,16 @@ class miner:
         synapse.merkle_proof = b64_encode(
             merkle_tree.get_proof(synapse.challenge_index)
         )
-        bt.logging.trace(f"exited b64_encode()")
+
         bt.logging.trace(f"getting merkle root...")
         synapse.merkle_root = merkle_tree.get_merkle_root()
-        bt.logging.trace(f"exited merkle root...")
-        bt.logging.debug(f"commitment: {str(synapse.commitment)[:24]}")
-        bt.logging.debug(f"randomness: {str(synapse.randomness)[:24]}")
-        bt.logging.debug(f"merkle_proof: {str(synapse.merkle_proof[:24])}")
-        bt.logging.debug(f"merkle_root: {str(synapse.merkle_root)[:24]}")
+ 
+        if self.config.miner.verbose:
+            bt.logging.debug(f"commitment: {str(synapse.commitment)[:24]}")
+            bt.logging.debug(f"randomness: {str(synapse.randomness)[:24]}")
+            bt.logging.debug(f"merkle_proof: {str(synapse.merkle_proof[:24])}")
+            bt.logging.debug(f"merkle_root: {str(synapse.merkle_root)[:24]}")
+
         bt.logging.info(f"returning challenge data {synapse.data_chunk[:24]}...")
         return synapse
 
@@ -786,7 +770,7 @@ class miner:
         self.request_count += 1
 
         # Fetch the data from the miner database
-        bt.logging.info(f"entering get_chunk_metadata()")
+        bt.logging.trace(f"entering get_chunk_metadata()")
         data = await get_chunk_metadata(self.database, synapse.data_hash)
 
         # Decode the data + metadata from bytes to json
@@ -800,7 +784,7 @@ class miner:
             bt.logging.error(f"No file found for {synapse.data_hash}")
             return synapse
 
-        bt.logging.info(f"entering load_from_filesystem()")
+        bt.logging.trace(f"entering load_from_filesystem()")
         try:
             encrypted_data_bytes = load_from_filesystem(filepath)
         except Exception as e:
@@ -808,10 +792,9 @@ class miner:
             synapse.axon.status_code = 404
             synapse.axon.status_message = "File not found"
             return synapse
-        bt.logging.info(f"exited load_from_filesystem()")
 
         # incorporate a final seed challenge to verify they still have the data at retrieval time
-        bt.logging.info(f"entering compute_subsequent_commitment()")
+        bt.logging.trace(f"entering compute_subsequent_commitment()")
         commitment, proof = compute_subsequent_commitment(
             encrypted_data_bytes,
             data[b"seed"].encode(),
@@ -820,17 +803,15 @@ class miner:
         )
         synapse.commitment_hash = commitment
         synapse.commitment_proof = proof
-        bt.logging.info(f"exited compute_subsequent_commitment()")
 
         # store new seed
-        bt.logging.info(f"entering update_seed_info()")
+        bt.logging.trace(f"entering update_seed_info()")
         await update_seed_info(self.database, synapse.data_hash, synapse.seed)
         bt.logging.debug(f"udpated retrieve miner storage: {pformat(data)}")
 
         # Return base64 data
-        bt.logging.info(f"entering b64_encode()")
+        bt.logging.trace(f"entering b64_encode()")
         synapse.data = base64.b64encode(encrypted_data_bytes)
-        bt.logging.info(f"exited b64_encode()")
         bt.logging.info(f"returning retrieved data {synapse.data[:24]}...")
         return synapse
 
