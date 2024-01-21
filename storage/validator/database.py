@@ -45,6 +45,50 @@ async def add_metadata_to_hotkey(
     bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
 
 
+async def add_metadata_to_hotkey_top_level(
+    ss58_address: str, data_hash: str, metadata: Dict, database: aioredis.Redis
+):
+    """
+    Associates a data hash and its metadata with a hotkey in Redis.
+
+    Parameters:
+        ss58_address (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        metadata (dict): The metadata to associate with the data hash. Includes the size of the data, the seed,
+            and the encryption payload. E.g. {'size': 123, 'seed': 456, 'encryption_payload': 'abc'}.
+        database (aioredis.Redis): The Redis client instance.
+    """
+    # Serialize the metadata as a JSON string
+    metadata_json = json.dumps(metadata)
+    # Use HSET to associate the data hash with the hotkey
+    key = f"hotkey:{ss58_address}:{data_hash}"
+    await database.set(key, metadata_json)
+    bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
+
+
+async def set_ttl_top_level(ss58_address: str, data_hash: str, ttl: int, database):
+    key = f"hotkey:{ss58_address}:{data_hash}"
+    await database.expire(key, ttl)
+    bt.logging.trace(f"Set TTL for data hash {data_hash} with hotkey {ss58_address}.")
+
+
+async def remove_metadata_from_hotkey_top_level(
+    ss58_address: str, data_hash: str, database: aioredis.Redis
+):
+    """
+    Removes a data hash and its metadata from a hotkey in Redis.
+
+    Parameters:
+        ss58_address (str): The primary key representing the hotkey.
+        data_hash (str): The subkey representing the data hash.
+        database (aioredis.Redis): The Redis client instance.
+    """
+    # Use HDEL to remove the data hash from the hotkey
+    key = f"hotkey:{ss58_address}:{data_hash}"
+    await database.delete(key)
+    bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}.")
+
+
 async def remove_metadata_from_hotkey(
     ss58_address: str, data_hash: str, database: aioredis.Redis
 ):
@@ -60,6 +104,31 @@ async def remove_metadata_from_hotkey(
     key = f"hotkey:{ss58_address}"
     await database.hdel(key, data_hash)
     bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}.")
+
+
+async def get_metadata_for_hotkey_top_level(
+    ss58_address: str, data_hash: str, database: aioredis.Redis
+):
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    # Fetch all fields (data hashes) and values (metadata) for the hotkey
+    all_metadata = {
+        x.decode().split(":")[-1]: await database.get(x)
+        async for x in database.scan_iter(f"hotkey:{ss58_address}:*")
+    }
+    # Deserialize the metadata for each data hash
+    return {
+        data_hash: json.loads(metadata.decode("utf-8"))
+        for data_hash, metadata in all_metadata.items()
+    }
 
 
 async def get_metadata_for_hotkey(
@@ -88,6 +157,26 @@ async def get_metadata_for_hotkey(
     }
 
 
+async def get_hashes_for_hotkey_top_level(
+    ss58_address: str, database: aioredis.Redis
+) -> List[str]:
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    # Fetch all fields (data hashes) and values (metadata) for the hotkey
+    return [
+        x.decode().split(":")[-1]
+        async for x in database.scan_iter(f"hotkey:{ss58_address}:*")
+    ]
+
+
 async def get_hashes_for_hotkey(
     ss58_address: str, database: aioredis.Redis
 ) -> List[str]:
@@ -110,6 +199,26 @@ async def get_hashes_for_hotkey(
     ]
 
 
+async def remove_hashes_for_hotkey_top_level(
+    ss58_address: str, hashes: list, database: aioredis.Redis
+) -> List[str]:
+    """
+    Retrieves all data hashes and their metadata for a given hotkey.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are data hashes and values are the associated metadata.
+    """
+    bt.logging.trace(
+        f"remove_hashes_for_hotkey() removing {len(hashes)} hashes from hotkey {ss58_address}"
+    )
+    for _hash in hashes:
+        await remove_metadata_from_hotkey_top_level(ss58_address, _hash, database)
+
+
 async def remove_hashes_for_hotkey(
     ss58_address: str, hashes: list, database: aioredis.Redis
 ) -> List[str]:
@@ -128,6 +237,28 @@ async def remove_hashes_for_hotkey(
     )
     for _hash in hashes:
         await remove_metadata_from_hotkey(ss58_address, _hash, database)
+
+
+async def update_metadata_for_data_hash_top_level(
+    ss58_address: str, data_hash: str, new_metadata: dict, database: aioredis.Redis
+):
+    """
+    Updates the metadata for a specific data hash associated with a hotkey.
+
+    Parameters:
+        ss58_address (str): The key representing the hotkey.
+        data_hash (str): The subkey representing the data hash to update.
+        new_metadata (dict): The new metadata to associate with the data hash.
+        database (aioredis.Redis): The Redis client instance.
+    """
+    # Serialize the new metadata as a JSON string
+    new_metadata_json = json.dumps(new_metadata)
+    # Update the field in the hash with the new metadata
+    key = f"hotkey:{ss58_address}:{data_hash}"
+    await database.set(key, new_metadata_json)
+    bt.logging.trace(
+        f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
+    )
 
 
 async def update_metadata_for_data_hash(
@@ -149,6 +280,35 @@ async def update_metadata_for_data_hash(
     bt.logging.trace(
         f"Updated metadata for data hash {data_hash} under hotkey {ss58_address}."
     )
+
+
+async def get_metadata_for_hotkey_and_hash_top_level(
+    ss58_address: str, data_hash: str, database: aioredis.Redis, verbose: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves specific metadata from a hash in Redis for the given field_key.
+
+    Parameters:
+        ss58_address (str): The hotkey assoicated.
+        data_hash (str): The data hash associated.
+        databse (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        The deserialized metadata as a dictionary, or None if not found.
+    """
+    # Get the JSON string from Redis
+    metadata_json = await database.get(f"hotkey:{ss58_address}:{data_hash}")
+    if verbose:
+        bt.logging.trace(
+            f"hotkey {ss58_address[:16]} | data_hash {data_hash[:16]} | metadata_json {metadata_json}"
+        )
+    if metadata_json:
+        # Deserialize the JSON string to a Python dictionary
+        metadata = json.loads(metadata_json)
+        return metadata
+    else:
+        bt.logging.trace(f"No metadata found for {data_hash} in hash {ss58_address}.")
+        return None
 
 
 async def get_metadata_for_hotkey_and_hash(
@@ -178,6 +338,38 @@ async def get_metadata_for_hotkey_and_hash(
     else:
         bt.logging.trace(f"No metadata found for {data_hash} in hash {ss58_address}.")
         return None
+
+
+async def get_all_chunk_hashes_top_level(
+    database: aioredis.Redis, verbose: bool = False
+) -> Dict[str, List[str]]:
+    """
+    Retrieves all chunk hashes and associated metadata from the Redis instance.
+
+    Parameters:
+        database (aioredis.Redis): The Redis client instance.
+
+    Returns:
+        A dictionary where keys are chunk hashes and values are lists of hotkeys associated with each chunk hash.
+    """
+    # TODO: Trade memory for CPU to cache these results as separate keys in the index
+    # Initialize an empty dictionary to store the inverse map
+    chunk_hash_hotkeys = {}
+
+    # Retrieve all hotkeys (assuming keys are named with a 'hotkey:' prefix)
+    async for index_key in database.scan_iter("*"):
+        if not index_key.startswith(b"hotkey:"):
+            continue
+
+        # Iterate over each data hash and append the hotkey to the corresponding list
+        splits = index_key.decode("utf-8").split(":")
+        hotkey = splits[1]
+        data_hash = splits[-1]
+        if data_hash not in chunk_hash_hotkeys:
+            chunk_hash_hotkeys[data_hash] = []
+        chunk_hash_hotkeys[data_hash].append(hotkey)
+
+    return chunk_hash_hotkeys
 
 
 async def get_all_chunk_hashes(database: aioredis.Redis) -> Dict[str, List[str]]:
