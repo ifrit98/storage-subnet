@@ -121,7 +121,6 @@ class EmissionData:
                         with open("scripts/observability/emission_data.json", "w", encoding="utf-8") as file:
                             json.dump(extracted, file)
                         extracted.clear()
-                
 
     @threaded
     def get_block_events(self):
