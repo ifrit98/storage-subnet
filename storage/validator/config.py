@@ -184,13 +184,13 @@ def add_args(cls, parser):
     parser.add_argument(
         "--neuron.store_sample_size",
         type=int,
-        default=10,
+        default=5,
         help="Number of miners to store each piece of data on.",
     )
     parser.add_argument(
         "--neuron.challenge_sample_size",
         type=int,
-        default=10,
+        default=5,
         help="Number of miners to challenge at a time. Target is ~90 miners per epoch.",
     )
     parser.add_argument(
