@@ -218,16 +218,14 @@ def apply_reward_scores(
         bt.logging.debug(f"Reward shape: {rewards.shape}")
         bt.logging.debug(f"UIDs: {uids}")
 
-    # Normalize rewards based on total batch size
+    # Scale rewards based on response times and normalize based on total batch size
     bt.logging.debug(f"Total batch size: {total_batch_size}")
-    bt.logging.debug(f"Prenormalized rewards: {rewards}")
     rebal_size = zeros_with_same_length(total_batch_size)
-    rewards = [(reward / total_batch_size) * rebal_size for reward in rewards]
-    bt.logging.debug(f"Normalized rewards: {rewards}")
 
-    # Scale rewards based on response times
+    bt.logging.debug(f"Prenormalized scaled rewards: {scaled_rewards}")
     scaled_rewards = scale_rewards(uids, responses, rewards, timeout=timeout, mode=mode)
-    bt.logging.debug(f"apply_reward_scores() Scaled rewards: {scaled_rewards}")
+    scaled_rewards = [(reward / total_batch_size) * rebal_size for reward in scaled_rewards]
+    bt.logging.debug(f"Normalized rewards: {scaled_rewards}")
 
     # Compute forward pass rewards
     # shape: [ metagraph.n ]
