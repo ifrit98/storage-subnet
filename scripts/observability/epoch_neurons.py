@@ -83,6 +83,7 @@ class EmissionData:
         while True:
             prev_block = 0
             blocks_since_epoch = self.subtensor.blocks_since_epoch(self.netuid)
+            #print(blocks_since_epoch)
 
             if blocks_since_epoch > prev_block:
                 prev_block = blocks_since_epoch
@@ -107,20 +108,29 @@ class EmissionData:
         Returns:
             None
         """
+        old_block_counts = {}
+        epoch_data = {}
+        
         while True:
             with self.cache_lock:
                 if bool(self.cache):
-                    extracted = {
-                        current_block: {
-                            neuron.uid: neuron.emission for neuron in neurons_by_block
+                    epoch_data = {
+                        current_epoch: {
+                            current_block: {
+                                neuron.uid: neuron.emission for neuron in neurons_by_block
+                            } for current_block, neurons_by_block in blocks.items()
                         } for current_epoch, blocks in self.cache.items()
-                        for current_block, neurons_by_block in blocks.items()
                     }
 
-                    if len(extracted) > 10:
-                        with open("scripts/observability/emission_data.json", "w", encoding="utf-8") as file:
-                            json.dump(extracted, file)
-                        extracted.clear()
+                    for current_epoch, blocks in epoch_data.items():
+                        current_block_count = len(blocks)
+                        old_block_count = old_block_counts.get(current_epoch, 0)
+
+                        if current_block_count > old_block_count:
+                            with open("scripts/observability/emission_data.json", "w", encoding="utf-8") as f:
+                                json.dump(epoch_data, f, indent=4)
+
+                        old_block_counts[current_epoch] = current_block_count
                         
                 
 
