@@ -21,3 +21,6 @@ if [ "$value" = "Hello, FileTao!" ]; then
 else
     echo "Test failed: Data did not persist."
 fi
+
+# Remove key from Redis
+redis-cli -a $REDIS_PASSWORD DEL testkey
