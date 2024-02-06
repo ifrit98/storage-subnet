@@ -27,8 +27,3 @@ ENV WANDB_API_KEY=$WANDB_API_KEY
 RUN wandb login
 
 RUN git config --global --add safe.directory /root/.bittensor
-
-# docker build --build-arg WANDB_API_KEY=8e38ba23036d39c74e019cdfc5aa776d84c7c82e -t storage-subnet:latest . 
-# docker build --build-arg WANDB_API_KEY=<WANDB_API_KEY> -t storage-subnet:latest .
-# docker run -it --rm --name storage-subnet storage-subnet:latest
-# sudo docker run -it --rm --entrypoint /bin/bash storage-subnet:latest

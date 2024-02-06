@@ -103,6 +103,12 @@ docker-compose up -d
 The `-d` argument detaches the process from the shell and runs in the background. Check logs with `docker logs sn21`.
 
 
+To run and inspect the docker image from an interactive terminal:
+```bash
+docker run -it --rm --entrypoint /bin/bash storage-subnet:latest
+```
+
+
 If using docker, you may skip the next section `Manual Installation`, and go ahead to [Storage-Cli-Interface](#storage-cli-interface).
 
 ## Manual installation
