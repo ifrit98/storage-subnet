@@ -20,12 +20,13 @@ Currently supporting `python>=3.9,<3.11`.
 
 1. [FileTAO](#FileTAO)
 1. [Installation](#installation)
-   - [Install Redis](#install-redis)
-   - [Install PM2](#install-pm2)
+   - [Docker](#docker)
+   - [Manual Installation](#manual-installation)
+      - [Install Redis](#install-redis)
+      - [Install PM2](#install-pm2)
 1. [Network Stats](#network-stats)
 1. [Storage CLI Interface](#storage-cli-interface)
    - [Overview](#overview)
-   - [Prerequisites](#prerequisites)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
      - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
@@ -56,61 +57,55 @@ Currently supporting `python>=3.9,<3.11`.
    - [(Optional) Setup WandB](#setup-wandb)
 1. [Local Subtensor](#local-subtensor)
 
-# Storage CLI Interface
+# Installation
 
-## Overview
-The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+## Docker
+For convenience, there is a provided `Dockerfile` and `docker-compose.yml` for running miner, validator, or api nodes.
 
-The FileTao storage cli uses IPFS content identifiers (`CIDs`) to identify storage on the network. This has several advantages over using simple hashes of the data, as a way of providing a more robust and verifiable way of identifying and retrieving data. 
-
-Unlike simple hashes, which only represent the content, CIDs in IPFS (InterPlanetary File System) are more comprehensive. They contain not only a hash of the content but also information about the hashing algorithm and encoding used. This makes CIDs self-describing and ensures that the data retrieved is exactly what was stored, without any alterations.
-
-The benefits of using CIDs in the FileTao Storage CLI on Bittensor include:
-
-1. Content Addressing: CIDs allow for content-based addressing rather than location-based addressing. This means that the content itself, rather than its location on a specific server, is used to reference and access the data. This approach is inherently more secure and decentralized.
-1. Version Control and Deduplication: Since CIDs change with even the slightest alteration in the content, they naturally support version control. Moreover, the use of CIDs facilitates deduplication, as the same content stored multiple times will have the same CID, saving space and reducing redundancy on the network.
-1. Network Efficiency: Using CIDs improves network efficiency in data retrieval. Since the CID contains information about the content, it allows the network to fetch data from the nearest node that stores it, rather than relying on a central server, thus speeding up the data retrieval process.
-1. Future-Proofing: The CID system is designed to be future-proof. As new hashing algorithms and encodings emerge, CIDs can adapt to include this new information without disrupting the existing system. This ensures long-term viability of the storage system on the Bittensor network.
-1. Immutable and Tamper-Proof: The use of CIDs ensures immutability and tamper-proofing of data. Since the CID is a unique identifier for a specific version of the content, any changes in the content result in a different CID. This makes it easy to verify the integrity of the data and detect any unauthorized modifications.
-
-CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate both CIDv0 and CIDv1 by calling `make_cid(data: Union[str,bytes], version: int)`
-
-```python
-from storage.validator.cid import make_cid
-
-# Generate CID objects
-cid0 = make_cid("abc", 0)
-cid0
-> CIDv0(version=0, codec=dag-pb, multihash=b'QmQpeUrxtQE5N2SVog1Z..')
-
-cid1 = make_cid("abc", 1)
-cid1
-> CIDv1(version=1, codec=sha2-256, multihash=b'bafkreif2pall7dybz7v..')
-
-# Get the multihash out
-multihash = make_cid("abc", 0).multihash
-multihash
-> b'QmQpeUrxtQE5N2SVog1ZCxd7c7RN4fBNQu5aLwkk5RY9ER'
-
-from storage.validator.cid import decode_cid
-# Decode a CIDv1 object to get the original data hash, produced by `sha256` (CIDv1)
-decoded_hash = decode_cid(cid1)
-decoded_hash
-> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
-
-expected_hash = hashlib.sha256("abc".encode()).digest()
-expected_hash
-> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
-
-decoded_hash == expected_hash
-> True
+In order to use this option, you **MUST** build the docker image first and then run the docker-compose. Pass your `wandb` api key as an argument to the build script:
+```bash
+docker build --build-arg WANDB_API_KEY=<WANDB_API_KEY> -t storage-subnet:latest .
 ```
 
-## Prerequisites
-Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+Once you have successfully built the docker image, you must properly setup the docker-compose.yml, replacing values in carets <>:
+```bash
+version: '3.7'
+
+services:
+  my_container:
+    image: storage-subnet:latest
+    container_name: sn21
+    network_mode: host
+    environment:
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: # this should be set or left blank if not password protected (NOT RECOMMENDED!)
+      PYTHONPATH: "/root/.bittensor:${PYTHONPATH}"
+    volumes:
+      - <YOUR_HOME_DIR>/.bittensor/wallets:/root/.bittensor/wallets # expand and add ~/ (home)
+      - .:/root/storage-subnet
+    restart: always
+    command: >
+      python /root/storage-subnet/neurons/<miner|validator|api>.py # Pick one
+      --wallet.name <YOUR_COLDKEY> # coldkey name, e.g. default
+      --wallet.hotkey <YOUR_HOTKEY> # hotkey name, e.g. validator
+      --netuid 21
+      --subtensor.network local # can be finney, or a specific chain_endpoint arugment
+      --logging.debug
+      ... # add other optional arguments as necessary
+   ...
+```
+
+Once the docker-compose.yml is properly filled, run the miner, validator, or api using docker-compose:
+```bash
+docker-compose up -d
+```
+
+The `-d` argument detaches the process from the shell and runs in the background. Check logs with `docker logs sn21`.
 
 
-## Installation
+If using docker, you may skip the next section `Manual Installation`, and go ahead to [Storage-Cli-Interface](#storage-cli-interface).
+
+## Manual installation
 ```bash
 git clone https://github.com/ifrit98/storage-subnet
 cd storage-subnet
@@ -263,6 +258,56 @@ sudo apt install nodejs npm
 Once this compeltes, install pm2 globally
 ```bash
 sudo npm install pm2 -g
+```
+
+# Storage CLI Interface
+
+## Overview
+The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+
+The FileTao storage cli uses IPFS content identifiers (`CIDs`) to identify storage on the network. This has several advantages over using simple hashes of the data, as a way of providing a more robust and verifiable way of identifying and retrieving data. 
+
+Unlike simple hashes, which only represent the content, CIDs in IPFS (InterPlanetary File System) are more comprehensive. They contain not only a hash of the content but also information about the hashing algorithm and encoding used. This makes CIDs self-describing and ensures that the data retrieved is exactly what was stored, without any alterations.
+
+The benefits of using CIDs in the FileTao Storage CLI on Bittensor include:
+
+1. Content Addressing: CIDs allow for content-based addressing rather than location-based addressing. This means that the content itself, rather than its location on a specific server, is used to reference and access the data. This approach is inherently more secure and decentralized.
+1. Version Control and Deduplication: Since CIDs change with even the slightest alteration in the content, they naturally support version control. Moreover, the use of CIDs facilitates deduplication, as the same content stored multiple times will have the same CID, saving space and reducing redundancy on the network.
+1. Network Efficiency: Using CIDs improves network efficiency in data retrieval. Since the CID contains information about the content, it allows the network to fetch data from the nearest node that stores it, rather than relying on a central server, thus speeding up the data retrieval process.
+1. Future-Proofing: The CID system is designed to be future-proof. As new hashing algorithms and encodings emerge, CIDs can adapt to include this new information without disrupting the existing system. This ensures long-term viability of the storage system on the Bittensor network.
+1. Immutable and Tamper-Proof: The use of CIDs ensures immutability and tamper-proofing of data. Since the CID is a unique identifier for a specific version of the content, any changes in the content result in a different CID. This makes it easy to verify the integrity of the data and detect any unauthorized modifications.
+
+CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate both CIDv0 and CIDv1 by calling `make_cid(data: Union[str,bytes], version: int)`
+
+```python
+from storage.validator.cid import make_cid
+
+# Generate CID objects
+cid0 = make_cid("abc", 0)
+cid0
+> CIDv0(version=0, codec=dag-pb, multihash=b'QmQpeUrxtQE5N2SVog1Z..')
+
+cid1 = make_cid("abc", 1)
+cid1
+> CIDv1(version=1, codec=sha2-256, multihash=b'bafkreif2pall7dybz7v..')
+
+# Get the multihash out
+multihash = make_cid("abc", 0).multihash
+multihash
+> b'QmQpeUrxtQE5N2SVog1ZCxd7c7RN4fBNQu5aLwkk5RY9ER'
+
+from storage.validator.cid import decode_cid
+# Decode a CIDv1 object to get the original data hash, produced by `sha256` (CIDv1)
+decoded_hash = decode_cid(cid1)
+decoded_hash
+> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
+
+expected_hash = hashlib.sha256("abc".encode()).digest()
+expected_hash
+> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
+
+decoded_hash == expected_hash
+> True
 ```
 
 

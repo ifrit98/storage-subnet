@@ -1,0 +1,36 @@
+version: '3.7'
+
+services:
+  my_container:
+    image: storage-subnet:latest
+    container_name: sn21
+    network_mode: host
+    environment:
+      REDIS_HOST: localhost
+      REDIS_PASSWORD:
+      PYTHONPATH: "/root/.bittensor:${PYTHONPATH}"
+    volumes:
+      - <YOUR_HOME_DIR>/.bittensor/wallets:/root/.bittensor/wallets
+      - .:/root/storage-subnet
+    restart: always
+    command: >
+      python /root/storage-subnet/neurons/validator.py
+      --wallet.name <YOUR_COLDKEY>
+      --wallet.hotkey <YOUR_HOTKEY>
+      --netuid 21
+      --subtensor.network local
+      --logging.debug
+
+  redis:
+    image: redis:latest
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  redis-data:
