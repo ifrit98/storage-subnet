@@ -1,5 +1,7 @@
 import torch
 import base64
+import random
+import asyncio
 import bittensor
 import bittensor as bt
 
@@ -74,8 +76,10 @@ async def get_query_api_nodes(dendrite, metagraph, n=0.1, timeout=3):
         dendrite, metagraph, init_query_uids, timeout=timeout
     )
     bt.logging.debug(
-        f"Available API node UIDs for subnet {metagraph.netuid}: {init_query_uids}"
+        f"Available API node UIDs for subnet {metagraph.netuid}: {query_uids}"
     )
+    if len(query_uids) > 3:
+        query_uids = random.sample(query_uids, 3)
     return query_uids
 
 
@@ -150,8 +154,12 @@ async def store_data(
         timeout=ping_timeout,
     )
 
-    with bt.__console__.status(":satellite: Retreiving data..."):
-        responses = await dendrite(axons, synapse, timeout=timeout, deserialize=False)
+    with bt.__console__.status(":satellite: Storing data..."):
+        tasks = [
+            asyncio.create_task(dendrite(axon, synapse, timeout=timeout, deserialize=deserialize))
+            for axon in axons
+        ]
+        responses = await asyncio.gather(*tasks)
 
         bt.logging.debug(
             "axon responses:", [resp.dendrite.dict() for resp in responses]
@@ -223,7 +231,11 @@ async def retrieve_data(
     )
 
     with bt.__console__.status(":satellite: Retreiving data..."):
-        responses = await dendrite(axons, synapse, timeout=timeout, deserialize=False)
+        tasks = [
+            asyncio.create_task(dendrite(axon, synapse, timeout=timeout, deserialize=False))
+            for axon in axons
+        ]
+        responses = await asyncio.gather(*tasks)
 
     success = False
     decrypted_data = b""

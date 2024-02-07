@@ -134,6 +134,8 @@ async def reroll_distribution(self, distribution, failed_uids):
     new_uids = await get_available_query_miners(
         self, k=len(failed_uids), exclude=failed_uids
     )
+    # Ping miners to ensure they are available
+    new_uids, _ = await ping_uids(self, new_uids)
     distribution["uids"] = new_uids
     return distribution
 

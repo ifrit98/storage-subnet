@@ -290,7 +290,7 @@ async def create_reward_vector(
             await callback(hotkey, idx, uid, response)
         else:
             bt.logging.error(
-                f"create_reward_vector() Failed to verify store commitment from UID: {uid} | hotkey: {hotkey}"
+                f"Failed to verify {synapse.__class__} commitment from UID: {uid} | hotkey: {hotkey}"
             )
             fail_callback(uid)
 

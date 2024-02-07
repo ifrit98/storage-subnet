@@ -350,9 +350,10 @@ async def retrieve_broadband(self, full_hash: str):
 
     # Get the chunks you need to reconstruct IN order
     ordered_metadata = await get_ordered_metadata(full_hash, self.database)
-    if ordered_metadata == []:
+    bt.logging.debug(f"ordered metadata: {ordered_metadata}")
+    if ordered_metadata == [] or ordered_metadata is None:
         bt.logging.error(f"No metadata found for full hash: {full_hash}")
-        return None
+        raise ValueError(f"No metadata found for full hash: {full_hash}")
 
     # Get the hotkeys/uids to query
     tasks = []
