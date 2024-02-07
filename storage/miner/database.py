@@ -240,6 +240,27 @@ async def get_total_storage_used(r: "aioredis.Strictredis") -> int:
     return total_size
 
 
+async def get_filepath(r: "aioredis.StrictRedis", chunk_hash: str, hotkey: str) -> str:
+    """
+    Retrieves the filepath for a specific chunk from the Redis database.
+
+    Args:
+        chunk_hash (str): The unique hash identifying the chunk.
+        hotkey (str): The hotkey associated with the chunk.
+        r (redis.Redis): The Redis connection instance.
+
+    Returns:
+        str: The filepath of the chunk.
+    """
+
+    filepath = ""
+    metadata_str = await r.hget(chunk_hash, hotkey)
+    if metadata_str is not None:
+        metadata = json.loads(metadata_str)
+        filepath = metadata.get("filepath")
+    return filepath
+
+
 async def migrate_data_directory(
     r: "aioredis.Strictredis", new_base_directory: str, return_failures: bool = False
 ) -> Optional[List[str]]:

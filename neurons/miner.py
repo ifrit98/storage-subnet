@@ -76,6 +76,7 @@ from storage.miner.database import (
     store_chunk_metadata,
     update_seed_info,
     get_chunk_metadata,
+    get_filepath,
     store_or_update_chunk_metadata,
 )
 
@@ -619,6 +620,9 @@ class miner:
                 encrypted_byte_data, self.config.database.directory, str(data_hash)
             )
             bt.logging.trace(f"stored data {data_hash} in filepath: {filepath}")
+        else:
+            filepath = await get_filepath(self.database, data_hash, synapse.dendrite.hotkey)
+
         # Add the initial chunk, size, and validator seed information
         # If data exists and is the same hotkey caller, overwrite prev seed, otherwise add a new entry
         await store_or_update_chunk_metadata(
