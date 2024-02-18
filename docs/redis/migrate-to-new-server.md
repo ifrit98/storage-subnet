@@ -4,11 +4,13 @@ In the *origin* server we have to create a dump of the database. We can do it as
 ```bash
 # server: origin
 A$ redis-cli
+127.0.0.1:6379> auth <your-passwd>
 127.0.0.1:6379> CONFIG GET dir
 1) "dir"
 2) "/var/lib/redis/"
 127.0.0.1:6379> SAVE
 OK
+A$ scp /var/lib/redis/dump.rdb user@destiny-ip:/tmp/dump.rdb
 ```
 
 In the *destiny* server we have to incorporate that data. We can do it as follows:

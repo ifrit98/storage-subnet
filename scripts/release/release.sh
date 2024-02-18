@@ -135,6 +135,9 @@ echo_info "Detected new version tag: $VERSION"
 echo_info "Previous version tag: $PREV_VERSION_TAG"
 echo_info "Tag generated: $TAG_NAME"
 
+echo "$VERSION"
+echo " ${BASH_SOURCE%/*}/github_release.sh $APPLY_ACTION $GITHUB_TOKEN -P $PREV_VERSION_TAG -V $VERSION"
+
 # 3. Create Github resources
 if [[ $APPLY == "true" ]]; then
   ${BASH_SOURCE%/*}/github_release.sh $APPLY_ACTION --github-token $GITHUB_TOKEN -P $PREV_VERSION_TAG -V $VERSION

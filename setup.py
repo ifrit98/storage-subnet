@@ -19,11 +19,9 @@
 import re
 import os
 import codecs
-import pathlib
 from os import path
 from io import open
 from setuptools import setup, find_packages
-from pkg_resources import parse_requirements
 
 
 def read_requirements(path):
@@ -47,6 +45,7 @@ def read_requirements(path):
 
 
 requirements = read_requirements("requirements.txt")
+extra_requirements_dev = read_requirements("requirements-dev.txt")
 here = path.abspath(path.dirname(__file__))
 
 with open(path.join(here, "README.md"), encoding="utf-8") as f:
@@ -74,8 +73,13 @@ setup(
     author_email="ifrit98@gmail.com",
     license="MIT",
     python_requires=">=3.9,<3.11",
-    scripts=["bin/ftcli"],
+    entry_points={
+        "console_scripts": [
+            "filetao=storage.cli.cli:filetao"
+        ]
+    },
     install_requires=requirements,
+    extras_require={"dev": extra_requirements_dev},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

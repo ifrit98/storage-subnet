@@ -16,7 +16,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import sys
 import copy
 import time
@@ -24,13 +23,12 @@ import torch
 import base64
 import typing
 import asyncio
-import aioredis
+import websocket
 import bittensor as bt
 
 from pprint import pformat
 from pyinstrument import Profiler
-from Crypto.Random import get_random_bytes, random
-from dataclasses import asdict
+from Crypto.Random import get_random_bytes
 
 from storage.validator.event import EventSchema
 from storage import protocol
@@ -39,7 +37,6 @@ from storage.shared.ecc import (
     setup_CRS,
     ecc_point_to_hex,
 )
-from storage.shared.utils import b64_encode
 from storage.validator.utils import (
     make_random_file,
     compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
@@ -54,6 +51,7 @@ from storage.validator.database import (
     get_ordered_metadata,
     hotkey_at_capacity,
 )
+from storage.validator.cid import generate_cid_string
 from storage.validator.bonding import update_statistics
 
 from .reward import create_reward_vector
@@ -65,7 +63,7 @@ async def store_encrypted_data(
     encrypted_data: typing.Union[bytes, str],
     encryption_payload: dict,
     exclude_uids: typing.List[str] = [],
-    ttl: int = 0,
+    ttl: int = None,
     k: int = None,
     max_retries: int = 3,
 ) -> bool:
@@ -113,12 +111,13 @@ async def store_encrypted_data(
         g=ecc_point_to_hex(g),
         h=ecc_point_to_hex(h),
         seed=get_random_bytes(32).hex(),  # 256-bit seed
+        ttl=ttl or self.config.neuron.data_ttl,
     )
 
     # Select subset of miners to query (e.g. redunancy factor of N)
     uids, _ = await ping_and_retry_uids(
         self,
-        k=k or self.config.neuron.store_redundancy,
+        k=k or 4,
         max_retries=max_retries,
         exclude_uids=exclude_uids,
     )
@@ -138,7 +137,7 @@ async def store_encrypted_data(
             axons,
             synapse,
             deserialize=False,
-            timeout=self.config.neuron.store_timeout,
+            timeout=60,
         )
 
         # Compute the rewards for the responses given proc time.
@@ -161,12 +160,8 @@ async def store_encrypted_data(
                 data_hash,
                 response_storage,
                 self.database,
+                ttl=ttl or self.config.neuron.data_ttl,
             )
-            if ttl > 0:
-                await self.database.expire(
-                    f"{hotkey}:{data_hash}",
-                    ttl,
-                )
             bt.logging.debug(
                 f"Stored data in database with hotkey: {hotkey} | uid {uid} | {data_hash}"
             )
@@ -182,18 +177,19 @@ async def store_encrypted_data(
         if self.config.neuron.verbose and self.config.neuron.log_responses:
             bt.logging.debug(f"Store responses round: {retries}")
             [
-                bt.logging.debug(f"Store response: {response.dendrite.dict()}")
+                bt.logging.debug(f"Store response: {response.axon.dict()}")
                 for response in responses
             ]
 
         bt.logging.trace(f"Applying store rewards for retry: {retries}")
+        data_size = sys.getsizeof(b64_encrypted_data)
         apply_reward_scores(
             self,
-            uids,
-            responses,
-            rewards,
-            timeout=self.config.neuron.store_timeout,
-            mode=self.config.neuron.reward_mode,
+            uids=uids,
+            responses=responses,
+            rewards=rewards,
+            data_sizes=[data_size] * len(responses),
+            timeout=60,
         )
 
         # Get a new set of UIDs to query for those left behind
@@ -250,13 +246,9 @@ async def store_random_data(self):
         self,
         encrypted_data,
         encryption_payload,
-        k=self.config.neuron.store_sample_size,
+        k=15,
         ttl=self.config.neuron.data_ttl,
     )
-
-
-from .utils import compute_chunk_distribution_mut_exclusive_numpy_reuse_uids
-import websocket
 
 
 async def store_broadband(
@@ -267,6 +259,7 @@ async def store_broadband(
     k=10,
     data_hash=None,
     exclude_uids=None,
+    ttl=None,
 ):
     """
     Asynchronously stores encrypted data across a distributed network by splitting it into chunks and
@@ -334,6 +327,7 @@ async def store_broadband(
             g=ecc_point_to_hex(g),
             h=ecc_point_to_hex(h),
             seed=random_seed,
+            ttl=ttl or self.config.neuron.data_ttl,
         )
 
         uids = [
@@ -347,7 +341,7 @@ async def store_broadband(
             axons,
             synapse,
             deserialize=False,
-            timeout=self.config.neuron.store_timeout,
+            timeout=60,
         )
 
         # Compute the rewards for the responses given proc time.
@@ -368,13 +362,14 @@ async def store_broadband(
         )
         event.rewards.extend(rewards.tolist())
 
+        data_size = sys.getsizeof(b64_encoded_chunk)
         apply_reward_scores(
             self,
-            uids,
-            responses,
-            rewards,
-            timeout=self.config.neuron.store_timeout,
-            mode=self.config.neuron.reward_mode,
+            uids=uids,
+            responses=responses,
+            rewards=rewards,
+            data_sizes=[data_size] * len(responses),
+            timeout=60,
         )
 
         bt.logging.debug(f"Updated reward scores: {rewards.tolist()}")
@@ -425,6 +420,7 @@ async def store_broadband(
                 chunk_hash,
                 response_storage,  # seed + size + encryption keys
                 self.database,
+                ttl=ttl or self.config.neuron.data_ttl,
             )
             end = time.time()
             bt.logging.debug(
@@ -466,7 +462,6 @@ async def store_broadband(
 
         bt.logging.debug(f"gathering broadband tasks: {pformat(tasks)}")
         results = await asyncio.gather(*tasks)
-        bt.logging.debug(f"store_chunk_group() results: {pformat(results)}")
         # Grab the responses and relevant data necessary for verify from the results
         for i, result_group in enumerate(results):
             responses, b64_encoded_chunk, random_seed = result_group
@@ -474,7 +469,7 @@ async def store_broadband(
             bt.logging.debug(f"-- b64_encoded_chunk: {b64_encoded_chunk[:100]}")
             bt.logging.debug(f"-- random_seed: {random_seed}")
 
-            # Update the distributions with respones
+            # Update the distributions with responses
             distributions[i]["responses"] = responses
             distributions[i]["b64_encoded_chunk"] = b64_encoded_chunk
             distributions[i]["random_seed"] = random_seed
@@ -518,7 +513,7 @@ async def store_broadband(
 
     bt.logging.debug(f"store_broadband() {encrypted_data[:100]}")
 
-    full_hash = data_hash or hash_data(encrypted_data)
+    full_hash = data_hash or generate_cid_string(encrypted_data)
     bt.logging.debug(f"full hash: {full_hash}")
 
     # Check and see if hash already exists, reject if so.
@@ -527,6 +522,20 @@ async def store_broadband(
         return full_hash
 
     exclude_uids = copy.deepcopy(exclude_uids)
+    bt.logging.debug(f"Original exclude_uids: {exclude_uids}")
+
+    # Remove failed UIDs from consideration in chunk distributions
+    uids, failed_uids = await ping_and_retry_uids(
+        self,
+        k=50,
+        max_retries=1,
+        exclude_uids=exclude_uids,
+    )
+    bt.logging.debug(f"ping_and_retry_uids() failed uids: {failed_uids}")
+    if exclude_uids is None:
+        exclude_uids = []
+    exclude_uids = exclude_uids + list(failed_uids)
+    bt.logging.debug(f"Updated exclude_uids: {exclude_uids}")
 
     full_size = sys.getsizeof(encrypted_data)
     bt.logging.debug(f"full size: {full_size}")
@@ -539,7 +548,7 @@ async def store_broadband(
             distributions = await create_initial_distributions(encrypted_data, R, k)
             break
         except websocket._exceptions.WebSocketConnectionClosedException:
-            bt.logging.warning(f"Failed to create initial distributions, retrying...")
+            bt.logging.warning("Failed to create initial distributions, retrying...")
             retries += 1
         except Exception as e:
             bt.logging.warning(
@@ -550,6 +559,7 @@ async def store_broadband(
     bt.logging.trace(f"computed distributions: {pformat(distributions)}")
 
     chunk_hashes = []
+    # TODO: review is variable is needed
     retry_dists = [None]  # sentinel for first iteration
     retries = 0
     while len(distributions) > 0 and retries < 3:

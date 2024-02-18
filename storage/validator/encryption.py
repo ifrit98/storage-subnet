@@ -18,7 +18,6 @@
 
 import os
 import json
-import time
 import typing
 
 import bittensor as bt

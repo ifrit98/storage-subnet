@@ -23,15 +23,17 @@ import time
 import bittensor as bt
 
 from pprint import pformat
-from storage.validator.config import config, check_config, add_args
 from storage.validator.state import log_event
 from storage.validator.bonding import compute_all_tiers
-from storage.validator.reward import apply_reward_scores
 from storage.validator.database import (
     total_validator_storage,
     get_all_chunk_hashes,
     get_miner_statistics,
+    purge_expired_ttl_keys,
+    purge_challenges_for_all_hotkeys,
 )
+from storage.validator.state import save_state
+from storage.validator.utils import get_current_epoch
 
 from .challenge import challenge_data
 from .retrieve import retrieve_data
@@ -47,13 +49,12 @@ async def forward(self):
     # Record forward time
     start = time.time()
 
-    if self.step % self.config.neuron.store_step_length == 0:
-        # Store some random data
-        bt.logging.info("initiating store random")
-        event = await store_random_data(self)
+    # Store some random data
+    bt.logging.info("initiating store random")
+    event = await store_random_data(self)
 
-        # Log event
-        log_event(self, event)
+    # Log store event
+    log_event(self, event)
 
     # Challenge every opportunity (e.g. every 2.5 blocks with 30 sec timeout)
     bt.logging.info("initiating challenge")
@@ -62,7 +63,7 @@ async def forward(self):
     # Log event
     log_event(self, event)
 
-    if self.step % self.config.neuron.retrieve_step_length == 0:
+    if self.step % 5 == 0:
         # Retrieve some data
         bt.logging.info("initiating retrieve")
         _, event = await retrieve_data(self)
@@ -70,24 +71,40 @@ async def forward(self):
         # Log event
         log_event(self, event)
 
-    if self.step % self.config.neuron.distribute_step_length == 0:
+    if self.step % 10 == 0:
         # Distribute data
         bt.logging.info("initiating distribute")
-        await distribute_data(self, self.config.neuron.store_redundancy)
+        await distribute_data(self, 4)
 
-    # Monitor every 5 steps
-    if self.step % self.config.neuron.monitor_step_length == 0:
-        down_uids = await monitor(self)
-        if len(down_uids) > 0:
-            bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
-            await rebalance_data(
-                self,
-                k=2,  # increase redundancy
-                dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
-                hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
-            )
+    # Monitor every step
+    down_uids = await monitor(self)
+    if len(down_uids) > 0:
+        bt.logging.info(f"Downed uids marked for rebalance: {down_uids}")
+        await rebalance_data(
+            self,
+            k=2,  # increase redundancy
+            dropped_hotkeys=[self.metagraph.hotkeys[uid] for uid in down_uids],
+            hotkey_replaced=False,  # Don't delete challenge data (only in subscription handler)
+        )
 
-    if self.step % self.config.neuron.compute_stats_interval == 0 and self.step > 0:
+    # Purge all challenge data to start fresh and avoid requerying hotkeys with stale challenge data
+    current_epoch = get_current_epoch(self.subtensor)
+    bt.logging.info(
+        f"Current epoch: {current_epoch} | Last purged epoch: {self.last_purged_epoch}"
+    )
+    if current_epoch % 10 == 0:
+        if self.last_purged_epoch < current_epoch:
+            bt.logging.info("initiating challenges purge")
+            await purge_challenges_for_all_hotkeys(self.database)
+            self.last_purged_epoch = current_epoch
+            save_state(self)
+
+    # Purge expired TTL keys
+    if self.step % 60 == 0:
+        bt.logging.info("initiating TTL purge for expired keys")
+        await purge_expired_ttl_keys(self.database)
+
+    if self.step % 720 == 0 and self.step > 0:
         bt.logging.info("initiating compute stats")
         await compute_all_tiers(self.database)
 
@@ -99,7 +116,7 @@ async def forward(self):
         chunk_hash_map = await get_all_chunk_hashes(self.database)
 
         # Log the statistics, storage, and hashmap to wandb.
-        if not self.config.wandb.off:
+        if not self.config.wandb.off and self.wandb is not None:
             with open(self.config.neuron.miner_stats_path, "w") as file:
                 json.dump(stats, file)
 

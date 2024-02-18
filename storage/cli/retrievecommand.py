@@ -17,7 +17,6 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import sys
 import json
 import torch
 import base64
@@ -28,14 +27,8 @@ from storage.validator.encryption import decrypt_data_with_private_key
 
 import bittensor
 
-from rich import print
-from rich.console import Console
-from rich.tree import Tree
-from typing import List, Optional
-from rich.align import Align
-from rich.table import Table
+from typing import List
 from rich.prompt import Prompt
-from tqdm import tqdm
 
 from .default_values import defaults
 
@@ -118,7 +111,7 @@ class RetrieveData:
             )
             os.makedirs(cli.config.storage_basepath)
         base_outpath = os.path.expanduser(cli.config.storage_basepath)
-        outpath = os.path.join(base_outpath, cli.config.data_hash)
+        outpath = os.path.join(base_outpath, cli.config.cid)
         try:
             if (
                 wallet.coldkeypub_file.exists_on_device()
@@ -130,13 +123,13 @@ class RetrieveData:
                 hashes_dict = list_all_hashes(hash_file)
                 bittensor.logging.debug(f"hashes dict: {hashes_dict}")
                 reverse_hashes_dict = {v: k for k, v in hashes_dict.items()}
-                if cli.config.data_hash in reverse_hashes_dict:
-                    filename = reverse_hashes_dict[cli.config.data_hash]
+                if cli.config.cid in reverse_hashes_dict:
+                    filename = reverse_hashes_dict[cli.config.cid]
                     outpath = os.path.join(base_outpath, filename)
                     bittensor.logging.debug(f"set filename: {filename}")
         except Exception as e:
             bittensor.logging.warning(
-                "Failed to lookup filename for data_hash: {} ".format(e),
+                "Failed to lookup filename for CID: {} ".format(e),
                 "Reverting to hash value as filename {outpath}",
             )
 
@@ -145,8 +138,8 @@ class RetrieveData:
             bittensor.logging.debug("subtensor:", sub)
             RetrieveData._run(cli, sub, outpath, wallet)
         finally:
-            if "subtensor" in locals():
-                subtensor.close()
+            if "sub" in locals():
+                sub.close()
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
@@ -155,7 +148,7 @@ class RetrieveData:
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
 
-        synapse = storage.protocol.RetrieveUser(data_hash=cli.config.data_hash)
+        synapse = storage.protocol.RetrieveUser(data_hash=cli.config.cid)
         bittensor.logging.debug("synapse:", synapse)
 
         mg = sub.metagraph(cli.config.netuid)
@@ -178,7 +171,7 @@ class RetrieveData:
                 bittensor.logging.trace(f"response: {response.dendrite.dict()}")
                 if (
                     response.dendrite.status_code != 200
-                    or response.encrypted_data == None
+                    or response.encrypted_data is None
                 ):
                     continue
 
@@ -191,7 +184,7 @@ class RetrieveData:
                     f"encryption_payload: {response.encryption_payload}"
                 )
                 if (
-                    response.encryption_payload == None
+                    response.encryption_payload is None
                     or response.encryption_payload == ""
                     or response.encryption_payload == "{}"
                 ):
@@ -247,8 +240,8 @@ class RetrieveData:
             )
             config.wallet.hotkey = str(wallet_hotkey)
 
-        if not config.is_set("data_hash") and not config.no_prompt:
-            config.data_hash = Prompt.ask("Enter hash of data to retrieve")
+        if not config.is_set("cid") and not config.no_prompt:
+            config.cid = Prompt.ask("Enter CID of data to retrieve")
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -256,9 +249,9 @@ class RetrieveData:
             "get", help="""Retrieve data from the Bittensor network."""
         )
         retrieve_parser.add_argument(
-            "--data_hash",
+            "--cid",
             type=str,
-            help="Data hash to retrieve in the Bittensor network.",
+            help="Data content id to retrieve from= the Bittensor network.",
         )
         retrieve_parser.add_argument(
             "--hash_basepath",

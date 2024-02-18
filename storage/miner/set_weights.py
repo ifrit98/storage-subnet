@@ -17,16 +17,23 @@
 # DEALINGS IN THE SOFTWARE.
 
 import torch
+import wandb
+
+from bittensor import logging as bt_logging
+from bittensor import subtensor
+from bittensor import wallet
+from bittensor import metagraph
 
 from storage.shared.weights import set_weights, should_set_weights
+from storage import __spec_version__ as spec_version
 
 
 def set_weights_for_miner(
-    subtensor: "bt.subtensor",
+    subtensor: "subtensor",
     netuid: int,
     uid: int,
-    wallet: "bt.wallet",
-    metagraph: "bt.metagraph",
+    wallet: "wallet",
+    metagraph: "metagraph",
     wandb_on: bool = False,
     tempo: int = 360,
     wait_for_inclusion: bool = False,
@@ -68,14 +75,14 @@ def set_weights_for_miner(
     chain_weights = torch.zeros(subtensor.subnetwork_n(netuid=netuid))
     chain_weights[uid] = 1
     uids = torch.arange(0, len(chain_weights))
-    version_key = 1
+    version_key = spec_version
 
     # --- Set weights.
     last_updated = metagraph.last_update[uid].item()
     current_block = subtensor.get_current_block()
 
     if should_set_weights(current_block, last_updated, tempo):
-        success = set_weights(
+        success, message = set_weights(
             subtensor=subtensor,
             wallet=wallet,
             netuid=netuid,
@@ -89,9 +96,9 @@ def set_weights_for_miner(
         if wandb_on:
             wandb.log({"set_weights": 1})
 
-        return success
+        return success, message
     else:
         bt_logging.info(
             f"Not setting weights because we did it {current_block - last_updated} blocks ago. Last updated: {last_updated}, Current Block: {current_block}"
         )
-        return False
+        return False, message

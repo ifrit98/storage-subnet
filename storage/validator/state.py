@@ -20,14 +20,12 @@
 import torch
 import wandb
 import copy
-import math
-import hashlib as rpccheckhealth
 
 from loguru import logger
 from dataclasses import asdict
-from typing import Callable, Any
 
-import storage
+from storage import __version__ as THIS_VERSION
+from storage import __spec_version__ as THIS_SPEC_VERSION
 import storage.validator as validator
 from storage.validator.event import EventSchema
 
@@ -47,8 +45,8 @@ def init_wandb(self, reinit=False):
     """Starts a new wandb run."""
     tags = [
         self.wallet.hotkey.ss58_address,
-        storage.__version__,
-        str(storage.__spec_version__),
+        THIS_VERSION,
+        str(THIS_SPEC_VERSION),
         f"netuid_{self.metagraph.netuid}",
     ]
 
@@ -84,7 +82,8 @@ def init_wandb(self, reinit=False):
 
 def reinit_wandb(self):
     """Reinitializes wandb, rolling over the run."""
-    self.wandb.finish()
+    if self.wandb is not None:
+        self.wandb.finish()
     init_wandb(self, reinit=True)
 
 
@@ -131,7 +130,7 @@ def resync_metagraph(self: "validator.neuron.neuron"):
         # If so, we need to add new hotkeys and moving averages.
         if len(self.moving_averaged_scores) < len(self.metagraph.hotkeys):
             bt.logging.info(
-                f"resync_metagraph() Metagraph has grown, adding new hotkeys and moving averages"
+                "resync_metagraph() Metagraph has grown, adding new hotkeys and moving averages"
             )
             # Update the size of the moving average scores.
             new_moving_average = torch.zeros((self.metagraph.n)).to(self.device)
@@ -146,6 +145,8 @@ def save_state(self):
     try:
         neuron_state_dict = {
             "neuron_weights": self.moving_averaged_scores.to("cpu").tolist(),
+            "last_purged_epoch": self.last_purged_epoch,
+            "monitor_lookup": self.monitor_lookup,
         }
         torch.save(neuron_state_dict, f"{self.config.neuron.full_path}/model.torch")
         bt.logging.success(
@@ -165,10 +166,24 @@ def load_state(self):
     try:
         state_dict = torch.load(f"{self.config.neuron.full_path}/model.torch")
         neuron_weights = torch.tensor(state_dict["neuron_weights"])
+        self.last_purged_epoch = state_dict.get("last_purged_epoch", 0)
+        bt.logging.info(f"Loaded last_purged_epoch: {self.last_purged_epoch}")
+        self.monitor_lookup = state_dict.get(
+            "monitor_lookup", {uid: 0 for uid in self.metagraph.uids.tolist()}
+        )
+        if list(self.monitor_lookup.keys()) != self.metagraph.uids.tolist():
+            bt.logging.info(
+                "Monitor lookup keys do not match metagraph uids. Populating new monitor_lookup with zeros"
+            )
+            self.monitor_lookup = {
+                uid: self.monitor_lookup.get(uid, 0)
+                for uid in self.metagraph.uids.tolist()
+            }
+        bt.logging.info(f"Loaded monitor_lookup: {self.monitor_lookup}")
         # Check to ensure that the size of the neruon weights matches the metagraph size.
         if neuron_weights.shape != (self.metagraph.n,):
-            bt.logging.warning(
-                f"Neuron weights shape {neuron_weights.shape} does not match metagraph n {self.metagraph.n}"
+            bt.logging.info(
+                f"Neuron weights shape {neuron_weights.shape} does not match metagraph n {self.metagraph.n.item()}"
                 "Populating new moving_averaged_scores IDs with zeros"
             )
             self.moving_averaged_scores[: len(neuron_weights)] = neuron_weights.to(
@@ -191,6 +206,6 @@ def log_event(self, event):
         logger.log("EVENTS", "events", **event.__dict__)
 
     # Log the event to wandb
-    if not self.config.wandb.off:
+    if not self.config.wandb.off and self.wandb is not None:
         wandb_event = EventSchema.from_dict(event.__dict__)
         self.wandb.log(asdict(wandb_event))

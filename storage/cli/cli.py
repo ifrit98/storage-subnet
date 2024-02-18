@@ -16,19 +16,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import sys
-import json
 import argparse
 import storage
 import bittensor
 from rich import print
-from rich.console import Console
-from rich.tree import Tree
 from typing import List, Optional
-from rich.align import Align
-from rich.table import Table
-from tqdm import tqdm
 
 from .retrievecommand import RetrieveData
 from .storecommand import StoreData
@@ -45,9 +38,11 @@ ALIAS_TO_COMMAND = {
     "s": "store",
     "r": "retrieve",
     "m": "miner",
+    "n": "run",
     "retrieve": "retrieve",
     "store": "store",
     "miner": "miner",
+    "run": "run",
 }
 
 COMMANDS = {
@@ -101,7 +96,7 @@ class cli:
         bittensor.turn_console_on()
 
         # If no config is provided, create a new one from args.
-        if config == None:
+        if config is None:
             config = cli.create_config(args)
 
         self.config = config
@@ -118,6 +113,7 @@ class cli:
         if not self.config.get("no_version_checking", d=True):
             try:
                 bittensor.utils.version_checking()
+            # TODO: replace bare except with 'expected' exceptions
             except:
                 # If version checking fails, inform user with an exception.
                 raise RuntimeError(
@@ -173,7 +169,7 @@ class cli:
         parser = cli.__create_parser__()
 
         # If no arguments are passed, print help text and exit the program.
-        if args == None or len(args) == 0:
+        if args is None or len(args) == 0:
             parser.print_help()
             sys.exit()
 
@@ -193,7 +189,7 @@ class cli:
             command = config.command
             command_data = COMMANDS[command]
             if isinstance(command_data, dict):
-                if config["subcommand"] != None:
+                if config["subcommand"] is not None:
                     command_data["commands"][config["subcommand"]].check_config(config)
                 else:
                     print(
@@ -223,3 +219,8 @@ class cli:
         else:
             print(f":cross_mark:[red]Unknown command: {self.config.command}[/red]")
             sys.exit()
+
+
+def filetao():
+    args = sys.argv[1:]
+    cli(args=args).run()

@@ -16,12 +16,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import Crypto
 import typing
 import pydantic
 import bittensor as bt
-
-from Crypto.PublicKey import ECC
 
 
 # Basically setup for a given piece of data
@@ -43,6 +40,7 @@ class Store(bt.Synapse):
     commitment: typing.Optional[str] = None
     signature: typing.Optional[bytes] = None
     commitment_hash: typing.Optional[str] = None  # includes seed
+    ttl: typing.Optional[int] = None  # time to live (in seconds)
 
     required_hash_fields: typing.List[str] = pydantic.Field(
         [
@@ -81,6 +79,7 @@ class StoreUser(bt.Synapse):
     encryption_payload: str  # encrypted json serialized bytestring of encryption params
 
     data_hash: typing.Optional[str] = None  # Miner storage lookup key
+    ttl: typing.Optional[int] = None  # time to live (in seconds)
 
     required_hash_fields: typing.List[str] = pydantic.Field(
         ["encrypted_data", "encryption_payload"],

@@ -162,3 +162,5 @@ cython_debug/
 ideas/
 
 scratch/
+
+**/redis.conf.test

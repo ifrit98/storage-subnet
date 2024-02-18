@@ -17,7 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
-import aioredis
+from redis import asyncio as aioredis
 import asyncio
 import bittensor as bt
 from rich.table import Table
@@ -109,7 +109,7 @@ class ListMinerStats:
         asyncio.run(coro)
 
     @staticmethod
-    def check_config(config: "bittensor.config"):
+    def check_config(config: "bt.config"):
         pass
 
     @staticmethod

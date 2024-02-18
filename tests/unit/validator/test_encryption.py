@@ -1,16 +1,8 @@
 from unittest import TestCase
 
-from storage.validator.encryption import (
-    encrypt_data,
-    encrypt_data_with_wallet,
-    decrypt_data_with_wallet,
-)
-
-from bittensor import wallet as bt_wallet
 from nacl import pwhash, secret
 
 import os
-import sys
 
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +35,7 @@ class TestStoreCommand(TestCase):
         #
         # This should be the final test that ensures the code used is OK
         # Generate random data and encrypt/decrypt
-        # 
+        #
         random_data = os.urandom(256)
 
         # Generate a new wallet if none exists

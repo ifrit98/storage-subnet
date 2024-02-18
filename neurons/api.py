@@ -16,37 +16,29 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
-import copy
 import json
 import time
 import torch
 import base64
 import typing
 import asyncio
-import aioredis
+from redis import asyncio as aioredis
 import traceback
-import websocket
 import bittensor as bt
 import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
+from storage.shared.checks import check_environment
+from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import should_checkpoint
 from storage.validator.encryption import encrypt_data, setup_encryption_wallet
 from storage.validator.store import store_broadband
 from storage.validator.retrieve import retrieve_broadband
-from storage.validator.network import (
-    reroll_distribution,
-    compute_and_ping_chunks,
-    ping_uids,
-)
-
 from storage.validator.database import retrieve_encryption_payload
-
+from storage.validator.cid import generate_cid_string
 from storage.validator.encryption import decrypt_data_with_private_key
 
 
@@ -86,6 +78,14 @@ class neuron:
         self.check_config(self.config)
         bt.logging(config=self.config, logging_dir=self.config.neuron.full_path)
         print(self.config)
+
+        try:
+            asyncio.run(check_environment(self.config.database.redis_conf_path))
+        except AssertionError as e:
+            bt.logging.warning(
+                f"Something is missing in your environment: {e}. Please check your configuration, use the README for help, and try again."
+            )
+
         bt.logging.info("neuron.__init__()")
 
         # Init device.
@@ -135,10 +135,15 @@ class neuron:
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
+        bt.logging.info("loading database")
+        redis_password = get_redis_password(self.config.database.redis_password)
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
             db=self.config.database.index,
+            socket_keepalive=True,
+            socket_connect_timeout=300,
+            password=redis_password,
         )
         self.db_semaphore = asyncio.Semaphore()
 
@@ -192,9 +197,6 @@ class neuron:
         # Init the event loop.
         self.loop = asyncio.get_event_loop()
 
-        if self.config.neuron.challenge_sample_size == 0:
-            self.config.neuron.challenge_sample_size = self.metagraph.n
-
         self.prev_step_block = get_current_block(self.subtensor)
 
         # Instantiate runners
@@ -205,51 +207,6 @@ class neuron:
         self.request_timestamps: typing.Dict = {}
 
         self.step = 0
-
-        self._top_n_validators = None
-        self.get_top_n_validators()
-
-    def get_top_n_validators(self):
-        """
-        Retrieves a list of the top N validators based on the stake value from the metagraph.
-        This list represents the top 10% of validators by stake.
-
-        Returns:
-            list: A list of UIDs (unique identifiers) for the top N validators.
-
-        Note:
-            - The method filters out the UID of the current instance (self) if it is in the top N list.
-            - This function is typically used to identify validators with the highest stake in the network,
-            which can be crucial for decision-making processes in a distributed system.
-        """
-        top_uids = torch.where(
-            self.metagraph.S > torch.quantile(self.metagraph.S, 1 - 0.1)
-        )[0].tolist()
-        if self.my_subnet_uid in top_uids:
-            top_uids.remove(self.my_subnet_uid)
-        return top_uids
-
-    @property
-    def top_n_validators(self):
-        """
-        A property that provides access to the top N validators' UIDs. It calculates the top N validators
-        if they have not been computed yet or if a checkpoint condition is met (indicated by the
-        'should_checkpoint' function).
-
-        Returns:
-            list: A list of UIDs for the top N validators.
-
-        Note:
-            - This property employs lazy loading and caching to efficiently manage the retrieval of top N validators.
-            - The cache is updated based on specific conditions, such as crossing a checkpoint in the network.
-        """
-        if self._top_n_validators == None or should_checkpoint(
-            get_current_block(self.subtensor),
-            self.prev_step_block,
-            self.config.neuron.checkpoint_block_length,
-        ):
-            self._top_n_validators = self.get_top_n_validators()
-        return self._top_n_validators
 
     async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
         """
@@ -269,7 +226,7 @@ class neuron:
             - It relies on the 'store_broadband' method for actual storage and hash generation.
             - The method logs detailed information about the storage process for monitoring and debugging.
         """
-        bt.logging.debug(f"store_user_data() {synapse.dendrite.dict()}")
+        bt.logging.debug(f"store_user_data() {synapse.axon.dict()}")
 
         decoded_data = base64.b64decode(synapse.encrypted_data)
         decoded_data = (
@@ -282,38 +239,34 @@ class neuron:
         )
 
         # Hash the original data to avoid data confusion
-        data_hash = hash_data(decoded_data)
+        content_id = generate_cid_string(decoded_data)
 
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)
 
         await self.database.set(
-            f"payload:validator:{data_hash}", validator_encryption_payload
+            f"payload:validator:{content_id}", validator_encryption_payload
         )
 
         _ = await store_broadband(
             self,
             encrypted_data=validator_encrypted_data,
             encryption_payload=synapse.encryption_payload,
-            data_hash=data_hash,
+            data_hash=content_id,
         )
-        synapse.data_hash = data_hash
+        synapse.data_hash = content_id
         return synapse
 
     async def store_blacklist(
         self, synapse: protocol.StoreUser
     ) -> typing.Tuple[bool, str]:
+        # If debug mode, whitelist everything (NOT RECOMMENDED)
+        if self.config.api.open_access:
+            return False, "Open access: WARNING all whitelisted"
+
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
             return False, f"Hotkey {synapse.dendrite.hotkey} whitelisted."
-
-        # If a validator with top n% stake, allow.
-        if synapse.dendrite.hotkey in self.top_n_validators:
-            return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
-
-        # If debug mode, whitelist everything (NOT RECOMMENDED)
-        if self.config.api.debug:
-            return False, "Debug all whitelisted"
 
         # Otherwise, reject.
         return (
@@ -385,17 +338,13 @@ class neuron:
     async def retrieve_blacklist(
         self, synapse: protocol.RetrieveUser
     ) -> typing.Tuple[bool, str]:
+        # If debug mode, whitelist everything (NOT RECOMMENDED)
+        if self.config.api.open_access:
+            return False, "Open access: WARNING all whitelisted"
+
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
             return False, f"Hotkey {synapse.dendrite.hotkey} whitelisted."
-
-        # If a validator with top n% stake, allow.
-        if synapse.dendrite.hotkey in self.top_n_validators:
-            return False, f"Hotkey {synapse.dendrite.hotkey} in top n% stake."
-
-        # If debug mode, whitelist everything (NOT RECOMMENDED)
-        if self.config.api.debug:
-            return False, "Debug all whitelisted."
 
         # Otherwise, reject.
         return (
@@ -417,20 +366,15 @@ class neuron:
 
     def run(self):
         bt.logging.info("run()")
-        if not self.wallet.hotkey.ss58_address in self.metagraph.hotkeys:
+        if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
             raise Exception(
                 f"API is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
             )
         try:
             while not self.should_exit:
-                start_epoch = time.time()
-
                 # --- Wait until next epoch.
                 current_block = self.subtensor.get_current_block()
-                while (
-                    current_block - self.prev_step_block
-                    < self.config.neuron.blocks_per_step
-                ):
+                while current_block - self.prev_step_block < 3:
                     # --- Wait for next bloc.
                     time.sleep(1)
                     current_block = self.subtensor.get_current_block()
@@ -455,7 +399,7 @@ class neuron:
             exit()
 
         # In case of unforeseen errors, the API will log the error and continue operations.
-        except Exception as e:
+        except Exception:
             bt.logging.error(traceback.format_exc())
 
         # After all we have to ensure subtensor connection is closed properly
@@ -511,9 +455,9 @@ class neuron:
         self.stop_run_thread()
 
 
-def main():
+def run_api():
     neuron().run()
 
 
 if __name__ == "__main__":
-    main()
+    run_api()

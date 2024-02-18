@@ -49,9 +49,9 @@ def verify_chained_commitment(proof, seed, commitment, verbose=True):
     Returns:
         bool: True if the commitment is verified successfully, False otherwise.
     """
-    if proof == None or seed == None or commitment == None:
+    if proof is None or seed is None or commitment is None:
         bt.logging.error(
-            f"Missing proof, seed, or commitment for chained commitment verification."
+            "Missing proof, seed, or commitment for chained commitment verification."
         )
         return False
     expected_commitment = str(hash_data(proof.encode() + seed.encode()))
@@ -74,9 +74,9 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
     Returns:
         bool: True if the challenge is verified successfully, False otherwise.
     """
-    if synapse.commitment_hash == None or synapse.commitment_proof == None:
+    if synapse.commitment_hash is None or synapse.commitment_proof is None:
         bt.logging.error(
-            f"Missing commitment hash or proof for synapse: {pformat(synapse.dendrite.dict())}."
+            f"Missing commitment hash or proof for synapse: {pformat(synapse.axon.dict())}."
         )
         return False
 
@@ -84,7 +84,7 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
         synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
     ):
         bt.logging.error(f"Initial commitment hash does not match expected result.")
-        bt.logging.error(f"synapse {pformat(synapse.dendrite.dict())}")
+        bt.logging.error(f"synapse {pformat(synapse.axon.dict())}")
         return False
 
     # TODO: Add checks and defensive programming here to handle all types
@@ -101,10 +101,10 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
         synapse.randomness,
     ):
         if verbose:
-            bt.logging.error(f"Opening commitment failed!")
+            bt.logging.error("Opening commitment failed!")
             bt.logging.error(f"commitment: {synapse.commitment[:100]}")
             bt.logging.error(f"seed      : {seed}")
-            bt.logging.error(f"synapse   : {pformat(synapse.dendrite.dict())}")
+            bt.logging.error(f"synapse   : {pformat(synapse.axon.dict())}")
         return False
 
     if not validate_merkle_proof(
@@ -113,11 +113,11 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
         synapse.merkle_root,
     ):
         if verbose:
-            bt.logging.error(f"Merkle proof validation failed!")
+            bt.logging.error("Merkle proof validation failed!")
             bt.logging.error(f"commitment  : {synapse.commitment[:100]}")
             bt.logging.error(f"merkle root : {synapse.merkle_root}")
             bt.logging.error(f"merkle proof: {pformat(synapse.merkle_proof)[-1]}")
-            bt.logging.error(f"synapse     : {pformat(synapse.dendrite.dict())}")
+            bt.logging.error(f"synapse     : {pformat(synapse.axon.dict())}")
         return False
 
     return True
@@ -146,10 +146,10 @@ def verify_store_with_seed(synapse, b64_encrypted_data, seed, verbose=False):
     # e.g. send synapse.commitment_hash as an int for consistency
     if synapse.commitment_hash != str(reconstructed_hash):
         if verbose:
-            bt.logging.error(f"Initial commitment hash != hash(data + seed)")
+            bt.logging.error("Initial commitment hash != hash(data + seed)")
             bt.logging.error(f"commitment hash   : {synapse.commitment_hash}")
             bt.logging.error(f"reconstructed hash: {reconstructed_hash}")
-            bt.logging.error(f"synapse           : {synapse.dendrite.dict()}")
+            bt.logging.error(f"synapse           : {synapse.axon.dict()}")
         return False
 
     committer = ECCommitment(
@@ -164,7 +164,7 @@ def verify_store_with_seed(synapse, b64_encrypted_data, seed, verbose=False):
         synapse.randomness,
     ):
         bt.logging.error(f"Opening commitment failed")
-        bt.logging.error(f"synapse: {synapse.dendrite.dict()}")
+        bt.logging.error(f"synapse: {synapse.axon.dict()}")
         return False
 
     return True
@@ -183,9 +183,9 @@ def verify_retrieve_with_seed(synapse, seed, verbose=False):
     if not verify_chained_commitment(
         synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
     ):
-        bt.logging.error(f"Initial commitment hash does not match expected result.")
+        bt.logging.error("Initial commitment hash does not match expected result.")
         if verbose:
-            bt.logging.error(f"synapse {synapse.dendrite.dict()}")
+            bt.logging.error(f"synapse {synapse.axon.dict()}")
             bt.logging.error(f"commitment_proof: {synapse.commitment_proof}")
             bt.logging.error(f"seed            : {seed}")
             bt.logging.error(f"commitment_hash : {synapse.commitment_hash}")

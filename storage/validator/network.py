@@ -36,7 +36,7 @@ async def ping_uids(self, uids):
             axons,
             bt.Synapse(),
             deserialize=False,
-            timeout=self.config.api.ping_timeout,
+            timeout=5,
         )
         successful_uids = [
             uid
@@ -134,6 +134,8 @@ async def reroll_distribution(self, distribution, failed_uids):
     new_uids = await get_available_query_miners(
         self, k=len(failed_uids), exclude=failed_uids
     )
+    # Ping miners to ensure they are available
+    new_uids, _ = await ping_uids(self, new_uids)
     distribution["uids"] = new_uids
     return distribution
 
@@ -145,9 +147,7 @@ async def ping_and_retry_uids(
     Fetch available uids to minimize waiting for timeouts if they're going to fail anyways...
     """
     # Select initial subset of miners to query
-    uids = await get_available_query_miners(
-        self, k=k or self.config.neuron.store_redundancy, exclude=exclude_uids
-    )
+    uids = await get_available_query_miners(self, k=k or 4, exclude=exclude_uids)
     bt.logging.debug("initial ping_and_retry() uids:", uids)
 
     retries = 0
@@ -188,19 +188,19 @@ async def monitor(self):
     list of UIDs to ping.
     """
     # Ping current subset of UIDs
-    query_uids = await get_available_query_miners(
-        self, k=self.config.neuron.monitor_sample_size
-    )
+    query_uids = await get_available_query_miners(self, k=40)
     bt.logging.debug(f"monitor() uids: {query_uids}")
     _, failed_uids = await ping_uids(self, query_uids)
+    bt.logging.debug(f"monitor() failed uids: {failed_uids}")
 
     down_uids = []
     for uid in failed_uids:
         self.monitor_lookup[uid] += 1
-        if self.monitor_lookup[uid] > self.config.neuron.max_failed_pings:
+        if self.monitor_lookup[uid] > 5:
             self.monitor_lookup[uid] = 0
             down_uids.append(uid)
     bt.logging.debug(f"monitor() down uids: {down_uids}")
+    bt.logging.trace(f"monitor() monitor_lookup: {self.monitor_lookup}")
 
     if down_uids:
         # Negatively reward
@@ -220,7 +220,7 @@ async def monitor(self):
             0, torch.tensor(down_uids).to(self.device), rewards
         ).to(self.device)
 
-        alpha: float = self.config.neuron.moving_average_alpha
+        alpha: float = 0.05
         self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
             1 - alpha
         ) * self.moving_averaged_scores.to(self.device)

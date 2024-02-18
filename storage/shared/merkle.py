@@ -106,7 +106,7 @@ class MerkleTree(object):
     def _to_hex(self, x):
         try:  # python3
             return x.hex()
-        except:  # python2
+        except:  # python2 # TODO: do not use bare except
             return binascii.hexlify(x)
 
     def reset_tree(self):
@@ -376,7 +376,7 @@ def validate_merkle_proof(proof, target_hash, merkle_root, hash_type="sha3_256")
                 # the sibling is a left node
                 sibling = bytearray.fromhex(p["left"])
                 proof_hash = hash_func(sibling + proof_hash).digest()
-            except:
+            except:  # TODO: do not use bare except
                 # the sibling is a right node
                 sibling = bytearray.fromhex(p["right"])
                 proof_hash = hash_func(proof_hash + sibling).digest()

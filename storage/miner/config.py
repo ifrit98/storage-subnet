@@ -45,6 +45,9 @@ def check_config(cls, config: "bt.Config"):
 
     config.miner.log_path = os.path.expanduser(log_path)
     config.miner.full_path = os.path.expanduser(full_path)
+    config.miner.request_log_path = os.path.join(
+        full_path, config.miner.request_log_name
+    )
 
     if not os.path.exists(config.miner.full_path):
         os.makedirs(config.miner.full_path, exist_ok=True)
@@ -55,7 +58,7 @@ def check_config(cls, config: "bt.Config"):
         # Add custom event logger for the events.
         logger.level("EVENTS", no=38, icon="📝")
         logger.add(
-            config.miner.full_path + "/" + "EVENTS.log",
+            config.miner.log_path + "/" + "EVENTS.log",
             rotation=config.miner.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -66,7 +69,7 @@ def check_config(cls, config: "bt.Config"):
         )
 
         logger.add(
-            config.miner.full_path + "/" + "INFO.log",
+            config.miner.log_path + "/" + "INFO.log",
             rotation=config.miner.events_retention_size,
             serialize=True,
             enqueue=True,
@@ -76,27 +79,29 @@ def check_config(cls, config: "bt.Config"):
             format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
         )
 
-        logger.add(
-            config.miner.full_path + "/" + "DEBUG.log",
-            rotation=config.miner.events_retention_size,
-            serialize=True,
-            enqueue=True,
-            backtrace=False,
-            diagnose=False,
-            level="DEBUG",
-            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
-        )
+        if config.logging.debug:
+            logger.add(
+                config.miner.log_path + "/" + "DEBUG.log",
+                rotation=config.miner.events_retention_size,
+                serialize=True,
+                enqueue=True,
+                backtrace=False,
+                diagnose=False,
+                level="DEBUG",
+                format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+            )
 
-        logger.add(
-            config.miner.full_path + "/" + "TRACE.log",
-            rotation=config.miner.events_retention_size,
-            serialize=True,
-            enqueue=True,
-            backtrace=False,
-            diagnose=False,
-            level="TRACE",
-            format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
-        )
+        if config.logging.trace:
+            logger.add(
+                config.miner.log_path + "/" + "TRACE.log",
+                rotation=config.miner.events_retention_size,
+                serialize=True,
+                enqueue=True,
+                backtrace=False,
+                diagnose=False,
+                level="TRACE",
+                format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+            )
 
 
 def add_args(cls, parser):
@@ -115,6 +120,24 @@ def add_args(cls, parser):
         default="cuda" if torch.cuda.is_available() else "cpu",
     )
     parser.add_argument("--miner.verbose", default=False, action="store_true")
+    parser.add_argument(
+        "--miner.request_log_name",
+        type=str,
+        help="Name of the request log file",
+        default="requests_log.json",
+    )
+    parser.add_argument(
+        "--miner.max_requests_per_window",
+        type=int,
+        help="Maximum number of requests per time window.",
+        default=50,
+    )
+    parser.add_argument(
+        "--miner.rate_limit_window",
+        type=int,
+        help="Time window in blocks for rate limiting.",
+        default=25,
+    )
 
     parser.add_argument(
         "--database.host", default="localhost", help="The host of the redis database."
@@ -135,6 +158,18 @@ def add_args(cls, parser):
         "--database.directory",
         default="~/.data",
         help="The directory to store data in.",
+    )
+    parser.add_argument(
+        "--database.redis_password",
+        type=str,
+        default=None,
+        help="The redis password.",
+    )
+    parser.add_argument(
+        "--database.redis_conf_path",
+        type=str,
+        help="Redis configuration path.",
+        default="/etc/redis/redis.conf",
     )
 
     # Run config.
@@ -159,7 +194,7 @@ def add_args(cls, parser):
 
     # Blacklist.
     parser.add_argument(
-        "--miner.blacklist.blacklist",
+        "--blacklist.blacklist_hotkeys",
         type=str,
         required=False,
         nargs="*",
@@ -167,7 +202,7 @@ def add_args(cls, parser):
         default=[],
     )
     parser.add_argument(
-        "--miner.blacklist.whitelist",
+        "--blacklist.whitelist_hotkeys",
         type=str,
         required=False,
         nargs="*",
@@ -175,25 +210,25 @@ def add_args(cls, parser):
         default=[],
     )
     parser.add_argument(
-        "--miner.blacklist.force_validator_permit",
+        "--blacklist.force_validator_permit",
         action="store_true",
         help="Only allow requests from validators",
         default=False,
     )
     parser.add_argument(
-        "--miner.blacklist.allow_non_registered",
+        "--blacklist.allow_non_registered",
         action="store_true",
         help="If True, the miner will allow non-registered hotkeys to mine.",
         default=False,
     )
     parser.add_argument(
-        "--miner.blacklist.minimum_stake_requirement",
+        "--blacklist.minimum_stake_requirement",
         type=float,
         help="Minimum stake requirement",
         default=0.0,
     )
     parser.add_argument(
-        "--miner.blacklist.min_request_period",
+        "--blacklist.min_request_period",
         type=int,
         help="Time period (in minute) to serve a maximum of 50 requests for each hotkey",
         default=5,

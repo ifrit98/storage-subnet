@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import os
 import asyncio
 import argparse
 import bittensor as bt
@@ -16,7 +15,7 @@ async def main(args):
         metagraph.sync(subtensor=subtensor)
         my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
 
-        weights_were_set = set_weights(
+        weights_were_set, message = set_weights(
             subtensor=subtensor,
             netuid=args.netuid,
             uid=my_subnet_uid,
@@ -31,7 +30,7 @@ async def main(args):
     finally:
         if "subtensor" in locals():
             subtensor.close()
-            bittensor.logging.debug("closing subtensor connection")
+            bt.logging.debug("closing subtensor connection")
 
 
 if __name__ == "__main__":

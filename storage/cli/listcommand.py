@@ -17,16 +17,11 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import sys
 import json
 import argparse
-import storage
 import bittensor
-from rich import print
 from rich.console import Console
-from rich.tree import Tree
-from typing import List, Optional
-from rich.align import Align
+from typing import List
 from rich.table import Table
 from tqdm import tqdm
 
@@ -136,6 +131,7 @@ class ListLocalHashes:
         r"""Lists hashes available to fetch data from the Bittensor network."""
 
         try:
+            # TODO: review if this is needed
             wallets = next(os.walk(os.path.expanduser(cli.config.wallet.path)))[1]
         except StopIteration:
             # No wallet files found.

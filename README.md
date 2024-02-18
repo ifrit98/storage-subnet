@@ -8,7 +8,7 @@
 
 FileTAO (Bittensor Subnet 21) implements a novel, multi-layered zero-knowledge interactive proof-of-spacetime algorithm by cleverly using Pedersen commitments, random challenges leveraging elliptic curve cryptography, sequential seed-based chained hash verification, and merkle proofs to achieve an efficient, robust, secure, and highly available decetralized storage system on the Bittensor network. The system validates on encrypted user data, such that miners are unaware of what data they are storing, and only end-users may encrypt/decrypt the data they provide with their bittensor wallet coldkey.
 
-We consider this system to be an important stepping stone so that bittensor can fulfill it's mission of democratizing intelligence, and a decentralized AWS platform is a key brick in this wall. 
+We consider this system to be an important stepping stone so that bittensor can fulfill its mission of democratizing intelligence, and a decentralized AWS platform is a key brick in this wall. 
 
 **NOTICE**: Using this software, you **must** agree to the Terms and Agreements provided in the [terms and conditions](TERMS.md) document. By downloading and running this software, you implicitly agree to these terms and conditions.
 
@@ -22,7 +22,7 @@ Currently supporting `python>=3.9,<3.11`.
 1. [Installation](#installation)
    - [Install Redis](#install-redis)
    - [Install PM2](#install-pm2)
-1. [Network Stats](#network-stats)
+1. [Storage API](#storage-api)
 1. [Storage CLI Interface](#storage-cli-interface)
    - [Overview](#overview)
    - [Prerequisites](#prerequisites)
@@ -33,6 +33,7 @@ Currently supporting `python>=3.9,<3.11`.
    - [Examples](#examples)
    - [General Options](#general-options)
    - [Notes](#notes)
+1. [Miner Stats](#miner-stats)
 1. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
    - [Role of a Miner (Prover)](#role-of-a-miner-prover)
    - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
@@ -55,15 +56,8 @@ Currently supporting `python>=3.9,<3.11`.
    - [Running the API](#running-the-api)
    - [(Optional) Setup WandB](#setup-wandb)
 1. [Local Subtensor](#local-subtensor)
-
-# Storage CLI Interface
-
-## Overview
-The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
-
-
-## Prerequisites
-Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+1. [Database Migration](#database-schema-migration)
+1. [Disable RDB](#disable-rdb)
 
 
 ## Installation
@@ -114,35 +108,99 @@ Nov 16 22:35:42 user systemd[1]: Starting Advanced key-value store...
 Nov 16 22:35:42 user systemd[1]: Started Advanced key-value store.
 ```
 
-#### Redis troubleshooting
-If you have problems with connecting to redis or it is not active for some reason, try:
+### Secure Redis Configuration
 
-(1) Look for existing processes on the default redis port (6379)
-```
-sudo lsof -i:6379
-```
+In order to securely run a node, whether a miner or validator, you must run ensure your redis instance is secure from the outside internet and is password-protected.
 
-If anything displays, like in the example below:
+The following steps are **mandatory** for secure communication on the network:
+
+1. Closing the default redis port
+1. Password protecting redis
+1. Enabling persistence
+
+#### Close external traffic to Redis 
+
+> Note: **EXPOSING THE REDIS PORT IS A MAJOR SECURITY RISK**
+
+This Bash script is designed to configure UFW (Uncomplicated Firewall) to manage access to default Redis port 6379. The script's primary function is to block all external traffic to port 6379, typically used by Redis, while allowing local processes to still access this port.
+
+##### Usage
+To run the script, use the following command in the terminal:
+```bash
+sudo ./scripts/redis/create_redis_firewall.sh
+```
+Running this script will:
+- Check if UFW is installed and active. If UFW is not active, the script will attempt to enable it.
+- Set UFW rules to deny all external access to port 6379.
+- Set UFW rules to allow all local access to port 6379.
+- Apply the changes by reloading UFW.
+
+##### Important Considerations
+- **Test Before Production**: Always test the script in a controlled environment before deploying it in a production setting.
+- **Existing Rules**: If there are existing rules for port 6379, review the script to ensure compatibility.
+- **Firewall Management**: This script is specifically for systems using UFW. If another firewall management tool is in use, this script will not be compatible.
+
+#### Automated Redis Password Configuration
+To enhance security, our system now automatically generates a strong password for Redis. This is **REQUIRED**. This is handled by the `set_redis_password.sh` script. Follow these steps to set up Redis with an automated password:
+
+1. **Run the Redis Start Script**: 
+    ```bash
+    bash scripts/redis/set_redis_password.sh
+    ```
+    This script generates a secure password for Redis, attempts to shut down any running Redis instances, and then starts Redis with the new password.
+
+2. **Set `REDIS_PASSWORD` Environment Variable**: 
+    The script will export the `REDIS_PASSWORD` environment variable. Ensure this variable is set in your environment where the Redis client is running.
+
+   To export your redis password generated in `set_redis_password.sh` as an environment variable at any time, run:
+   ```bash
+   REDIS_CONF="/etc/redis/redis.conf"
+   export REDIS_PASSWORD=$(sudo grep -Po '^requirepass \K.*' $REDIS_CONF)
+   ```
+
+3. **Test password successfully enabled**
+    Use the provided script `test_redis_require_pass.sh`
+    ```bash
+    bash ./scripts/redis/test_redis_require_pass.sh
+    ```
+
+#### Enable persistence
+If persistence is not enabled in your redis instance, it is **CRUCIAL** that this feature is used. Provided script `./scripts/redis/enable_persistence.sh` does exactly this.
 
 ```bash
-COMMAND    PID   USER   FD   TYPE    DEVICE SIZE/OFF NODE NAME
-python3 961206   user   33u  IPv4 455676435      0t0  TCP 123.456.111.22:58162->111.222.333.44.bc.googleusercontent.com:6379 (ESTABLISHED)
-
+bash ./scripts/redis/enable_persistence.sh
 ```
 
-Look for the process ID under `PID` and kill it
-
+You can verify that this was done correctly by running another provided script to test this feature was enabled.
 ```bash
-kill -9 <PID>
-
-#e.g.
-kill -9 961206
+bash ./scripts/redis/test_persistence.sh
 ```
 
-(2) Restarting the service
-```bash
-systemctl restart redis
-```
+> Note these scripts and operations REQUIRE sudo
+
+
+#### Redis Troubleshooting
+If you encounter issues with Redis, follow these steps:
+
+1. **Check for Existing Redis Processes**: 
+    Use `lsof` to look for processes using the default Redis port (6379).
+    ```bash
+    sudo lsof -i:6379
+    ```
+    If any processes are using this port, they will be listed.
+
+2. **Terminate Unwanted Redis Processes**: 
+    Find the PID under the `PID` column and terminate it using `kill`.
+    ```bash
+    kill -9 <PID>
+    # Example: kill -9 961206
+    ```
+
+3. **Restart the Redis Service**: 
+    If needed, restart the Redis service.
+    ```bash
+    systemctl restart redis
+    ```
 
 ### Install PM2
 This will allow you to use the process manager `pm2` for easily setting up your miner or validator.
@@ -152,10 +210,132 @@ Install nodejs and npm
 sudo apt install nodejs npm
 ```
 
-Once this compeltes, install pm2 globally
+Once this completes, install pm2 globally
 ```bash
 sudo npm install pm2 -g
 ```
+
+## Storage API
+In addition to the command-line interface, FileTao can be accessed via the bittensor subnets python API.
+
+The subnets API requires two abstract functions to be implemented: `prepare_synapse`, and `process_responses`. This allows for all subnets to be queried through exposed axons, typically on the validator side.
+
+To instantiate the API for any given request type (`store` or `retrieve`), you only need a bittensor `wallet`.
+```python
+# Import the API handler you wish to use
+from storage import StoreUserAPI
+
+# Load the wallet desired
+wallet = bt.wallet(name="sn21", hotkey="query")
+
+# Instantiate the API handler object
+store = StoreUserAPI(wallet)
+```
+
+### API Storing Data
+Here is a complete example to store data on `FileTao` programmatically.
+
+```python
+import bittensor as bt
+from storage import StoreUserAPI
+
+# Load the handler given desired wallet for querying
+wallet = bt.wallet()
+store = StoreUserAPI(wallet)
+
+# Fetch the subnet 21 validator set via metagraph
+metagraph = bt.metagraph(netuid=21)
+
+# Store data on the decentralized network!
+cid = await store(
+   metagraph=metagraph,
+   # add any arguments for the `StoreUser` synapse
+   data=b"some data", # Any data (must be bytes) to store
+   encrypt=True, # encrpyt the data using the bittensor wallet provided
+   ttl=60 * 60 * 24 * 30,
+   encoding="utf-8",
+   uid=None, # query a specific validator UID if desired
+)
+
+print(cid)
+> QmTPqcLhVnCtjoYuCZwPzfXcFrUviiPComTepHfEEaGf7g
+```
+
+> NOTE: Make sure you store the CID of your data, otherwise you will not be able to retrieve it!
+
+### API Retrieving Data 
+```python
+from storage import RetrieveUserAPI
+
+# Fetch the content-identifier for your data to retrieve
+cid = "QmTPqcLhVnCtjoYuCZwPzfXcFrUviiPComTepHfEEaGf7g"
+
+# Load the handler given desired wallet for querying
+wallet = bt.wallet()
+
+# Fetch the subnet 21 validator set via metagraph
+metagraph = bt.metagraph(netuid=21)
+
+# Instantiate the API with wallet
+retrieve_handler = RetrieveUserAPI(wallet)
+
+# Get the data back from the decentralized network!
+data = await retrieve_handler(metagraph=metagraph, cid=cid)
+print(data)
+> b"\x12 K\x1b\x80\x9cr\xce\x0e\xf8\xd8\x15\x`"...
+```
+
+## Storage CLI Interface
+
+The Storage CLI provides a user-friendly command-line interface for storing and retrieving data on the Bittensor network. It simplifies the process of data encryption, storage, and retrieval, ensuring security and ease of use. This tool is ideal for users who need to manage data securely on a decentralized network.
+
+The FileTao storage cli uses IPFS content identifiers (`CIDs`) to identify storage on the network. This has several advantages over using simple hashes of the data, as a way of providing a more robust and verifiable way of identifying and retrieving data. 
+
+Unlike simple hashes, which only represent the content, CIDs in IPFS (InterPlanetary File System) are more comprehensive. They contain not only a hash of the content but also information about the hashing algorithm and encoding used. This makes CIDs self-describing and ensures that the data retrieved is exactly what was stored, without any alterations.
+
+The benefits of using CIDs in the FileTao Storage CLI on Bittensor include:
+
+1. Content Addressing: CIDs allow for content-based addressing rather than location-based addressing. This means that the content itself, rather than its location on a specific server, is used to reference and access the data. This approach is inherently more secure and decentralized.
+1. Version Control and Deduplication: Since CIDs change with even the slightest alteration in the content, they naturally support version control. Moreover, the use of CIDs facilitates deduplication, as the same content stored multiple times will have the same CID, saving space and reducing redundancy on the network.
+1. Network Efficiency: Using CIDs improves network efficiency in data retrieval. Since the CID contains information about the content, it allows the network to fetch data from the nearest node that stores it, rather than relying on a central server, thus speeding up the data retrieval process.
+1. Future-Proofing: The CID system is designed to be future-proof. As new hashing algorithms and encodings emerge, CIDs can adapt to include this new information without disrupting the existing system. This ensures long-term viability of the storage system on the Bittensor network.
+1. Immutable and Tamper-Proof: The use of CIDs ensures immutability and tamper-proofing of data. Since the CID is a unique identifier for a specific version of the content, any changes in the content result in a different CID. This makes it easy to verify the integrity of the data and detect any unauthorized modifications.
+
+CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate both CIDv0 and CIDv1 by calling `make_cid(data: Union[str,bytes], version: int)`
+
+```python
+from storage.validator.cid import make_cid
+
+# Generate CID objects
+cid0 = make_cid("abc", 0)
+cid0
+> CIDv0(version=0, codec=dag-pb, multihash=b'QmQpeUrxtQE5N2SVog1Z..')
+
+cid1 = make_cid("abc", 1)
+cid1
+> CIDv1(version=1, codec=sha2-256, multihash=b'bafkreif2pall7dybz7v..')
+
+# Get the multihash out
+multihash = make_cid("abc", 0).multihash
+multihash
+> b'QmQpeUrxtQE5N2SVog1ZCxd7c7RN4fBNQu5aLwkk5RY9ER'
+
+from storage.validator.cid import decode_cid
+# Decode a CIDv1 object to get the original data hash, produced by `sha256` (CIDv1)
+decoded_hash = decode_cid(cid1)
+decoded_hash
+> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
+
+expected_hash = hashlib.sha256("abc".encode()).digest()
+expected_hash
+> b'\xbax\x16\xbf\x8f\x01\xcf\xeaAA@\xde]\xae"#\xb0\x03a\xa3\x96\x17z\x9c\xb4\x10\xffa\xf2\x00\x15\xad'
+
+decoded_hash == expected_hash
+> True
+```
+
+### Prerequisites
+Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
 
 
 ## Commands
@@ -168,7 +348,7 @@ This command encrypts and stores data on the Bittensor network.
 
 #### Usage
 ```bash
-ftcli store put --filepath <path-to-data> [options]
+filetao store put --filepath <path-to-data> [options]
 ```
 
 #### Options
@@ -187,7 +367,7 @@ This command retrieves previously stored data from the Bittensor network.
 
 #### Usage
 ```bash
-ftcli retrieve get --data_hash <hash> [options]
+filetao retrieve get --data_hash <hash> [options]
 ```
 
 #### Options
@@ -203,7 +383,7 @@ Lists all data hashes stored on the network associated with the specified coldke
 
 #### Usage
 ```bash
-ftcli retrieve list [options]
+filetao retrieve list [options]
 ```
 
 #### Options
@@ -214,39 +394,36 @@ ftcli retrieve list [options]
 
 ### Storing Data
 ```bash
-ftcli store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
+filetao store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
 ### Retrieving Data
 ```bash
-ftcli retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
+filetao retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
 ### Listing Data
 ```bash
-ftcli retrieve list --wallet.name mywallet
+filetao retrieve list --wallet.name mywallet
 ```
 
 ![list](assets/list.png)
 
 
-### Miner statistics
+## Miner statistics
 
 If you are running a validator and have a locally running instance of Redis, you may use this command to view the miner statistics gathered. This command will display a list of all hotkeys and their associated statistics, such as `total successes`, `attempts` vs `successes` for each category, `tier`, `current storage`, and `total storage limit`.
 
 ```bash
-ftcli miner stats --index 0
+filetao miner stats --index 0
 ```
 ![stats](assets/miner_stats.png)
 
-#### Options
+### Options
 - `--index <id>`: (Optional) Integer index of the Redis database (default: 0)
 
 
-## General Options
-- `--help`: Displays help information about CLI commands and options.
-
-## Notes
+### Notes
 - Ensure your wallet is configured and accessible.
 - File paths should be absolute or relative to your current directory.
 - Data hashes are unique identifiers for your stored data on the Bittensor network.
@@ -261,7 +438,7 @@ A DSN is a network architecture where data storage and management are distribute
 A miner in this context refers to a network participant responsible for storing and managing data. They prove the integrity and availability of the data they store through cryptographic methods, ensuring compliance with network protocols.
 
 ### Role of a Validator (Verifier)
-A validator, on the other hand is a consumer of the proofs generated by the miner. They are responsible for maintaining an index of where data is stored and associated metadata for managing the system and maintainng data integrity and security.
+A validator, on the other hand is a consumer of the proofs generated by the miner. They are responsible for maintaining an index of where data is stored and associated metadata for managing the system and maintaining data integrity and security.
 
 ## Main Features of Subnet 21
 
@@ -294,7 +471,7 @@ This ZK Proof of Space-Time system represents a significant advancement in decen
 ## Zero Knowledge Proof-of-Spacetime
 
 The algorithm comprises three phases:
-- **Storage**: Miners store data locally and prove to the verifier (validator) that they have commited to the entire data block
+- **Storage**: Miners store data locally and prove to the verifier (validator) that they have committed to the entire data block
 - **Challenge**: Random challenges are issued by validators without advance warning, and miners must recommit to the entire data in order respond with the correct merkle proof.
 - **Retrieval**: Upon retrieving data, miners are challenged to generate an efficient proof based on a random seed value that is sent back with the original data for verification.
 
@@ -325,7 +502,7 @@ Upon receipt, validators verify the commitment and the initial hash chain, stori
 ### Challenge Phase
 In the Challenge phase, the system verifies the possession of the data without actually retrieving the data itself.
 
-Validators request the miner prove that it currently stores the data claimed by issuing an index-based challenge, where the miner must apply Pedersen committments to the entire data table given a random seed and a chunk size. 
+Validators request the miner prove that it currently stores the data claimed by issuing an index-based challenge, where the miner must apply Pedersen commitments to the entire data table given a random seed and a chunk size. 
 
 Data is chunked according to the chunk size, and each slice is committed to using a Pederson commitment with the current random seed. Each commitment is appended to a merkle tree, and a subsequent proof is generated to obtain the path along the merkle tree such that a validator can verify the random seed was indeed used to commit to each data chunk at challenge time, thus proving the miner has the data at time of the challenge. 
 
@@ -389,7 +566,7 @@ In each phase, cryptographic primitives like hashing, commitment schemes (e.g., 
 
 In FileTAO's decentralized storage system, optimal behavior is crucial for the overall health and efficiency of the network. Miners play a vital role in maintaining this ecosystem, and their actions directly impact their rewards and standing within the subnet. We have implemented a tier-based reward system to encourage proper behavior, successful challenge completions, and consistent performance.
 
-Failing to pass either challenge or retrieval verifications incur negative rewards. This is doubly destructive, as rolling statistics are continuously logged to periodically compute which tier a given miner hotkey belongs to. When a miner achieves the threshold for the next tier, the rewards that miner recieves proportionally increase. Conversely, when a miner drops below the threshold of the previous tier, that miner's rewards are slashed such that they recieve rewards proportionally to the immediately lower tier.
+Failing to pass either challenge or retrieval verifications incur negative rewards. This is doubly destructive, as rolling statistics are continuously logged to periodically compute which tier a given miner hotkey belongs to. When a miner achieves the threshold for the next tier, the rewards that miner receives proportionally increase. Conversely, when a miner drops below the threshold of the previous tier, that miner's rewards are slashed such that they receive rewards proportionally to the immediately lower tier.
 
 **Why Optimal Behavior Matters:**
 1. **Reliability:** Miners who consistently store, retrieve, and pass challenges with high success rates ensure the reliability and integrity of the network.
@@ -463,13 +640,13 @@ Importance of Tier System:
 #### Maintaining and Advancing Tiers:
 - To advance to a higher tier, miners must consistently achieve the required success rates in their operations.
 - Periodic evaluations are conducted to ensure miners maintain the necessary performance standards to stay in their respective tiers.
-- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 sucessful requests, whether they are challenge requests, store requests, or retrie requests and must maintain a 95% success rate in all categories. 
+- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 successful requests, whether they are challenge requests, store requests, or retry requests and must maintain a 95% success rate in all categories. 
 - Depending on how often a miner is queried, how many validators are operating at one given time, and primarily the performance of the miner, this can take several hours to several days. Assuming full 64 validator slots are occupied, this should take a matter of hours.
 
 Here is a distribution of UIDs queried over 1000 blocks based on block hash:
 ![uid-dist](assets/uid_dist.png)
 
-Assuming perfect performance, that out of ~200 miner UIDs, each of which is queried rougly 34 times every 1000 rounds, namely a 3.4% chance every query round, one can expect to reach the next tier within 
+Assuming perfect performance, that out of ~200 miner UIDs, each of which is queried roughly 34 times every 1000 rounds, namely a 3.4% chance every query round, one can expect to reach the next tier within 
 
 ```bash
 hours = total_successes / prob_of_query_per_round * time_per_round / 3600
@@ -562,6 +739,8 @@ FileTao is made up of both miners and validators, both of which are responsible 
 ### Running a miner
 You can run a miner in your base environment like so:
 
+> NOTE: When registering a miner, it is *highly* recommended to not reuse hotkeys. Best practice is to always use a new hotkey when registering on SN21.
+
 ```bash
 python neurons/miner.py --wallet.name <NAME> --wallet.hotkey <HOTKEY> --logging.debug
 ```
@@ -595,12 +774,12 @@ pm2 start /home/user/storage-subnet/neurons/miner.py --interpreter /home/user/mi
 - `--miner.set_weights_wait_for_inclusion`: Wether to wait for the set_weights extrinsic to enter a block. Default: False.
 - `--miner.set_weights_wait_for_finalization`: Wether to wait for the set_weights extrinsic to be finalized on the chain. Default: False.
 
-- `--miner.blacklist.blacklist`: List of hotkeys to blacklist. Default: [].
-- `--miner.blacklist.whitelist`: List of hotkeys to whitelist. Default: [].
-- `--miner.blacklist.force_validator_permit`: If True, only allows requests from validators. Default: False.
-- `--miner.blacklist.allow_non_registered`: If True, allows non-registered hotkeys to mine. Default: False.
-- `--miner.blacklist.minimum_stake_requirement`: Minimum stake requirement for participating hotkeys. Default: 0.0.
-- `--miner.blacklist.min_request_period`: Time period (in minutes) to serve a maximum number of requests per hotkey. Default: 5.
+- `--blacklist.blacklist_hotkeys`: List of hotkeys to blacklist. Default: [].
+- `--blacklist.whitelist_hotkeys`: List of hotkeys to whitelist. Default: [].
+- `--blacklist.force_validator_permit`: If True, only allows requests from validators. Default: False.
+- `--blacklist.allow_non_registered`: If True, allows non-registered hotkeys to mine. Default: False.
+- `--blacklist.minimum_stake_requirement`: Minimum stake requirement for participating hotkeys. Default: 0.0.
+- `--blacklist.min_request_period`: Time period (in minutes) to serve a maximum number of requests per hotkey. Default: 5.
 
 - `--miner.priority.default`: Default priority for non-registered requests. Default: 0.0.
 - `--miner.priority.time_stake_multiplicate`: Time (in minutes) to double the importance of stake in the priority queue. Default: 10.
@@ -629,6 +808,24 @@ If for whatever reason you need to migrate the data in your hard drive configure
 When should you run the migration script?:
 - if you want to specify a different --database.directory
 - if your data has moved but your redis index has not reflected this change
+
+**NOTE:** Please ensure you manually save a backup of the redis database.
+
+Run:
+```
+# Enter the redis cli
+redis-cli -a $REDIS_PASSWORD
+
+# Run the save command manually and exit the redis session
+SAVE
+exit
+
+# Make a backup of the dump
+sudo cp /var/lib/redis/dump.rdb /var/lib/redis/dump.bak.rdb
+```
+
+It is wise to do this **before** running migration in case any unexpected issues arise.
+
 
 ```bash
 bash scripts/migrate_database_directory.sh <OLD_PATH> <NEW_PATH> <DATABASE_INDEX>
@@ -676,24 +873,12 @@ pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/use
 - `--neuron.curve`: The elliptic curve used for cryptography. Only "P-256" is currently available.
 - `--neuron.maxsize`: The maximum size of random data to store. If `None`, a lognormal random Gaussian distribution is used (default: `None`).
 - `--neuron.min_chunk_size`: The minimum chunk size of random data for challenges. Default: 256.
-- `--neuron.override_chunk_size`: Overrides the random chunk size for splitting data into challenges. Default: 0 (no override).
-- `--neuron.store_redundancy`: The number of miners to store each piece of data on. Default: 3.
-- `--neuron.store_step_length`: Steps before a random store epoch is complete. Default: 5.
-- `--neuron.challenge_sample_size`: The number of miners to challenge at a time, targeting ~90 miners per epoch. Default: 10.
-- `--neuron.retrieve_step_length`: Steps before a random retrieve epoch is complete. Default: 5.
-- `--neuron.tier_update_step_length`: Steps before a tier update epoch is complete. Default: 100.
-- `--neuron.set_weights_epoch_length`: Blocks until the miner sets weights on chain. Default: 200.
 - `--neuron.disable_log_rewards`: If set, disables all reward logging to suppress function values from being logged (e.g., to WandB). Default: False.
 - `--neuron.chunk_factor`: The factor to divide data into chunks. Default: 4.
 - `--neuron.num_concurrent_forwards`: The number of concurrent forward requests running at any time. Default: 1.
 - `--neuron.disable_set_weights`: If set, disables setting weights on the chain. Default: False.
-- `--neuron.moving_average_alpha`: The alpha parameter for the moving average, indicating new observation weight. Default: 0.05.
 - `--neuron.semaphore_size`: The limit on concurrent asynchronous calls. Default: 256.
-- `--neuron.store_timeout`: Timeout for store data queries. Default: 60 seconds.
-- `--neuron.challenge_timeout`: Timeout for challenge data queries. Default: 30 seconds.
-- `--neuron.retrieve_timeout`: Timeout for retrieve data queries. Default: 60 seconds.
 - `--neuron.checkpoint_block_length`: Blocks before a checkpoint is saved. Default: 100.
-- `--neuron.blocks_per_step`: Blocks before a step is taken in the mining process. Default: 3.
 - `--neuron.events_retention_size`: File size for retaining event logs (e.g., "2 GB"). Default: "2 GB".
 - `--neuron.dont_save_events`: If set, event logs will not be saved to a file. Default: False.
 - `--neuron.vpermit_tao_limit`: The maximum TAO allowed for querying a validator with a vpermit. Default: 500.
@@ -796,7 +981,7 @@ See [`min_compute.yml`](min_compute.yml) for complete details on minimum and rec
 
 Availability is *critical* in storage in general and SN21, specifically. The reward mechanism punishes failed challenges and retrievals, even if the reason for that failure is unavailability, not only explicitly incorrect proofs or intentionally malicious behavior. It is possible to experience intermittent connectivity with the free provided endpoints for subtensor connections.
 
-It is *highly* recommended that all miners and validators run their own local subtensor node. This will resolve the many issues commonly found with intermittent connectivity across all subents.
+It is *highly* recommended that all miners and validators run their own local subtensor node. This will resolve the many issues commonly found with intermittent connectivity across all subnets.
 
 To start your miner/validator using your local node, include the flag `--subtensor.network local` into your startup parameters.
 
@@ -824,7 +1009,7 @@ sudo docker compose up -d
 Provided are two scripts to build subtensor, and then to run it inside a pm2 process as a convenience. If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
 ```bash
 # Installs dependencies and builds the subtensor binary
-./scripts/build_subtensor_linux.sh
+./scripts/subtensor/build_subtensor_linux.sh
 
 # Runs local subtensor in a pm2 process (NOTE: this can take several hours to sync chain history)
 # Make sure the directory is configured properly to run from the built subtensor binary
@@ -833,7 +1018,7 @@ Provided are two scripts to build subtensor, and then to run it inside a pm2 pro
 # cd ~/storage-subnet/subtensor
 
 # Run the script to start subtensor
-./scripts/start_local_subtensor.sh
+./scripts/subtensor/start_local_subtensor.sh
 ```
 
 You should see output like this in your pm2 logs for the process at startup:
@@ -860,4 +1045,86 @@ pm2 logs subtensor
 1|subtensor  | 2023-12-22 14:21:35 ⏩ Warping, Downloading state, 2.74 Mib (56 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 498.3kiB/s ⬆ 41.3kiB/s    
 1|subtensor  | 2023-12-22 14:21:40 ⏩ Warping, Downloading state, 11.25 Mib (110 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 1.1MiB/s ⬆ 37.0kiB/s    
 1|subtensor  | 2023-12-22 14:21:45 ⏩ Warping, Downloading state, 20.22 Mib (163 peers), best: #0 (0x2f05…6c03), finalized #0 (0x2f05…6c03), ⬇ 1.2MiB/s ⬆ 48.7kiB/s 
+```
+
+## Database Schema Migration
+
+As over version `1.5.3` FileTao has a new miner database schema to work with the API. It is REQUIRED to update the schema for proper functioning of the FileTao network to participate. This tool will help you convert if you have data from <`1.5.3`.
+
+Converts the schema of a Redis database to the new hotkey format. It automates the process of checking the environment for necessary configurations and performing the schema conversion on the specified Redis database, as well as cleanup after conversion (separate script).
+
+This is done in two stages:
+1. Conversion
+2. Cleanup
+
+Both scripts are labeled with the prefix `01` and `02` in order to distinguish the proper order to run.
+
+## Backup
+Please ensure you run the following to enter an authenticated session for redis:
+```bash
+redis-cli -a $REDIS_PASSWORD 
+```
+
+Then run save inside the session:
+
+```bash
+127.0.0.1:6379> SAVE
+> OK
+
+exit # exit the session to terminal
+```
+
+Finally, go to where the dump.rdb file is (`/var/lib/redis`` by default), and copy it as a backup **before** commencing the schema migration:
+
+```bash
+sudo cp /var/lib/redis/dump.rdb /var/lib/redis/dump.bak.rdb
+```
+
+> Shoutout to shr1ftyy for his step!
+
+## Usage
+
+Both scripts need to specify the Redis database connection details and the path to the Redis configuration file. The tool supports the following command-line arguments:
+
+- `--redis_password`: Password for the Redis database (if applicable).
+- `--redis_conf_path`: Path to the Redis configuration file. Default is `/etc/redis/redis.conf`.
+- `--database_host`: Hostname of the Redis database. Default is `localhost`.
+- `--database_port`: Port number of the Redis database. Default is `6379`.
+- `--database_index`: Database index to use. Default is `0`.
+
+### Script 1 Example
+
+```bash
+python scripts/redis/schema_migration/01_migrate.py --redis_password=mysecretpassword --database_host=localhost --database_port=6379 --database_index=0
+```
+
+This converts the current index to the new hotkey format.
+
+### Script 2 Example
+
+```bash
+python scripts/redis/schema_migration/02_clean.py --redis_password=mysecretpassword --database_host=localhost --database_port=6379 --database_index=0
+```
+This cleans up any lingering old keys left after conversion.
+
+#### Important Notes
+
+- Ensure that the Redis database is accessible and that the provided credentials are correct.
+- It's recommended to back up your Redis database before performing the schema conversion to prevent data loss.
+
+
+## Disable RDB
+Appendonly is sufficient for proper database persistence and RDB has introduced overhead that creates `closed connection` errors with `async` operations. Therefore we now recommend disabling this feature and have provided a convnenience script to do this.
+
+Please run:
+```bash
+bash ./scripts/redis/disable_rdb.sh 
+```
+
+This will remove the `save` argument for RDB in the `etc/reids/redis.conf` file. 
+
+Please ensure to path the path to your redis.conf file if it is differen from the default:
+```bash
+REDIS_PATH="/path/to/redis.conf"
+bash ./scripts/redis/disable_rdb.sh $REDIS_PATH
 ```

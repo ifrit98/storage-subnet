@@ -18,15 +18,18 @@
 
 import os
 import json
+import time
 import shutil
 import storage
 import wandb
 import copy
+import asyncio
+import multiprocessing
 import bittensor as bt
+from collections import deque
 
 from ..shared.ecc import (
     ecc_point_to_hex,
-    hex_to_ecc_point,
     hash_data,
 )
 from ..shared.merkle import (
@@ -72,7 +75,7 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     return randomness, chunks, points, merkle_tree
 
 
-def save_data_to_filesystem(data, directory, filename):
+def save_data_to_filesystem(data, directory, hotkey, filename):
     """
     Saves data to the filesystem at the specified directory and filename. If the directory does
     not exist, it is created.
@@ -80,6 +83,7 @@ def save_data_to_filesystem(data, directory, filename):
     Parameters:
     - data: The data to be saved.
     - directory (str): The directory path where the data should be saved.
+    - hotkey (str): The hotkey associated with the data.
     - filename (str): The name of the file to save the data in.
 
     Returns:
@@ -88,7 +92,7 @@ def save_data_to_filesystem(data, directory, filename):
     This function is useful for persisting data to the disk.
     """
     # Ensure the directory exists
-    directory = os.path.expanduser(directory)
+    directory = os.path.join(os.path.expanduser(directory), hotkey)
     os.makedirs(directory, exist_ok=True)
     file_path = os.path.join(directory, filename)
     with open(file_path, "wb") as file:
@@ -267,5 +271,131 @@ def update_storage_stats(self):
     bt.logging.info(f"Free memory: {self.free_memory} bytes")
     self.current_storage_usage = get_directory_size(self.config.database.directory)
     bt.logging.info(f"Miner storage usage: {self.current_storage_usage} bytes")
-    self.percent_disk_usage = self.current_storage_usage / self.free_memory
+    self.percent_disk_usage = self.current_storage_usage / (self.free_memory + self.current_storage_usage)
     bt.logging.info(f"Miner % disk usage : {100 * self.percent_disk_usage:.3f}%")
+
+
+def load_request_log(request_log_path: str) -> dict:
+    """
+    Loads the request logger from disk if it exists.
+
+    Args:
+        log_path (str): The path to the directory containing the request log.
+
+    Returns:
+        Dict: The request log data, if it exists, or an empty dictionary.
+
+    This method loads the request log from disk if it exists. If not, it returns an empty dictionary.
+    """
+    if os.path.exists(request_log_path):
+        try:
+            with open(request_log_path, "r") as f:
+                request_log = json.load(f)
+        except Exception as e:
+            bt.logging.error(f"Error loading request log: {e}. Resetting.")
+            request_log = {}
+    else:
+        request_log = {}
+    return request_log
+
+
+def log_request(synapse: "bt.Synapse", request_log: dict):
+    """
+    Log the request and store the timestamp of each request.
+
+    Args:
+        synapse (bt.Synapse): The synapse object with the request details.
+        request_log (dict): The dictionary to log request timestamps.
+
+    The function logs the time of each request in the request log and the request type.
+    """
+    current_time = time.time()
+    caller = synapse.dendrite.hotkey
+    if caller not in request_log:
+        request_log[caller] = []
+
+    request_log[caller].append((synapse.name, current_time))
+    return request_log
+
+
+class RateLimiter:
+    def __init__(self, max_requests, time_window):
+        self.max_requests = max_requests
+        self.time_window = time_window
+        self.requests = deque()
+
+    def is_allowed(self, caller):
+        current_time = time.time()
+        while (
+            self.requests
+            and current_time - self.requests[0]["timestamp"] > self.time_window
+        ):
+            self.requests.popleft()
+
+        if len(self.requests) < self.max_requests:
+            self.requests.append({"caller": caller, "timestamp": current_time})
+            return True
+        else:
+            return False
+
+
+def get_purge_ttl_script_path(current_dir):
+    """
+    Constructs and returns the path to the 'rebalance_deregistration.sh' script within a project directory.
+
+    This function takes the root path of a project and appends the relative path to the 'rebalance_deregistration.sh' script.
+    It assumes that the script is located within the 'scripts' subdirectory of the given project root.
+
+    Parameters:
+    project_root (str): The root path of the project directory.
+
+    Returns:
+    str: The full path to the 'rebalance_deregistration.sh' script.
+    """
+    project_root = os.path.join(current_dir, "..")
+    project_root = os.path.normpath(project_root)
+    script_path = os.path.join(project_root, "scripts", "run_ttl_purge.sh")
+    return script_path
+
+
+def run_async_in_sync_context(
+    coroutine_function: callable,
+    loop: asyncio.unix_events._UnixSelectorEventLoop = None,
+    ttl: int = 100,
+    *args,
+):
+    """
+    Runs an asynchronous coroutine in a synchronous context using a separate process.
+
+    This function is useful for running asynchronous coroutines in a synchronous context, such as in a synchronous
+    function or method. It creates a separate process to run the asynchronous coroutine and waits for it to complete
+    before returning control to the caller.
+
+    Parameters:
+    - coroutine_function (callable): The asynchronous coroutine function to be run.
+    - loop (asyncio.unix_events._UnixSelectorEventLoop): The event loop to be used for running the coroutine.
+    - ttl (int): The time-to-live (TTL) for the process. If the process does not complete within this time, it will be terminated.
+    - *args: The arguments to be passed to the coroutine function.
+
+    Usage:
+    ```python
+    async def async_function():
+        await asyncio.sleep(1)
+        print("Async function completed")
+
+    def sync_function():
+        run_async_in_sync_context(async_function)
+        print("Sync function completed")
+    ```
+    """
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    def sync_wrapper(self):
+        async def run_async_coro():
+            await asyncio.gather(coroutine_function(*args))
+        loop.run_until_complete(run_async_coro())
+
+    process = multiprocessing.Process(target=sync_wrapper, args=args)
+    process.start()
+    process.join(timeout=ttl)

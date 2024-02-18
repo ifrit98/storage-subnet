@@ -22,5 +22,10 @@ function echo_json {
 }
 
 function get_git_tag_higher_version {
-    echo `git tag -l --sort -version:refname | head -n 1`
+    F_PREV_VERSION=$(git tag -l --sort -version:refname | head -n 1)
+    if [[ -z $F_PREV_VERSION ]]; then
+        echo '0.0.0'
+    else
+        echo $F_PREV_VERSION
+    fi
 }

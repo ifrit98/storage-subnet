@@ -17,31 +17,26 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import sys
 import json
-import torch
 import base64
 import argparse
 
 import storage
 from storage.validator.encryption import encrypt_data
+from storage.validator.cid import generate_cid_string
 from storage.shared.ecc import hash_data
 
 import bittensor
 
-from rich import print
-from rich.console import Console
-from rich.tree import Tree
-from typing import List, Optional
-from rich.align import Align
-from rich.table import Table
+from typing import List
 from rich.prompt import Prompt
-from tqdm import tqdm
 from storage.validator.utils import get_all_validators
+
+from .default_values import defaults
+
 
 bittensor.trace()
 
-from .default_values import defaults
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -133,7 +128,7 @@ class StoreData:
         bittensor.logging.debug("wallet:", wallet)
 
         # Unlock the wallet
-        if not cli.config.noencrypt:
+        if cli.config.encrypt:
             wallet.hotkey
             wallet.coldkey
 
@@ -147,7 +142,7 @@ class StoreData:
         with open(cli.config.filepath, "rb") as f:
             raw_data = f.read()
 
-        if not cli.config.noencrypt:
+        if cli.config.encrypt:
             encrypted_data, encryption_payload = encrypt_data(
                 bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
                 wallet,
@@ -155,6 +150,8 @@ class StoreData:
         else:
             encrypted_data = raw_data
             encryption_payload = "{}"
+
+        expected_cid = generate_cid_string(encrypted_data)
         encoded_data = base64.b64encode(encrypted_data)
         bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:100]}")
         bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
@@ -162,6 +159,7 @@ class StoreData:
         synapse = storage.protocol.StoreUser(
             encrypted_data=encoded_data,
             encryption_payload=encryption_payload,
+            ttl=cli.config.ttl,
         )
         bittensor.logging.debug(f"sending synapse: {synapse.dendrite.dict()}")
 
@@ -172,14 +170,14 @@ class StoreData:
         try:
             sub = bittensor.subtensor(network=cli.config.subtensor.network)
             bittensor.logging.debug("subtensor:", sub)
-            StoreData._run(cli, synapse, sub, wallet, hash_filepath)
+            StoreData._run(cli, synapse, sub, wallet, hash_filepath, expected_cid)
         finally:
-            if "subtensor" in locals():
-                subtensor.close()
+            if "sub" in locals():
+                sub.close()
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    def _run(cli, synapse, subtensor, wallet, hash_filepath):
+    def _run(cli, synapse, subtensor, wallet, hash_filepath, expected_cid):
         r"""Store data from local disk on the Bittensor network."""
         dendrite = bittensor.dendrite(wallet=wallet)
         bittensor.logging.debug("dendrite:", dendrite)
@@ -218,6 +216,11 @@ class StoreData:
                     else response.data_hash
                 )
                 bittensor.logging.debug("received data hash: {}".format(data_hash))
+
+                if data_hash != expected_cid:
+                    bittensor.logging.warning(
+                        f"Received CID {data_hash} does not match expected CID {expected_cid}."
+                    )
                 success = True
                 break
 
@@ -303,9 +306,15 @@ class StoreData:
             help="Tao limit for the validator permit.",
         )
         store_parser.add_argument(
-            "--noencrypt",
+            "--encrypt",
             action="store_true",
-            help="Do not encrypt the data before storing it on the Bittensor network.",
+            help="Encrypt the data before storing it on the Bittensor network with bittensor wallet coldkey.",
+        )
+        store_parser.add_argument(
+            "--ttl",
+            type=int,
+            default=60 * 60 * 24 * 30,
+            help="Time to live for the data on the Bittensor network. (Default 30 days)",
         )
 
         bittensor.wallet.add_args(store_parser)

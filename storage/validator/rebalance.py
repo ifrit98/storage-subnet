@@ -19,7 +19,6 @@
 import typing
 import bittensor as bt
 
-from pprint import pformat
 from storage.validator.database import (
     is_file_chunk,
     get_metadata_for_hotkey,
@@ -50,7 +49,7 @@ async def rebalance_data_for_hotkey(
     """
     try:
         source_uid = self.metagraph.hotkeys.index(source_hotkey)
-    except Exception as e:
+    except Exception:
         source_uid = -1
         bt.logging.warning(
             f"Distribute source hotkey {source_hotkey} already replaced in metagraph."
