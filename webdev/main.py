@@ -7,10 +7,12 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 import torch
-import storage, bittensor, base64, argparse
+import storage, base64, argparse, hashlib
+import bittensor as bt
 from storage.cli import create_config
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage.validator.utils import get_all_validators
+from storage import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
 
 # Constants and Security Configurations
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # Replace with environment variable in production
@@ -19,16 +21,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Initialize FastAPI app
 app = FastAPI()
-
-# Provide args to create the config
-args = argparse.Namespace()
-args.wallet_name = 'wallet_name'
-args.wallet_hotkey = 'hotkey'
-args.subtensor_network = 'subtensor_network'
-args.stake_limit = 'stake_limit'
-args.data_hash = 'data_hash'
-# Call the create_config function from the cli class
-config = create_config(args)
 
 # Initialize Password Context for hashing and verifying
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -40,6 +32,8 @@ class User(BaseModel):
 class UserInDB(User):
     hashed_password: str
     seed: str
+    wallet_name: str
+    wallet_hotkey: str
 
 class Token(BaseModel):
     access_token: str
@@ -50,7 +44,12 @@ class TokenData(BaseModel):
 
 # In-memory database (Replace with a real database in production)
 fake_user_db: Dict[str, UserInDB] = {
-    "johndoe": UserInDB(username="johndoe", hashed_password=pwd_context.hash("example"), seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae")  # Replace with actual hashed password
+    "johndoe": UserInDB(username="johndoe", 
+                        hashed_password=pwd_context.hash("example"), 
+                        seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae", 
+                        wallet_name = 'abcd', 
+                        wallet_hotkey = 'efghijk', 
+                        )
 }
 
 # User management functions
@@ -77,22 +76,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# load the wallet
-wallet = bittensor.wallet(
-    name=config.wallet.name, hotkey=config.wallet.hotkey
-)
-
-# instantiate dendrite and metagraph
-dendrite = bittensor.dendrite(wallet=wallet)
-
-# create subtensor instance
-subtensor = bittensor.subtensor(network=config.subtensor.network)
-mg = subtensor.metagraph(config.netuid)
-
-self = argparse.Namespace()
-self.config = config
-self.metagraph = mg
-
 # User Authentication Functions
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
@@ -107,17 +90,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    return current_user
-
 # User Registration Endpoint
 @app.post("/register/")
 async def register_user(username: str, password: str):
     if get_user(fake_user_db, username):
         raise HTTPException(status_code=400, detail="Username already registered")
+    
+    # Generate wallet
+    user_wallet = bt.wallet.create(coldkey_use_password=False, hotkey_use_password = False)
+
+    # Hash the password and generate a seed for the user
     hashed_password = get_password_hash(password)
     seed = generate_seed()
-    fake_user_db[username] = UserInDB(username=username, hashed_password=hashed_password, seed=seed)
+    name = user_wallet.name
+    hotkey = user_wallet.hotkey.ss58_address
+
+    # Store the user details in the database
+    fake_user_db[username] = UserInDB(username=username, 
+                                      hashed_password=hashed_password, 
+                                      seed=seed, 
+                                      wallet_name = name, 
+                                      wallet_hotkey = hotkey, 
+                                      )
     return {"message": "User registered successfully"}
 
 # User Login and Token Generation Endpoint
@@ -130,6 +124,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 # Protected User Data Endpoint
 @app.get("/users/me/", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
@@ -137,57 +132,62 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 
 # File Upload Endpoint
 @app.post("/uploadfiles/")
-async def create_upload_files(files: List[UploadFile] = File(...)):
-    responses = []
+async def create_upload_files(files: List[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
+    
+    # Access wallet_name and wallet_hotkey from current_user
+    wallet_name = current_user.wallet_name
+    wallet_hotkey = current_user.wallet_hotkey
+    user_wallet = bt.wallet(name = wallet_name, hotkey = wallet_hotkey)
+
+    # storage handler
+    store_handler = StoreUserAPI(user_wallet)
+
+    # Fetch the axons of the available API nodes, or specify UIDs directly
+    metagraph = bt.subtensor("test").metagraph(netuid=22)
+    axons = await get_query_api_axons(wallet=user_wallet, metagraph=metagraph, uids=[5, 7])
+
     for file in files:
         raw_data = await file.read()
 
-        # encrypt using the bittensor wallet
-        encrypted_data, encryption_payload = encrypt_data(
-            bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
-            wallet,
+        cid = await store_handler(
+        axons=axons,
+        # any arguments for the proper synapse
+        data=raw_data,
+        encrypt=False, # optionally encrypt the data with your bittensor wallet
+        ttl=60 * 60 * 24 * 30,
+        encoding="utf-8",
+        uid=None,
+        timeout=60,
         )
 
-        # Encode the encrypted data
-        encoded_data = base64.b64encode(encrypted_data)
-
-        # create our synapse wrapper
-        synapse = storage.protocol.StoreUser(
-            encrypted_data=encoded_data,
-            encryption_payload=encryption_payload,
-        )
-
-        # grab validators to query for storage
-        query_uids = get_all_validators(self)
-        bittensor.logging.debug("query uids:", query_uids)
-        axons = [mg.axons[uid] for uid in query_uids]
-        bittensor.logging.debug("query axons:", axons)
-
-        # Post request to the decentralized storage network
-        response = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-        responses.append({"filename": file.filename, "response": response})
-
-    return responses
+    return cid
 
 # File Retrieval Endpoint
 @app.get("/retrieve/{data_hash}")
-async def retrieve_user_data(data_hash: str, outpath: str):
+async def retrieve_user_data(cid: str, current_user: User = Depends(get_current_user)):
+    
+    # Access wallet_name and wallet_hotkey from current_user
+    wallet_name = current_user.wallet_name
+    wallet_hotkey = current_user.wallet_hotkey
+    user_wallet = bt.wallet(name = wallet_name, hotkey = wallet_hotkey)
+
+    # retriever handler
+    retrieve_handler = RetrieveUserAPI(user_wallet)
+
+    # Fetch the axons of the available API nodes, or specify UIDs directly
+    metagraph = bt.subtensor("test").metagraph(netuid=22)
+    axons = await get_query_api_axons(wallet=user_wallet, metagraph=metagraph, uids=[5, 7])
+
     try:
-        # Determine axons to query from metagraph for retrieval
-        vpermits = mg.validator_permit
-        vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
-        vpermit_uids = torch.where(vpermits)[0]
-
-        query_uids = torch.where(mg.S[vpermit_uids] > config.stake_limit)[0]
-        axons = [mg.axons[uid] for uid in query_uids]
-
-        synapse = storage.protocol.RetrieveUser(data_hash=config.data_hash)
-
-        # Query axons
-        responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-        success = False
+        responses = await retrieve_handler(
+            axons=axons,
+            # Arugmnts for the proper synapse
+            cid=cid, 
+            timeout=60
+        )
+        
         for response in responses:
-            bittensor.logging.trace(f"response: {response.dendrite.dict()}")
+            # bittensor.logging.trace(f"response: {response.dendrite.dict()}")
             if (
                 response.dendrite.status_code != 200
                 or response.encrypted_data == None
@@ -207,7 +207,7 @@ async def retrieve_user_data(data_hash: str, outpath: str):
                 decrypted_data = decrypt_data_with_private_key(
                     encrypted_data,
                     response.encryption_payload,
-                    bytes(wallet.coldkey.private_key.hex(), "utf-8"),
+                    bytes(user_wallet.coldkey.private_key.hex(), "utf-8"),
                 )
             success = True
             break  # No need to keep going if we returned data.
