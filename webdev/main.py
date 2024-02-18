@@ -9,7 +9,6 @@ from typing import List, Optional, Dict
 import torch
 import storage, base64, argparse, hashlib
 import bittensor as bt
-from storage.cli import create_config
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage.validator.utils import get_all_validators
 from storage import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
