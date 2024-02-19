@@ -6,12 +6,9 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
-import torch
-import storage, base64, argparse, hashlib
+import base64
 import bittensor as bt
-from storage.cli import create_config
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
-from storage.validator.utils import get_all_validators
 from storage import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
 
 # Constants and Security Configurations
@@ -127,7 +124,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 # Protected User Data Endpoint
 @app.get("/users/me/", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 # File Upload Endpoint
@@ -164,7 +161,7 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
 
 # File Retrieval Endpoint
 @app.get("/retrieve/{data_hash}")
-async def retrieve_user_data(cid: str, current_user: User = Depends(get_current_user)):
+async def retrieve_user_data(cid: str, outpath: str, current_user: User = Depends(get_current_user)):
     
     # Access wallet_name and wallet_hotkey from current_user
     wallet_name = current_user.wallet_name
