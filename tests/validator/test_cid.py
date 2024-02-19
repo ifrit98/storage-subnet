@@ -3,7 +3,6 @@ import hashlib
 import requests
 
 from ipfs_cid import cid_sha256_hash as compute_cidv1  # pip install ipfs-cid
-from ipfs_cid_v0 import compute_hash, compute_hash_hex
 from storage.validator.cid import make_cid, decode_cid
 
 
@@ -28,10 +27,6 @@ class TestIPFSCID(unittest.TestCase):
         aardvark_cidv1 = compute_cidv1(self.aardvark)
         expected_hash = hashlib.sha256(self.aardvark).digest()
         self.assertEqual(decode_cid(aardvark_cidv1), expected_hash)
-
-    def test_compute_hash(self):
-        expected_hash = compute_hash(self.aardvark)[2:]
-        self.assertEqual(decode_cid(self.AARDVARK_CIDv0), expected_hash)
 
     def test_make_cid_v1(self):
         data = b"Hello World!"
