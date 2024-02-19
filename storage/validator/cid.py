@@ -5,8 +5,6 @@ import multibase
 import multihash
 import multicodec
 
-from ipfs_cid_v0 import compute_hash as compute_hashv0
-from ipfs_cid_v0 import compute_cid as compute_cidv0
 from ipfs_cid import cid_sha256_hash as compute_cidv1
 from morphys import ensure_bytes, ensure_unicode
 
@@ -36,14 +34,13 @@ class BaseCID(object):
         :py:class:`cid.cid.CIDv1` instead.
 
 
-        :param int version: CID version (0 or 1)
         :param str codec: codec to be used for encoding the hash
         :param str multihash: the multihash
         """
 
-        if version not in (0, 1):
+        if version not in (1,):
             raise ValueError(
-                "version should be 0 or 1, {} was provided".format(version)
+                "version should be 1, {} was provided".format(version)
             )
         if not multicodec.is_codec(codec):
             raise ValueError("invalid codec {} provided, please check".format(codec))
@@ -103,46 +100,6 @@ class BaseCID(object):
         )
 
 
-class CIDv0(BaseCID):
-    """CID version 0 object"""
-
-    CODEC = "dag-pb"
-
-    def __init__(self, multihash):
-        """
-        :param bytes multihash: multihash for the CID
-        """
-        super(CIDv0, self).__init__(0, self.CODEC, multihash)
-
-    @property
-    def buffer(self):
-        """
-        The raw representation that will be encoded.
-
-        :return: the multihash
-        :rtype: bytes
-        """
-        return base58.b58decode(self.multihash)
-
-    def encode(self):
-        """
-        base58-encoded buffer
-
-        :return: encoded representation or CID
-        :rtype: bytes
-        """
-        return ensure_bytes(base58.b58encode(self.buffer))
-
-    def to_v1(self):
-        """
-        Get an equivalent :py:class:`cid.CIDv1` object.
-
-        :return: :py:class:`cid.CIDv1` object
-        :rtype: :py:class:`cid.CIDv1`
-        """
-        return CIDv1(self.CODEC, self.multihash)
-
-
 class CIDv1(BaseCID):
     """CID version 1 object"""
 
@@ -150,7 +107,7 @@ class CIDv1(BaseCID):
         super(CIDv1, self).__init__(1, codec, multihash)
 
     @property
-    def buffer(self):
+    def buffer(self) -> bytes:
         """
         The raw representation of the CID
 
@@ -161,7 +118,7 @@ class CIDv1(BaseCID):
             [bytes([self.version]), multicodec.add_prefix(self.codec, self.multihash)]
         )
 
-    def encode(self, encoding="base58btc"):
+    def encode(self, encoding="base58btc") -> bytes:
         """
         Encoded version of the raw representation
 
@@ -173,26 +130,20 @@ class CIDv1(BaseCID):
         return multibase.encode(encoding, self.buffer)
 
 
-def make_cid(data, version=0):
+def make_cid(data: typing.Union[str, bytes]) -> "CIDv1":
     """
-    Creates a CIDv0 or CIDv1 object from raw data using the specified codec.
+    Creates a CIDv1 object from raw data using the specified codec.
 
     :param raw_data: The raw data to create a CID for.
     :return: A CID object.
     """
     raw_data = ensure_bytes(data)
 
-    if version == 0:
-        cid = compute_cidv0(raw_data)
-        return CIDv0(cid)
-    elif version == 1:
-        cid = compute_cidv1(raw_data)
-        return CIDv1("sha2-256", cid)
-    else:
-        raise ValueError("Invalid CID version")
+    cid = compute_cidv1(raw_data)
+    return CIDv1("sha2-256", cid)
 
 
-def decode_cid(cid_input):
+def decode_cid(cid_input) -> bytes:
     """
     Decodes a CID string or object into a multihash.
 
@@ -234,7 +185,7 @@ def decode_cid(cid_input):
         raise ValueError("Invalid CID input type. Must be a CID object or a string.")
 
 
-def generate_cid_string(data: typing.Union[str, bytes], version: int = 1):
+def generate_cid_string(data: typing.Union[str, bytes]) -> str:
     """
     Generates a CID string for the given data using the specified CID version.
 
@@ -244,9 +195,4 @@ def generate_cid_string(data: typing.Union[str, bytes], version: int = 1):
     """
     data_bytes = ensure_bytes(data)
 
-    if version == 0:
-        return compute_cidv0(data_bytes)
-    elif version == 1:
-        return compute_cidv1(data_bytes)
-    else:
-        raise ValueError("Invalid CID version")
+    return compute_cidv1(data_bytes)
