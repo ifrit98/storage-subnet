@@ -1,3 +1,4 @@
+bcrypt==4.1.2
 bittensor==6.7.2
 torch==2.0.1
 redis==5.0.1
@@ -6,6 +7,7 @@ pycryptodome==3.19.1
 pyinstrument==4.6.1
 wandb==0.16.0
 morphys==1.0
+python-multipart==0.0.9
 py-multibase==1.0.3
 py-multicodec==0.2.1
 py-multihash==2.0.1
