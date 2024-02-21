@@ -223,9 +223,9 @@ async def update_statistics(
 
     # Update the total successes that we rollover every epoch
     if await database.hget(stats_key, "total_successes") is None:
-        store_successes = int(await database.hget(stats_key, "store_successes"))
-        challenge_successes = int(await database.hget(stats_key, "challenge_successes"))
-        retrieval_successes = int(await database.hget(stats_key, "retrieve_successes"))
+        store_successes = int(await database.hget(stats_key, "store_successes") or 0)
+        challenge_successes = int(await database.hget(stats_key, "challenge_successes") or 0)
+        retrieval_successes = int(await database.hget(stats_key, "retrieve_successes") or 0)
         total_successes = store_successes + retrieval_successes + challenge_successes
         await database.hset(stats_key, "total_successes", total_successes)
     if success:
