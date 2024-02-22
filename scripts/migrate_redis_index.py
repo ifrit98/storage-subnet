@@ -14,8 +14,14 @@ async def main(args):
     if not os.path.exists(new_directory):
         os.makedirs(new_directory, exist_ok=True)
 
+    redis_password = get_redis_password(args.redis_password)
     try:
-        asyncio.run(check_environment(args.redis_conf_path))
+        asyncio.run(check_environment(
+            args.redis_conf_path,
+            args.database_host,
+            args.database_port,
+            redis_password
+        ))
     except AssertionError as e:
         bt.logging.warning(
             f"Something is missing in your environment: {e}. Please check your configuration, use the README for help, and try again."
@@ -25,7 +31,6 @@ async def main(args):
     bt.logging.info(
         f"Loading database from {args.database_host}:{args.database_port}"
     )
-    redis_password = get_redis_password(args.redis_password)
     database = aioredis.StrictRedis(
         host=args.database_host,
         port=args.database_port,
