@@ -94,7 +94,7 @@ async def register_user(username: str, password: str):
         raise HTTPException(status_code=400, detail="Username already registered")
     
     # Generate wallet
-    user_wallet = bt.wallet.create(coldkey_use_password=False, hotkey_use_password = False)
+    user_wallet = bt.wallet()
 
     # Hash the password and generate a seed for the user
     hashed_password = get_password_hash(password)
