@@ -31,6 +31,7 @@ class UserInDB(User):
     seed: str
     wallet_name: str
     wallet_hotkey: str
+    wallet_mnemonic: str
 
 class Token(BaseModel):
     access_token: str
@@ -39,14 +40,17 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
 
+# TODO: replace with Redis or something production-ready
 # In-memory database (Replace with a real database in production)
 fake_user_db: Dict[str, UserInDB] = {
-    "johndoe": UserInDB(username="johndoe", 
-                        hashed_password=pwd_context.hash("example"), 
-                        seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae", 
-                        wallet_name = 'abcd', 
-                        wallet_hotkey = 'efghijk', 
-                        )
+    "johndoe": UserInDB(
+        username="johndoe", 
+        hashed_password=pwd_context.hash("example"), 
+        seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae", 
+        wallet_name = 'johndoe',   # should be equivalent to username for consistency
+        wallet_hotkey = 'default', # can be default
+        wallet_mnemonic = 'family bean until sauce near place labor admit dismiss long asthma tunnel' 
+    )
 }
 
 # User management functions
@@ -94,24 +98,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 async def register_user(username: str, password: str):
     if get_user(fake_user_db, username):
         raise HTTPException(status_code=400, detail="Username already registered")
-    
+
     # Generate wallet
-    user_wallet = bt.wallet()
-    user_wallet.create(coldkey_use_password=False, hotkey_use_password = False)
+    user_wallet = bt.wallet(name=username)
+    user_wallet.create(coldkey_use_password=False, hotkey_use_password=False)
 
     # Hash the password and generate a seed for the user
     hashed_password = get_password_hash(password)
     seed = generate_seed()
     name = user_wallet.name
     hotkey = user_wallet.hotkey.ss58_address
+    mnemonic = user_wallet.coldkey.mnemonic
 
     # Store the user details in the database
-    fake_user_db[username] = UserInDB(username=username, 
-                                      hashed_password=hashed_password, 
-                                      seed=seed, 
-                                      wallet_name = name, 
-                                      wallet_hotkey = hotkey, 
-                                      )
+    fake_user_db[username] = UserInDB(
+        username = username, 
+        hashed_password = hashed_password, 
+        seed = seed, 
+        wallet_name = name, 
+        wallet_hotkey = hotkey,
+        wallet_mnemonic = mnemonic
+    )
     return {"message": "User registered successfully"}
 
 # User Login and Token Generation Endpoint
@@ -133,7 +140,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 # File Upload Endpoint
 @app.post("/uploadfiles/")
 async def create_upload_files(files: List[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
-    
+
     # Access wallet_name and wallet_hotkey from current_user
     wallet_name = current_user.wallet_name
     wallet_hotkey = current_user.wallet_hotkey
@@ -146,6 +153,7 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
     metagraph = bt.subtensor("test").metagraph(netuid=22)
     axons = await get_query_api_axons(wallet=user_wallet, metagraph=metagraph, uids=[5, 7])
 
+    # TODO: This should be non-blocking. Either in separate threads or asyncio tasks we await.
     for file in files:
         raw_data = await file.read()
 
