@@ -569,17 +569,26 @@ In FileTAO's decentralized storage system, optimal behavior is crucial for the o
 Failing to pass either challenge or retrieval verifications incur negative rewards. This is doubly destructive, as rolling statistics are continuously logged to periodically compute which tier a given miner hotkey belongs to. When a miner achieves the threshold for the next tier, the rewards that miner receives proportionally increase. Conversely, when a miner drops below the threshold of the previous tier, that miner's rewards are slashed such that they receive rewards proportionally to the immediately lower tier.
 
 **Why Optimal Behavior Matters:**
-1. **Reliability:** Miners who consistently store, retrieve, and pass challenges with high success rates ensure the reliability and integrity of the network.
+1. **Reliability:** Miners who consistently store, retrieve, and pass challenges with high Wilson Scores ensure the reliability and integrity of the network.
 2. **Trust:** High-performing miners build trust in the network, attracting more users and increasing the overall value of the system.
 3. **Efficiency:** Optimal behavior leads to a more efficient network, reducing the likelihood of data loss and ensuring fast, reliable access to stored information.
 
 **Tier-Based Reward System:**
 - **Tiers:** We classify miners into four tiers – Diamond, Gold, Silver, and Bronze – based on their performance metrics.
-- **Performance Metrics:** These include the success rate in storage, retrieval, and challenge tasks, as well as the total number of successful operations.
+- **Performance Metrics:** These include the Wilson Score in storage, retrieval, and challenge tasks, as well as the total number of successful operations.
 - **Higher Rewards for Higher Tiers:** Miners in higher tiers receive a greater proportion of the rewards, reflecting their superior performance and contribution to the network.
 
+### **Wilson Score**
+A measure of confidence is required to assess reliability in low sample environments. For miners who have less history, it is unfair to expect perfection early on and is account for by using a statistical tool, the `Wilson Score`. 
+
+For example, if a miner succeeds 4/5 times, it has a success rate of 80%. However it may not be indicative of true performance and reliability. Thus we have added Wilson Scores to accomodate low sample populations to get a more balanced approach to scoring miners.
+
+This effectively allows for forgiveness for early failures and facilitates miners who are faithful actors to still rise through the tier system without being perpetually punished for early mistakes or poor optimization.
+
+The equivalent wilson score for 4 of 5 attempts is `0.77`, which indicates with 95% statistical confidence that this miner is AT least this successful 80% of the time. Functionally, this allows for lowering of the tier requirements while having statistical confidence that over time, the miner may continue to improve performance from there while being considered reliable.
+
 **Moving Up Tiers:**
-- To ascend to a higher tier, a miner must maintain high success rates and achieve a set number of total successes.
+- To ascend to a higher tier, a miner must maintain high Wilson Scores and achieve a set number of total successes.
 - This progression system incentivizes continuous improvement and excellence in mining operations.
 
 **Graphical Representation:**
@@ -593,54 +602,44 @@ Failing to pass either challenge or retrieval verifications incur negative rewar
 The tier system classifies miners into five distinct categories, each with specific requirements and storage limits. These tiers are designed to reward miners based on their performance, reliability, and the total volume of data they can store.
 
 Importance of Tier System:
-- **Encourages High Performance:** Higher tiers reward miners with greater benefits, motivating them to maintain high success rates.
+- **Encourages High Performance:** Higher tiers reward miners with greater benefits, motivating them to maintain high Wilson Scores.
 - **Enhances Network Reliability:** The tier system ensures that only the most reliable and efficient miners handle significant volumes of data, enhancing the overall reliability of the network.
 - **Fair Reward Distribution:** The reward factors are proportional to the miners' tier, ensuring a fair distribution of rewards based on performance.
 
 1. 🎇 **Super Saiyan Tier:** 
    - **Storage Limit:** 1 Exabyte (EB)
-   - **Store Success Rate:** 99.9% (1/1000 chance of failure)
-   - **Retrieval Success Rate:** 99.9%
-   - **Challenge Success Rate:** 99.9%
-   - **Minimum Successes Required:** 100,000
+   - **Store Wilson Score:** 0.88
+   - **Minimum Successes Required:** 10,000
    - **Reward Factor:** 1.0 (100% rewards)
 
 2. 💎 **Diamond Tier:**
    - **Storage Limit:** 1 Petabyte (PB)
-   - **Store Success Rate:** 99% (1/100 chance of failure)
-   - **Retrieval Success Rate:** 99%
-   - **Challenge Success Rate:** 99%
-   - **Minimum Successes Required:** 50,000
+   - **Store Wilson Score:**  0.77
+   - **Minimum Successes Required:** 5,000
    - **Reward Factor:** 0.888 (88.8% rewards)
 
 3. 🥇 **Gold Tier:**
    - **Storage Limit:** 100 Terabytes (TB)
-   - **Store Success Rate:** 97.5% (1/50 chance of failure)
-   - **Retrieval Success Rate:** 97.5%
-   - **Challenge Success Rate:** 97.5%
-   - **Minimum Successes Required:** 5,000
+   - **Store Wilson Score:** 0.66
+   - **Minimum Successes Required:** 2,000
    - **Reward Factor:** 0.777 (77.7% rewards)
 
 4. 🥈 **Silver Tier:**
    - **Storage Limit:** 10 Terabytes (TB)
-   - **Store Success Rate:** 95% (1/20 chance of failure)
-   - **Retrieval Success Rate:** 95%
-   - **Challenge Success Rate:** 95%
+   - **Store Wilson Score:** 0.55
    - **Minimum Successes Required:** 1,000
-   - **Reward Factor:** 0.555 (55.5% rewards)
+   - **Reward Factor:** 0.666 (66.6% rewards)
 
 5. 🥉 **Bronze Tier:**
    - **Storage Limit:** 1 Terabyte (TB)
-   - **Store Success Rate:** Not specifically defined for this tier
-   - **Retrieval Success Rate:** Not specifically defined for this tier
-   - **Challenge Success Rate:** Not specifically defined for this tier
+   - **Store Wilson Score:** Not specifically defined for this tier
    - **Minimum Successes Required:** Not specifically defined for this tier
-   - **Reward Factor:** 0.444 (44.4% rewards)
+   - **Reward Factor:** 0.555 (55.5% rewards)
 
 #### Maintaining and Advancing Tiers:
-- To advance to a higher tier, miners must consistently achieve the required success rates in their operations.
+- To advance to a higher tier, miners must consistently achieve the required minimum Wilson Scores in their operations.
 - Periodic evaluations are conducted to ensure miners maintain the necessary performance standards to stay in their respective tiers.
-- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 successful requests, whether they are challenge requests, store requests, or retry requests and must maintain a 95% success rate in all categories. 
+- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 successful requests, whether they are challenge requests, store requests, or retry requests and must maintain a 95% Wilson Score in all categories. 
 - Depending on how often a miner is queried, how many validators are operating at one given time, and primarily the performance of the miner, this can take several hours to several days. Assuming full 64 validator slots are occupied, this should take a matter of hours.
 
 Here is a distribution of UIDs queried over 1000 blocks based on block hash:
@@ -650,32 +649,43 @@ Assuming perfect performance, that out of ~200 miner UIDs, each of which is quer
 
 ```bash
 hours = total_successes / prob_of_query_per_round * time_per_round / 3600
-hours = 98 # roughly 4 days at perfect performance (no challenge failures)
+hours = 98 # roughly 4 days at perfect performance to top tier (no challenge failures)
 ```
 
 #### Periodic Statistics Rollover
 
-Statistics for `store_successes/attempts`, `challenge_attempts/successes`, and `retrieve_attempts/successes` are reset every epoch, while the `total_successes` are carried over for accurate tier computation. This "sliding window" of the previous 360 blocks of `N` successes vs `M` attempts effectively resets the `N / M`ratio. This facilitates a less punishing tier calculation for early failures that then have to be "outpaced", while simultaneously discouraging grandfathering in of older miners who were able to succeed early and cement their status in a higher tier. The net effect is greater mobility across the tiers, keeping the network competitive while incentivizing reliability and consistency.
+Statistics for `store_successes/attempts`, `challenge_attempts/successes`, and `retrieve_attempts/successes` are reset every epoch, while the `total_successes` are carried over for accurate tier computation. This "sliding window" of the previous 360 blocks of `N` successes vs `M` attempts effectively resets the `N / M` ratio and applies Wilson Scoring. This facilitates a less punishing tier calculation for early failures that then have to be "outpaced", while simultaneously discouraging grandfathering in of older miners who were able to succeed early and cement their status in a higher tier. The net effect is greater mobility across the tiers, keeping the network competitive while incentivizing reliability and consistency.
 
 For example:
 ```bash
-# Initial 10 challenges failed
-
-# 10 early failures really punishing this miner even after 90 perfect attempts in a row
-total_successes = 1200
-challenge_successes = 90
-challenge_attempts = 100
-ratio = 0.9 # won't qualify for silver, would take 100 more perfect requests
-
-# Resets after 1 epoch
-challenge_successes = 0
-challenge_attempts = 0
-
-# At the end of the following epoch, missed only 1 challenge
-challenge_attempts = 29
-challenge_successes = 30
-ratio = 0.967 # now qualifies for silver, only took 30 more requests and allowed 1 failure
+store_successes = 2
+store_attempts = 2
+challenge_successes = 3
+challenge_attempts = 5
+retrieve_successes = 1
+retireve_attempts = 1
+total_successes_epoch = 6
+total_attempts_epoch = 8
+wilson_score = 0.73 # would qualify for Diamond tier this round
 ```
+
+The scores are then reset to the minimum level by last tier achieved so that 1 failure would not lower their rank:
+```bash
+store_attempts = 3
+store_successes = 3
+challenge_successes = 3
+challenge_attempts = 3
+retrieve_successes = 3
+retrieve_attempts = 3
+
+# Infer 1 failure
+attempts = 9
+successes = 10
+wilson_score = 0.883 # Still qualifies for Diamond tier
+```
+
+The next consecutive failure would potential return the miner below the threshold back down to Gold. This is a much more flexible and dynamic approach to fairly assign tiers without strict determinism and simple ratios.
+
 
 ### Speed and Reliability in Decentralized Storage Mining
 
@@ -688,7 +698,7 @@ In the context of FileTAO's decentralized storage system, speed and reliability 
 
 #### Importance of Reliability:
 1. **Data Integrity:** Reliable storage and retrieval ensure that data remains intact and accessible when needed. This is vital for maintaining the trust of users who rely on the network for data storage.
-2. **Challenge Success Rate:** A high success rate in passing challenges signifies a miner's reliability. It shows their commitment to maintaining the network's integrity and their capability to meet the required standards.
+2. **Challenge Wilson Score:** A high Wilson Score in passing challenges signifies a miner's reliability. It shows their commitment to maintaining the network's integrity and their capability to meet the required standards.
 3. **Tier Advancement and Stability:** Reliable miners have a better chance of advancing to higher tiers and maintaining their position. This stability is rewarded with increased earning potential and recognition within the network.
 
 #### Reward Scaling Mechanism:
@@ -697,16 +707,16 @@ In the context of FileTAO's decentralized storage system, speed and reliability 
 The sigmoid function is modified to incentivize faster response times while still sufficiently rewarding proper behavior. See the curve below:
 ![sigmoid](assets/sigmoid-scale.png)
 
-2. **Tier-Based Reward Factors:** Each tier has an associated reward factor, which determines the proportion of rewards received by the miner. Higher tiers, achieved through consistent performance, offer greater rewards. Miner rewards and punishments are symmetrically scaled by their tier. Miners who have a lower tier are penalized proportionally less than miners who have a higher tier. This encourages top miners to have higher success rates, and allows for lower tier miners the ability to work their way up the ladder.
+2. **Tier-Based Reward Factors:** Each tier has an associated reward factor, which determines the proportion of rewards received by the miner. Higher tiers, achieved through consistent performance, offer greater rewards. Miner rewards and punishments are symmetrically scaled by their tier. Miners who have a lower tier are penalized proportionally less than miners who have a higher tier. This encourages top miners to have higher Wilson Scores, and allows for lower tier miners the ability to work their way up the ladder.
 
 e.g.
 ```python
 reward = 1.0 * TIER_FACTOR if task_successful else TASK_NEGATIVE_REWARD * TIER_FACTOR
 
 # For Bronze and challenges
-reward = 1.0 * 0.444 if challenge_successful else -0.05 * 0.444
+reward = 1.0 * 0.555 if challenge_successful else -0.05 * 0.555
 reward
-> 0.444 | -0.0222 # lighter punishment for lower tier failure
+> 0.555 | -0.02775 # lighter punishment for lower tier failure
 
 # However for Gold
 reward = 1.0 * 0.777 if challenge_successful else -0.05 * 0.777
