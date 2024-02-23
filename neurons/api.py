@@ -261,8 +261,12 @@ class neuron:
         self, synapse: protocol.StoreUser
     ) -> typing.Tuple[bool, str]:
         # If debug mode, whitelist everything (NOT RECOMMENDED)
+
         if self.config.api.open_access:
             return False, "Open access: WARNING all whitelisted"
+
+        if synapse.dendrite.hotkey in self.config.api.blacklisted_hotkeys:
+            return True, f"Hotkey {synapse.dendrite.hotkey} blacklisted."
 
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:
