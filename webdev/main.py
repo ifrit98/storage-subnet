@@ -67,6 +67,7 @@ def generate_seed():
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    print('Creating access...')
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
@@ -75,6 +76,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 # User Authentication Functions
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    print('Getting current user...')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -94,7 +96,8 @@ async def register_user(username: str, password: str):
         raise HTTPException(status_code=400, detail="Username already registered")
     
     # Generate wallet
-    user_wallet = bt.wallet.create(coldkey_use_password=False, hotkey_use_password = False)
+    user_wallet = bt.wallet()
+    user_wallet.create(coldkey_use_password=False, hotkey_use_password = False)
 
     # Hash the password and generate a seed for the user
     hashed_password = get_password_hash(password)
