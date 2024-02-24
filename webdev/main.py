@@ -1,4 +1,8 @@
 import os
+import json
+import base64
+import bittensor as bt
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -6,15 +10,21 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
-import base64
-import bittensor as bt
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
+from database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
+from database import Token, TokenData, User, UserInDB
 
-# Constants and Security Configurations
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # Replace with environment variable in production
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Load the env configuration
+load_dotenv()
+
+# Init the redis db
+startup()
+redis_db = get_database()
+
+# Get metagraph for this session
+# TODO: get this in a periodic update loop
+metagraph = get_metagraph()
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -22,41 +32,19 @@ app = FastAPI()
 # Initialize Password Context for hashing and verifying
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# User Model and Database
-class User(BaseModel):
-    username: str
+# Wallet to use for querying the network (we whitelist ourselves)
+server_wallet = get_server_wallet()
 
-class UserInDB(User):
-    hashed_password: str
-    seed: str
-    wallet_name: str
-    wallet_hotkey: str
-    wallet_mnemonic: str
+# Singleton storage handler
+store_handler = StoreUserAPI(server_wallet)
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+# Singleton retriever handler
+retrieve_handler = RetrieveUserAPI(server_wallet)
 
-class TokenData(BaseModel):
-    username: Optional[str] = None
+# OAuth2 and JWT Token Management
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# TODO: replace with Redis or something production-ready
-# In-memory database (Replace with a real database in production)
-fake_user_db: Dict[str, UserInDB] = {
-    "johndoe": UserInDB(
-        username="johndoe", 
-        hashed_password=pwd_context.hash("example"), 
-        seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae", 
-        wallet_name = 'johndoe',   # should be equivalent to username for consistency
-        wallet_hotkey = 'default', # can be default
-        wallet_mnemonic = 'family bean until sauce near place labor admit dismiss long asthma tunnel' 
-    )
-}
-
-# User management functions
-def get_user(db, username: str):
-    return db.get(username)
-
+# Managmeent of Passwords
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -64,29 +52,25 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def generate_seed():
-    # Generate a random 32-byte seed and return its hash
     return pwd_context.hash(os.urandom(32))
-
-# OAuth2 and JWT Token Management
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     print('Creating access...')
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
     return encoded_jwt
 
 # User Authentication Functions
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     print('Getting current user...')
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, os.getenv("SECRET_KEY"), algorithms=[os.getenv("ALGORITHM")])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        user = get_user(fake_user_db, username)
+        user = get_user(redis_db, username)
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
@@ -96,10 +80,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # User Registration Endpoint
 @app.post("/register/")
 async def register_user(username: str, password: str):
-    if get_user(fake_user_db, username):
+    if get_user(username) is not None:
         raise HTTPException(status_code=400, detail="Username already registered")
 
-    # Generate wallet
+    # Generate wallet. Use `username` for coldkey and `default` hotkey
     user_wallet = bt.wallet(name=username)
     user_wallet.create(coldkey_use_password=False, hotkey_use_password=False)
 
@@ -110,8 +94,7 @@ async def register_user(username: str, password: str):
     hotkey = user_wallet.hotkey.ss58_address
     mnemonic = user_wallet.coldkey.mnemonic
 
-    # Store the user details in the database
-    fake_user_db[username] = UserInDB(
+    user = UserInDB(
         username = username, 
         hashed_password = hashed_password, 
         seed = seed, 
@@ -119,18 +102,18 @@ async def register_user(username: str, password: str):
         wallet_hotkey = hotkey,
         wallet_mnemonic = mnemonic
     )
-    return {"message": "User registered successfully"}
+    create_user(user)
+    return {"message": f"User {username} registered successfully"}
 
 # User Login and Token Generation Endpoint
 @app.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = get_user(fake_user_db, form_data.username)
+    user = get_user(form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")))
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
-
 
 # Protected User Data Endpoint
 @app.get("/users/me/", response_model=User)
@@ -146,56 +129,60 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
     wallet_hotkey = current_user.wallet_hotkey
     user_wallet = bt.wallet(name = wallet_name, hotkey = wallet_hotkey)
 
-    # storage handler
-    store_handler = StoreUserAPI(user_wallet)
-
     # Fetch the axons of the available API nodes, or specify UIDs directly
-    metagraph = bt.subtensor("test").metagraph(netuid=22)
-    axons = await get_query_api_axons(wallet=user_wallet, metagraph=metagraph, uids=[5, 7])
+    axons = await get_query_api_axons(wallet=server_wallet, metagraph=metagraph)
 
     # TODO: This should be non-blocking. Either in separate threads or asyncio tasks we await.
     for file in files:
         raw_data = await file.read()
 
+        # Encrypt the data with the user_wallet, and send with the server_wallet
+        if False:
+            encrypted_data, encryption_payload = encrypt_data(raw_data, user_wallet)
+        else:
+            # Don't encrypt for testing right now
+            encrypted_data, encryption_payload = raw_data, {}
+
         cid = await store_handler(
-        axons=axons,
-        # any arguments for the proper synapse
-        data=raw_data,
-        encrypt=False, # optionally encrypt the data with your bittensor wallet
-        ttl=60 * 60 * 24 * 30,
-        encoding="utf-8",
-        uid=None,
-        timeout=60,
+            axons=axons,
+            data=encrypted_data,
+            encrypt=False, # We already encrypted the data (and don't want to double encrypt it)
+            ttl=60 * 60 * 24 * 180, # 6 months
+            encoding="utf-8",
+            timeout=60,
         )
+
+        # Store the encrpyiton payload in the user db for later retrieval
+        store_file_metadata(file.filename, cid, encryption_payload)
 
     return cid
 
 # File Retrieval Endpoint
-@app.get("/retrieve/{data_hash}")
-async def retrieve_user_data(cid: str, outpath: str, current_user: User = Depends(get_current_user)):
-    
+@app.get("/retrieve/{filename}")
+async def retrieve_user_data(filename: str, outpath: str, current_user: User = Depends(get_current_user)):
+    # TODO: not sure if we should take CID or filename to get from the redis db?
+
     # Access wallet_name and wallet_hotkey from current_user
     wallet_name = current_user.wallet_name
     wallet_hotkey = current_user.wallet_hotkey
     user_wallet = bt.wallet(name = wallet_name, hotkey = wallet_hotkey)
 
-    # retriever handler
-    retrieve_handler = RetrieveUserAPI(user_wallet)
-
     # Fetch the axons of the available API nodes, or specify UIDs directly
-    metagraph = bt.subtensor("test").metagraph(netuid=22)
-    axons = await get_query_api_axons(wallet=user_wallet, metagraph=metagraph, uids=[5, 7])
+    axons = await get_query_api_axons(wallet=server_wallet, metagraph=metagraph)
 
+    metadata = get_file_metadata(filename)
+    cid = metadata["cid"]
+    encryption_payload = metadata["encryption_payload"]
+
+    success = False
     try:
         responses = await retrieve_handler(
             axons=axons,
-            # Arugmnts for the proper synapse
-            cid=cid, 
+            cid=cid,
             timeout=60
         )
-        
+
         for response in responses:
-            # bittensor.logging.trace(f"response: {response.dendrite.dict()}")
             if (
                 response.dendrite.status_code != 200
                 or response.encrypted_data == None
@@ -205,16 +192,16 @@ async def retrieve_user_data(cid: str, outpath: str, current_user: User = Depend
             # Decrypt the response
             encrypted_data = base64.b64decode(response.encrypted_data)
             
-            if (
-                response.encryption_payload == None
-                or response.encryption_payload == ""
-                or response.encryption_payload == "{}"
+            if ( # If the user did not encrypt the data initially, we don't need to decrypt it
+                encryption_payload == None
+                or encryption_payload == ""
+                or encryption_payload == "{}"
             ):
                 decrypted_data = encrypted_data
             else:
                 decrypted_data = decrypt_data_with_private_key(
                     encrypted_data,
-                    response.encryption_payload,
+                    encryption_payload,
                     bytes(user_wallet.coldkey.private_key.hex(), "utf-8"),
                 )
             success = True
@@ -222,8 +209,11 @@ async def retrieve_user_data(cid: str, outpath: str, current_user: User = Depend
 
         if success:
             # Save the data
+            # TODO: send this back to the user in addition to saving it locally?
+            # Assuming the client will be expecting the file back?
             with open(outpath, "wb") as f:
                 f.write(decrypted_data)
+            return {"message": f"Data retrieved and saved to {outpath}"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

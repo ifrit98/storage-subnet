@@ -21,6 +21,39 @@ def retrieve_user_data(base_url, token: str, file_hash: str):
     response = requests.get(f"{base_url}/retrieve/{file_hash}", headers=headers)
     return response.json()
 
+# Add some fake users to the database
+def test_create_fake_users():
+    redis_db = get_database()
+
+    # Create a new user
+    fake_user_jane = UserInDB(
+        username="janedoe",
+        hashed_password=pwd_context.hash("password123"),
+        seed="b6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39bf",
+        wallet_name="janedoe",
+        wallet_hotkey="default",
+        wallet_mnemonic="ocean bean until sauce near place labor admit dismiss long asthma tunnel"
+    )
+    create_user(fake_user_jane)
+
+    # Retrieve the user
+    user = get_user("janedoe")
+    assert user == fake_user_jane, "User doesn't match expected"
+
+    fake_user_john = UserInDB(
+            username="johndoe", 
+            hashed_password=pwd_context.hash("example"), 
+            seed="a6825ec6168f72e90b1244b1d2307433ad8394ad65b7ef4af10966bc103a39ae", 
+            wallet_name = 'johndoe',   # should be equivalent to username for consistency
+            wallet_hotkey = 'default', # can be default
+            wallet_mnemonic = 'family bean until sauce near place labor admit dismiss long asthma tunnel' 
+        )
+
+    create_user(fake_user_john)
+    user = get_user("johndoe")
+    assert user == fake_user_john, "User doesn't match expected"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Test FastAPI application")
     parser.add_argument('--host', type=str, default='localhost', help='Host where the FastAPI app is running')
