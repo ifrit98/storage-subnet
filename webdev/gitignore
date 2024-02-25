@@ -162,5 +162,11 @@ cython_debug/
 ideas/
 
 scratch/
+api/
+cli/
+miner/
+shared/
+validator/
+tests/
 
 **/redis.conf.test
