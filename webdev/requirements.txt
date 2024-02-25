@@ -18,8 +18,4 @@ uvicorn==0.27.1
 passlib==1.7.4
 aioredis==2.0.1
 pyinstrument==4.6.1
-redis==5.0.1
-pycryptodome==3.18.0
-torch==2.0.1
-wandb==0.16.0
 python-dotenv==1.0.1
