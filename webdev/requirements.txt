@@ -16,7 +16,6 @@ fastapi==0.109.2
 python-jose==3.3.0
 uvicorn==0.27.1
 passlib==1.7.4
-bittensor==6.6.1
 aioredis==2.0.1
 pyinstrument==4.6.1
 redis==5.0.1
