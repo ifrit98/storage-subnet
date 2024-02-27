@@ -329,6 +329,13 @@ def add_args(cls, parser):
         default=5,
     )
     parser.add_argument(
+        "--api.blacklisted_hotkeys",
+        nargs="+",
+        type=list,
+        help="List of blacklisted hotkeys.",
+        default=[],
+    )
+    parser.add_argument(
         "--api.whitelisted_hotkeys",
         nargs="+",
         type=list,
