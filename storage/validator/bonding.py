@@ -223,11 +223,30 @@ async def update_statistics(
 
     # Update the total successes that we rollover every epoch
     if await database.hget(stats_key, "total_successes") is None:
-        store_successes = int(await database.hget(stats_key, "store_successes"))
-        challenge_successes = int(await database.hget(stats_key, "challenge_successes"))
-        retrieval_successes = int(await database.hget(stats_key, "retrieve_successes"))
+        store_successes = await database.hget(stats_key, "store_successes")
+        if store_succeses is None:
+            store_successes = 0
+            database.hset(stats_key, "store_successes", 0) # ensure field exists
+        else:
+            store_successes = int(store_successes)
+
+        challenge_successes = await database.hget(stats_key, "challenge_successes")
+        if challenge_successes is None:
+            challenge_successes = 0
+            database.hset(stats_key, "challenge_successes", 0) # ensure field exists
+        else:
+            challenge_successes = int(challenge_successes)
+
+        retrieval_successes = await database.hget(stats_key, "retrieve_successes")
+        if retrieval_successes is None:
+            retrieval_successes = 0
+            database.hset(stats_key, "retrieve_successes", 0) # ensure field exists
+        else:
+            retrieval_successes = int(retrieval_successes)
+
         total_successes = store_successes + retrieval_successes + challenge_successes
         await database.hset(stats_key, "total_successes", total_successes)
+
     if success:
         await database.hincrby(stats_key, "total_successes", 1)
 
@@ -306,8 +325,14 @@ async def compute_tier(stats_key: str, database: aioredis.Redis, confidence=0.95
         storage_limit = STORAGE_LIMIT_BRONZE
 
     current_limit = await database.hget(stats_key, "storage_limit")
+    if current_limit is None:
+        current_limit = STORAGE_LIMIT_BRONZE
+        await database.hset(stats_key, "storage_limit", current_limit) # Ensure field exists
+    else:
+        current_limit = int(current_limit.decode())
+
     bt.logging.trace(f"Current storage limit for {stats_key}: {current_limit}")
-    if current_limit.decode() != storage_limit:
+    if current_limit != storage_limit:
         await database.hset(stats_key, "storage_limit", storage_limit)
         bt.logging.trace(
             f"Storage limit for {stats_key} set from {current_limit} -> {storage_limit} bytes."
