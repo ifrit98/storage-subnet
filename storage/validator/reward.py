@@ -252,8 +252,8 @@ def apply_reward_scores(
         1 - alpha
     ) * self.moving_averaged_scores.to(self.device)
     bt.logging.trace(f"Updated moving avg scores: {self.moving_averaged_scores}")
-    bt.logging.debug(f"UID specific rewards in scatter: {self.moving_averaged_scores[uids]}")
-
+    bt.logging.debug(f"UID specific rewards in scatter: {[self.moving_averaged_scores[uid] for uid in uids]}")
+    bt.logging.debug(f"UIDs (again) for reference: {uids}")
 
 async def create_reward_vector(
     self,
