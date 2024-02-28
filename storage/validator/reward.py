@@ -85,7 +85,7 @@ def calculate_sigmoid_params(timeout):
     return steepness, shift
 
 
-def get_sorted_response_times(uids, responses, timeout: float):
+def get_sorted_response_times(uids, responses, max_time: float):
     """
     Sorts a list of axons based on their response times.
 
@@ -95,6 +95,7 @@ def get_sorted_response_times(uids, responses, timeout: float):
     Args:
         uids (List[int]): List of unique identifiers for each axon.
         responses (List[Response]): List of Response objects corresponding to each axon.
+        max_time (float): The maximum response time for the current batch of axons.
 
     Returns:
         List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
@@ -108,7 +109,7 @@ def get_sorted_response_times(uids, responses, timeout: float):
             uids[idx],
             response.dendrite.process_time
             if response.dendrite.process_time is not None
-            else timeout,
+            else max_time,
         )
         for idx, response in enumerate(responses)
     ]
@@ -118,19 +119,19 @@ def get_sorted_response_times(uids, responses, timeout: float):
     return sorted_axon_times
 
 
-def sigmoid_normalize(process_times, timeout):
+def sigmoid_normalize(process_times, max_time):
     # Center the completion times around 0 for effective sigmoid scaling
     centered_times = process_times - np.mean(process_times)
 
-    # Calculate steepness and shift based on timeout
-    steepness, shift = calculate_sigmoid_params(timeout)
+    # Calculate steepness and shift based on maximum time in the batch
+    steepness, shift = calculate_sigmoid_params(max_time)
 
     # Apply adjusted sigmoid function to scale the times
     return adjusted_sigmoid_inverse(centered_times, steepness, shift)
 
 
 def scale_rewards(
-    uids, responses, rewards, timeout: float, data_sizes: List[float], device
+    uids, responses, rewards, data_sizes: List[float], device
 ):
     """
     Scales the rewards for each axon based on their response times using sigmoid normalization.
@@ -138,13 +139,19 @@ def scale_rewards(
         uids (List[int]): A list of unique identifiers for each axon.
         responses (List[Response]): A list of Response objects corresponding to each axon.
         rewards (List[float]): A list of initial reward values for each axon.
-        timeout (float): The timeout value used for response time calculations.
         data_sizes (List[int]): A list of data sizes corresponding to each axon.
 
     Returns:
         List[float]: A list of scaled rewards for each axon.
     """
-    sorted_axon_times = get_sorted_response_times(uids, responses, timeout=timeout)
+    max_time = max(
+        [
+            response.dendrite.process_time for response in responses
+            if response.dendrite.process_time is not None
+        ]
+    )
+
+    sorted_axon_times = get_sorted_response_times(uids, responses, max_time=max_time)
 
     # Extract only the process times
     process_times = [proc_time for _, proc_time in sorted_axon_times]
@@ -161,7 +168,7 @@ def scale_rewards(
     data_size_scaled_rewards = rewards.to(device) * normalized_log_data_sizes.to(device)
 
     # Normalize the response times
-    normalized_times = sigmoid_normalize(process_times, timeout)
+    normalized_times = sigmoid_normalize(process_times, max_time)
 
     # Create a dictionary mapping UIDs to normalized times
     uid_to_normalized_time = {
@@ -191,7 +198,6 @@ def apply_reward_scores(
     responses,
     rewards,
     data_sizes: List[float],
-    timeout: float,
 ):
     """
     Adjusts the moving average scores for a set of UIDs based on their response times and reward values.
@@ -203,7 +209,6 @@ def apply_reward_scores(
         responses (List[Response]): A list of response objects received from the nodes.
         rewards (torch.FloatTensor): A tensor containing the computed reward values.
         data_sizes (List[float]): The size of each data piece used for the forward pass.
-        timeout (float): The timeout value used for response time calculations.
     """
     if self.config.neuron.verbose:
         bt.logging.debug(f"Applying rewards: {rewards}")
@@ -215,7 +220,6 @@ def apply_reward_scores(
         uids,
         responses,
         rewards,
-        timeout=timeout,
         data_sizes=data_sizes,
         device=self.device,
     )
