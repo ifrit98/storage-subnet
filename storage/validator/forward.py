@@ -104,7 +104,7 @@ async def forward(self):
         bt.logging.info("initiating TTL purge for expired keys")
         await purge_expired_ttl_keys(self.database)
 
-    if self.step % 720 == 0 and self.step > 0:
+    if current_epoch % 3 == 0 and self.step > 0:
         bt.logging.info("initiating compute stats")
         await compute_all_tiers(self.database)
 
