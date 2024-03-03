@@ -18,7 +18,7 @@
 
 import bittensor as bt
 from substrateinterface import SubstrateInterface
-from storage.shared.utils import check_registration
+from storage.shared.checks import check_registration
 from .utils import update_storage_stats
 
 
