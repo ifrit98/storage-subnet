@@ -38,7 +38,7 @@ from storage.validator.utils import (
     get_current_validtor_uid_round_robin,
     get_rebalance_script_path,
 )
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import (
     should_checkpoint,
@@ -125,12 +125,7 @@ class neuron:
         self.wallet.create_if_non_existent()
 
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
