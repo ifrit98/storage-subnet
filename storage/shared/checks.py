@@ -3,6 +3,7 @@ import time
 import asyncio
 import re
 import os
+import bittensor as bt
 from redis import asyncio as aioredis
 
 
