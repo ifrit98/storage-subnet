@@ -29,7 +29,7 @@ import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
 from storage.validator.config import config, check_config, add_args
@@ -108,12 +108,7 @@ class neuron:
         self.wallet.create_if_non_existent()
 
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
