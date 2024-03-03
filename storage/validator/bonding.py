@@ -224,7 +224,7 @@ async def update_statistics(
     # Update the total successes that we rollover every epoch
     if await database.hget(stats_key, "total_successes") is None:
         store_successes = await database.hget(stats_key, "store_successes")
-        if store_succeses is None:
+        if store_successes is None:
             store_successes = 0
             database.hset(stats_key, "store_successes", 0) # ensure field exists
         else:
