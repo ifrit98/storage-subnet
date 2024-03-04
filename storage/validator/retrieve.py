@@ -247,7 +247,6 @@ async def retrieve_data(
         responses=[response_tuple[0] for response_tuple in response_tuples],
         rewards=rewards,
         data_sizes=data_sizes,
-        timeout=60,
     )
 
     # Determine the best UID based on rewards
@@ -337,7 +336,6 @@ async def retrieve_broadband(self, full_hash: str):
             responses=responses,
             rewards=rewards,
             data_sizes=[chunk_size * len(responses)],
-            timeout=60,
         )
 
         # Determine the best UID based on rewards

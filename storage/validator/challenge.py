@@ -248,7 +248,6 @@ async def challenge_data(self):
         responses=responses,
         rewards=rewards,
         data_sizes=data_sizes,
-        timeout=30,
     )
 
     # Determine the best UID based on rewards
