@@ -59,6 +59,7 @@ __spec_version__ = version.to_spec_version()
 from . import protocol
 from . import validator
 from . import miner
+from . import plot
 from . import cli
 from .api.store import StoreUserAPI
 from .api.retrieve import RetrieveUserAPI
