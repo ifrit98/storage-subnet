@@ -83,6 +83,7 @@ def plot_scatter_data(df, y_column, title):
     ax.set_title(title)
     ax.legend(markerscale=2)
     plt.savefig(f"{y_column}_over_time_scatter.png")
+    print(f"Scatter plot saved as {y_column}_over_time_scatter.png")
 
 def plot_3d_scatter_data(df, y_column, title):
     """Plot specified column over blocks as a 3D scatter plot, with UIDs on another axis."""
@@ -107,6 +108,7 @@ def plot_3d_scatter_data(df, y_column, title):
     ax.set_yticklabels(list(uid_to_y.keys()))
     ax.legend()
     plt.savefig(f"{y_column}_over_time_3D.png")
+    print("3D scatter plot saved as", f"{y_column}_over_time_3D.png")
 
 def plot_3d_scatter_data_interactive(df, y_column, title):
     """Generate an interactive 3D scatter plot of the specified column over blocks."""
@@ -186,3 +188,4 @@ def plot_heatmap_ma_scores(df):
     plt.xlabel('Block Index')
     plt.ylabel('UID')
     plt.savefig("moving_averaged_scores_heatmap.png")
+    print("Heatmap of moving averaged scores saved as moving_averaged_scores_heatmap.png")

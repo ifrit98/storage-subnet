@@ -1,3 +1,5 @@
+import argparse
+
 from storage.plot.utils import (
     load_event_dataframe,
     preprocess_data_for_plotting,
