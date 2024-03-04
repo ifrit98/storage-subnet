@@ -145,8 +145,13 @@ def set_weights_for_validator(
 
     if success is True:
         bt.logging.info("Set weights on chain successfully!")
+        best_idx = torch.argmax(torch.tensor(uint_weights)).item()
+        bt.logging.debug(f"Best index in set weights: {best_idx}")
 
-        best_uid = uint_uids[uint_weights.argmax()]
+        best_uid = uint_uids[best_idx]
+        bt.logging.debug(f"Best UID in set weights: {best_uid}")
+        bt.logging.debug(f"Best weight in set weights: {uint_weights[best_idx]}")
+
         event = EventSchema(
             task_name="SetWeights",
             successful=[],
@@ -157,7 +162,7 @@ def set_weights_for_validator(
             uids=uint_uids,
             step_length=0.0,
             best_uid=best_uid,
-            best_hotkey=metagraph.hotkeys.index(best_uid),
+            best_hotkey=metagraph.hotkeys[best_uid],
             rewards=[],
             set_weights=uint_weights,
         )
