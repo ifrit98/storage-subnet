@@ -23,6 +23,7 @@ import bittensor as bt
 from bittensor import Synapse
 from typing import Union, List
 from functools import partial
+from pprint import pformat
 
 from storage.validator.verify import (
     verify_store_with_seed,
@@ -281,6 +282,20 @@ async def create_reward_vector(
     else:
         raise ValueError(f"Invalid synapse type: {type(synapse)}")
 
+    times = [
+        response.dendrite.process_time or synapse.timeout
+        for response in responses
+    ]
+    bt.logging.debug(f"Dendrite Times: {times}")
+    sorted_times = sorted(list(zip(uids, times)), key=lambda x: x[1])
+
+    bt.logging.debug(f"Sorted Times: {sorted_times}")
+    in_top_2_dict = {
+        uid: True if time < synapse.timeout else False
+        for (uid, time) in sorted_times[:2]
+    }
+    bt.logging.debug(f"Is Top 2 Dict: {pformat(in_top_2_dict)}")
+
     for idx, (uid, response) in enumerate(zip(uids, responses)):
         # Verify the commitment
         hotkey = self.metagraph.hotkeys[uid]
@@ -307,7 +322,9 @@ async def create_reward_vector(
         )
 
         # Apply reward for this task
-        tier_factor = await get_tier_factor(hotkey, self.database)
+        tier_factor = await get_tier_factor(
+            hotkey, self.database, in_top_2=in_top_2_dict.get(uid, False)
+        )
         rewards[idx] = 1.0 * tier_factor if success else failure_reward * tier_factor
 
         event.successful.append(success)

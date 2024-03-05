@@ -306,7 +306,7 @@ async def compute_all_tiers(database: aioredis.Redis):
     await rollover_storage_stats(database)
 
 
-async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
+async def get_tier_factor(ss58_address: str, database: aioredis.Redis, in_top_2: bool = False) -> float:
     """
     Retrieves the reward factor based on the tier of a given miner.
     This function returns a factor that represents the proportion of rewards a miner
@@ -314,17 +314,28 @@ async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
     Args:
         ss58_address (str): The unique address (hotkey) of the miner.
         database (redis.Redis): The Redis client instance for database operations.
+        in_top_3 (bool): Whether the miner is in the top 3 tiers. Defaults to False.
     Returns:
         float: The reward factor corresponding to the miner's tier.
     """
     tier = await database.hget(f"stats:{ss58_address}", "tier")
-    if tier == b"Super Saiyan":
-        return SUPER_SAIYAN_TIER_REWARD_FACTOR
-    elif tier == b"Diamond":
-        return DIAMOND_TIER_REWARD_FACTOR
-    elif tier == b"Gold":
-        return GOLD_TIER_REWARD_FACTOR
-    elif tier == b"Silver":
-        return SILVER_TIER_REWARD_FACTOR
-    else:
+
+    if tier is None:
         return BRONZE_TIER_REWARD_FACTOR
+
+    if tier == b"Super Saiyan":
+        factor = SUPER_SAIYAN_TIER_REWARD_FACTOR
+    elif tier == b"Diamond":
+        factor = DIAMOND_TIER_REWARD_FACTOR
+    elif tier == b"Gold":
+        factor = GOLD_TIER_REWARD_FACTOR
+    elif tier == b"Silver":
+        factor = SILVER_TIER_REWARD_FACTOR
+    else:
+        factor = BRONZE_TIER_REWARD_FACTOR
+
+    # Boost the factor for the top 3 tiers by x% given their current tier
+    if in_top_2:
+        factor *= TIER_BOOSTS[tier]
+
+    return factor

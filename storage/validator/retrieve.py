@@ -162,6 +162,20 @@ async def retrieve_data(
         len(response_tuples), dtype=torch.float32
     ).to(self.device)
 
+    times = [
+        response.dendrite.process_time or 60
+        for response, _, _ in response_tuples
+    ]
+    bt.logging.debug(f"Dendrite Times: {times}")
+    sorted_times = sorted(list(zip(uids, times)), key=lambda x: x[1])
+
+    bt.logging.debug(f"Sorted Times: {sorted_times}")
+    in_top_2_dict = {
+        uid: True if time < 60 else False
+        for (uid, time) in sorted_times[:2]
+    }
+    bt.logging.debug(f"Is Top 2 Dict: {pformat(in_top_2_dict)}")
+
     decoded_data = b""
     data_sizes = []
     for idx, (uid, (response, data_hash, seed)) in enumerate(
@@ -177,7 +191,7 @@ async def retrieve_data(
         data_sizes.append(sys.getsizeof(response.data))
 
         # Get the tier factor for this miner to determine the total reward
-        tier_factor = await get_tier_factor(hotkey, self.database)
+        tier_factor = await get_tier_factor(hotkey, self.database, in_top_2=in_top_2_dict.get(uid, False))
         try:
             decoded_data = base64.b64decode(response.data)
         except Exception as e:
