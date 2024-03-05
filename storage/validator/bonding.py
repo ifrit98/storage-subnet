@@ -61,69 +61,18 @@ async def reset_storage_stats(stats_key: str, database: aioredis.Redis):
         ss58_address (str): The unique address (hotkey) of the miner.
         database (redis.Redis): The Redis client instance for database operations.
     """
-    stats = await database.hgetall(stats_key)
-    tier = stats.get(b"tier", b"Bronze").decode()
-    # Set min wilson score for each tier to preserve tier and can drop/go up from there based on future behavior
-    if tier == "Super Saiyan":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 7,
-                "store_successes": 7,
-                "challenge_successes": 8,
-                "challenge_attempts": 8,
-                "retrieve_successes": 8,
-                "retrieve_attempts": 8,
-            },
-        )
-    elif tier == "Diamond":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 3,
-                "store_successes": 3,
-                "challenge_successes": 3,
-                "challenge_attempts": 3,
-                "retrieve_successes": 3,
-                "retrieve_attempts": 3,
-            },
-        )
-    elif tier == "Gold":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 2,
-                "store_successes": 2,
-                "challenge_successes": 2,
-                "challenge_attempts": 2,
-                "retrieve_successes": 1,
-                "retrieve_attempts": 1,
-            },
-        )
-    elif tier == "Silver":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 1,
-                "store_successes": 1,
-                "challenge_successes": 1,
-                "challenge_attempts": 1,
-                "retrieve_successes": 0,
-                "retrieve_attempts": 0,
-            },
-        )
-    else:  # Bronze
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 0,
-                "store_successes": 0,
-                "challenge_successes": 0,
-                "challenge_attempts": 0,
-                "retrieve_successes": 0,
-                "retrieve_attempts": 0,
-            },
-        )
+    # Hard reset statistics
+    await database.hmset(
+        stats_key,
+        {
+            "store_attempts": 0,
+            "store_successes": 0,
+            "challenge_successes": 0,
+            "challenge_attempts": 0,
+            "retrieve_successes": 0,
+            "retrieve_attempts": 0,
+        },
+    )
 
 
 async def rollover_storage_stats(database: aioredis.Redis):
