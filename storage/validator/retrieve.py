@@ -164,7 +164,7 @@ async def retrieve_data(
 
     times = [
         response.dendrite.process_time or 60
-        for response in responses
+        for response, _, _ in response_tuples
     ]
     bt.logging.debug(f"Dendrite Times: {times}")
     sorted_times = sorted(list(zip(uids, times)), key=lambda x: x[1])
@@ -191,7 +191,7 @@ async def retrieve_data(
         data_sizes.append(sys.getsizeof(response.data))
 
         # Get the tier factor for this miner to determine the total reward
-        tier_factor = await get_tier_factor(hotkey, self.database, in_top_2=in_top_2_dict(uid, False))
+        tier_factor = await get_tier_factor(hotkey, self.database, in_top_2=in_top_2_dict.get(uid, False))
         try:
             decoded_data = base64.b64decode(response.data)
         except Exception as e:
