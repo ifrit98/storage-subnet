@@ -48,6 +48,7 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
+    log_event,
 )
 from storage.validator.weights import (
     set_weights_for_validator,
@@ -280,7 +281,7 @@ class neuron:
                 )
                 if validator_should_set_weights:
                     bt.logging.debug(f"Setting weights {self.moving_averaged_scores}")
-                    set_weights_for_validator(
+                    event = set_weights_for_validator(
                         subtensor=self.subtensor,
                         wallet=self.wallet,
                         metagraph=self.metagraph,
@@ -290,6 +291,9 @@ class neuron:
                     )
                     prev_set_weights_block = get_current_block(self.subtensor)
                     save_state(self)
+
+                    if event is not None:
+                        log_event(self, event)
 
                 # Rollover wandb to a new run.
                 if should_reinit_wandb(self):
