@@ -26,3 +26,11 @@ SUPER_SAIYAN_WILSON_SCORE = 0.88
 DIAMOND_WILSON_SCORE = 0.77
 GOLD_WILSON_SCORE = 0.66
 SILVER_WILSON_SCORE = 0.55
+
+TIER_BOOSTS = {
+    b"Super Saiyan": 1.02, # 2%  -> 1.02
+    b"Diamond": 1.05,      # 5%  -> 0.945
+    b"Gold": 1.1,          # 10% -> 0.88
+    b"Silver": 1.15,       # 15% -> 0.805
+    b"Bronze": 1.2,        # 20% -> 0.72
+}
