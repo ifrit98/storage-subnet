@@ -177,7 +177,7 @@ async def challenge_data(self):
     )
 
     times = [
-        response[0].dendrite.process_time or 30
+        response[1].dendrite.process_time or 30
         for response in responses
     ]
     bt.logging.debug(f"Dendrite Times: {times}")
