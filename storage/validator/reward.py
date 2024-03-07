@@ -149,7 +149,7 @@ def scale_rewards(
         [
             response.dendrite.process_time for response in responses
             if response.dendrite.process_time is not None
-        ]
+        ] or [1] # nobody responded successfully
     )
 
     sorted_axon_times = get_sorted_response_times(uids, responses, max_time=max_time)
