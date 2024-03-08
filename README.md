@@ -909,6 +909,9 @@ Run a validator using `pm2`:
 pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/user/miniconda3/envs/sn21/bin/python --name validator -- --netuid 21 --logging.debug --wallet.name default --wallet.hotkey validator
 ```
 
+> Note: It is imperative to specify the env var for the absolute path to `rebalance_deregistration.sh` script for rebalancing data appropriately on the network. This can be done by `.env` file or explicitly by exporting the path
+
+
 #### Options
 
 - `--neuron.name`: Specifies the name of the validator neuron. Default: "core_storage_validator".
@@ -939,11 +942,19 @@ These options allow you to fine-tune the behavior, storage, and network interact
 > Note: Challenge data lives by default for 5000 blocks in the validator index. This means after 7 days the data is removed and is no longer queried by the validator. This allows miners to recover who have lost challenge data
 
 ### Running the API
-Similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered hotkey on SN21. You can gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
+
+Running an API node at `neurons.api.py` allows you to create an entry node into the FileTao network for storing data. This can be connected to a back-end service, or used similarly to an IPFS node as an entrypoint for public use.
+
+It is important to run an API to improve decentralization of the network and allow for a greater surface area of queryable nodes for end users.
+
+This is similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered validator hotkey on SN21. Miners cannot run an API node. You may gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is also possible to whitelist all hotkeys and allow data to be stored from any bittensor wallet, regardless of registration status by using the `--api.open_access` flag. 
+
+It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
 
 ```bash
 python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
+> Note: this *must* be the same validator wallet used for running your validator. Miners cannot run an API node.
 
 #### Options
 
@@ -954,6 +965,8 @@ python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 - `--api.ping_timeout`: The timeout (in seconds) for ping data queries. This is the time allowed for a ping operation before it times out. Useful for checking network latency and availability. Default: 2 seconds.
 
 - `--api.whitelisted_hotkeys`: A list of whitelisted hotkeys. Only these hotkeys will be allowed to interact with the API. Default: [] (empty list, meaning no restrictions unless specified).
+
+- `--api.open_access`: This flag completely whitelists all hotkeys and exposes the endpoint to the any hotkey, regardless of registration status. *USE WITH CAUTION*
 
 These options are crucial for managing the behavior and security of your API interactions. The timeouts ensure that operations do not hang indefinitely, while the whitelisted hotkeys provide a mechanism to restrict access to trusted entities. Adjust these settings based on your operational requirements and security considerations.
 
