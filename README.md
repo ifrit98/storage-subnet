@@ -911,6 +911,12 @@ pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/use
 
 > Note: It is imperative to specify the env var for the absolute path to `rebalance_deregistration.sh` script for rebalancing data appropriately on the network. This can be done by `.env` file or explicitly by exporting the path
 
+For example,
+```bash
+REBALANCE_SCRIPT_PATH=/home/user/storage-subnet/scripts/rebalance_deregistration.sh
+```
+
+This way you are able to run your process from anywhere and not rely on relative path resolution to ensure proper functioning of the validator.
 
 #### Options
 
