@@ -50,11 +50,11 @@ If no filepath is provided, the script will attempt to load the default event lo
 
 ## Examples of Generated Visualizations
 
-- **Interactive Map of Rewards by Task**: ![Interactive Map of Rewards by Task](assets/31426574/ed3cd70f-f963-4fdb-8b06-5dfc1b78c7ce)
+- **Interactive Map of Rewards by Task**: ![Interactive Map of Rewards by Task](https://github.com/ifrit98/storage-subnet/assets/31426574/ed3cd70f-f963-4fdb-8b06-5dfc1b78c7ce)
 
-- **Interactive Map of Completion Time by Task**: ![Interactive Map of Completion Time by Task](assets/31426574/b1e68a61-9df8-411a-8653-3993e07e616e)
+- **Interactive Map of Completion Time by Task**: ![Interactive Map of Completion Time by Task](https://github.com/ifrit98/storage-subnet/assets/31426574/b1e68a61-9df8-411a-8653-3993e07e616e)
 
-- **Heatmap of Moving Averaged Scores**: ![Heatmap of Moving Averaged Scores](assets/31426574/e0b3dd55-1347-4cd6-afbe-3bac0af1c436)
+- **Heatmap of Moving Averaged Scores**: ![Heatmap of Moving Averaged Scores](https://github.com/ifrit98/storage-subnet/assets/31426574/e0b3dd55-1347-4cd6-afbe-3bac0af1c436)
 
 ## Conclusion
 
