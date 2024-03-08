@@ -17,47 +17,53 @@ Currently supporting `python>=3.9,<3.11`.
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
 # Table of Contents for Subnet 21 (FileTAO)
-
-1. [FileTAO](#FileTAO)
-1. [Installation](#installation)
+1. [FileTAO Overview](#filetao)
+2. [Installation](#installation)
    - [Install Redis](#install-redis)
+   - [Secure Redis Configuration](#secure-redis-configuration)
+     - [Close external traffic to Redis](#close-external-traffic-to-redis)
+     - [Automated Redis Password Configuration](#automated-redis-password-configuration)
+     - [Enable persistence](#enable-persistence)
+     - [Redis Troubleshooting](#redis-troubleshooting)
    - [Install PM2](#install-pm2)
-1. [Storage API](#storage-api)
-1. [Storage CLI Interface](#storage-cli-interface)
-   - [Overview](#overview)
+3. [Storage API](#storage-api)
+   - [Using API Wrappers](#using-api-wrappers)
+   - [Using SubnetsAPI](#using-subnetsapi)
+   - [API Storing Data](#api-storing-data)
+   - [API Retrieving Data](#api-retrieving-data)
+4. [Storage CLI Interface](#storage-cli-interface)
    - [Prerequisites](#prerequisites)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
      - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
      - [Listing Stored Data](#listing-stored-data)
    - [Examples](#examples)
-   - [General Options](#general-options)
-   - [Notes](#notes)
-1. [Miner Stats](#miner-stats)
-1. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
+   - [Miner Statistics](#miner-statistics)
+5. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
    - [Role of a Miner (Prover)](#role-of-a-miner-prover)
    - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
-1. [Main Features of Subnet 21](#main-features-of-subnet-21)
+6. [Main Features of Subnet 21](#main-features-of-subnet-21)
    - [Zero-Knowledge Proof of Space-Time System](#zero-knowledge-proof-of-space-time-system)
    - [Chained Proof Challenges](#chained-proof-challenges)
    - [Data Encryption and Zero-Knowledge Proofs for Privacy Preservation](#data-encryption-and-zero-knowledge-proofs-for-privacy-preservation)
    - [Scalability and Reliability](#scalability-and-reliability)
    - [Advanced Cryptographic Techniques](#advanced-cryptographic-techniques)
    - [User-Centric Approach](#user-centric-approach)
-1. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
+7. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
    - [Storage Phase](#storage-phase)
    - [Challenge Phase](#challenge-phase)
    - [Retrieval Phase](#retrieval-phase)
-1. [Reward System](#reward-system)
-1. [Epoch UID Selection](#epoch-uid-selection)
-1. [Running FileTao](#running-filetao)
-   - [Running a Miner](#running-a-miner)
-   - [Running a Validator](#running-a-validator)
-   - [Running the API](#running-the-api)
-   - [(Optional) Setup WandB](#setup-wandb)
-1. [Local Subtensor](#local-subtensor)
-1. [Database Migration](#database-schema-migration)
-1. [Disable RDB](#disable-rdb)
+8. [Reward System](#reward-system)
+   - [Speed and Reliability in Decentralized Storage Mining](#speed-and-reliability-in-decentralized-storage-mining)
+9. [Epoch UID Selection](#epoch-uid-selection)
+10. [Running FileTAO](#running-filetao)
+    - [Running a Miner](#running-a-miner)
+    - [Running a Validator](#running-a-validator)
+    - [Running the API](#running-the-api)
+    - [Setup WandB](#setup-wandb)
+11. [Local Subtensor](#local-subtensor)
+12. [Database Schema Migration](#database-schema-migration)
+13. [Disable RDB](#disable-rdb)
 
 
 ## Installation
@@ -216,7 +222,34 @@ sudo npm install pm2 -g
 ```
 
 ## Storage API
-In addition to the command-line interface, FileTao can be accessed via the bittensor subnets python API.
+### Using API Wrappers
+There are two high-level wrapper functions that allow easy access to FileTao's storage mechanism through bittensor abstractions, `store` and `retrieve`.
+
+It's as convenient as importing, preparing data, and firing away:
+```python
+import random
+import bittensor as bt
+from storage.api import store, retrieve
+
+# Store data
+wallet = bt.wallet()
+subtensor = bt.subtensor()
+
+data = b"Some bytestring data!"
+cid, hotkeys = await store(data, wallet, subtensor, netuid=22)
+print("Stored {} with {} hotkeys".format(cid, hotkeys))
+> Stored bafkreid6mhmfptdpfvljyavss77zmo6b2oert2pula2gy4tosekupm4nqa with validator hotkeys [5CaFuijc2ucdoWhkjLaYgnzYrpv62KGt1fWWtUxhFHXPA3KK, 5FKwbwguHU1SVQiGot5YKSTQ6fWGVv2wRHFrWfwp9X9nWbyU]
+```
+
+Now you can retrieve the data using the content identifier `CID` and the `hotkey`s directly:
+```python
+data = await retrieve(cid, wallet, subtensor, netuid=22, hotkeys=hotkeys)
+print(data)
+> b"Some bytestring data!"
+```
+
+### Using SubnetsAPI 
+In addition to the convenience wrappers and command-line interface, FileTao can be accessed via the bittensor subnets python API.
 
 The subnets API requires two abstract functions to be implemented: `prepare_synapse`, and `process_responses`. This allows for all subnets to be queried through exposed axons, typically on the validator side.
 
