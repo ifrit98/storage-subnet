@@ -229,9 +229,6 @@ class neuron:
             if isinstance(decoded_data, str)
             else decoded_data
         )
-        validator_encrypted_data, validator_encryption_payload = encrypt_data(
-            decoded_data, self.encryption_wallet
-        )
 
         # Hash the original data to avoid data confusion
         content_id = generate_cid_string(decoded_data)
@@ -241,6 +238,10 @@ class neuron:
             bt.logging.warning(f"Hash {content_id} already exists on the network.")
             synapse.data_hash = content_id
             return synapse
+
+        validator_encrypted_data, validator_encryption_payload = encrypt_data(
+            decoded_data, self.encryption_wallet
+        )
 
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)

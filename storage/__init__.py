@@ -61,6 +61,4 @@ from . import validator
 from . import miner
 from . import plot
 from . import cli
-from .api.store import StoreUserAPI
-from .api.retrieve import RetrieveUserAPI
-from .api.get_query_axons import get_query_api_axons
+from . import api

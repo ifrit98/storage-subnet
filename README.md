@@ -216,7 +216,34 @@ sudo npm install pm2 -g
 ```
 
 ## Storage API
-In addition to the command-line interface, FileTao can be accessed via the bittensor subnets python API.
+### Using API Wrappers
+There are two high-level wrapper functions that allow easy access to FileTao's storage mechanism through bittensor abstractions, `store` and `retrieve`.
+
+It's as convenient as importing, preparing data, and firing away:
+```python
+import random
+import bittensor as bt
+from storage.api import store, retrieve
+
+# Store data
+wallet = bt.wallet()
+subtensor = bt.subtensor()
+
+data = b"Some bytestring data!"
+cid, hotkeys = await store(data, wallet, subtensor, netuid=22)
+print("Stored {} with {} hotkeys".format(cid, hotkeys))
+> Stored bafkreid6mhmfptdpfvljyavss77zmo6b2oert2pula2gy4tosekupm4nqa with validator hotkeys [5CaFuijc2ucdoWhkjLaYgnzYrpv62KGt1fWWtUxhFHXPA3KK, 5FKwbwguHU1SVQiGot5YKSTQ6fWGVv2wRHFrWfwp9X9nWbyU]
+```
+
+Now you can retrieve the data using the content identifier `CID` and the `hotkey`s directly:
+```python
+data = await retrieve(cid, wallet, subtensor, netuid=22, hotkeys=hotkeys)
+print(data)
+> b"Some bytestring data!"
+```
+
+### Using SubnetsAPI 
+In addition to the convenience wrappers and command-line interface, FileTao can be accessed via the bittensor subnets python API.
 
 The subnets API requires two abstract functions to be implemented: `prepare_synapse`, and `process_responses`. This allows for all subnets to be queried through exposed axons, typically on the validator side.
 
