@@ -30,6 +30,7 @@ from copy import deepcopy
 from pprint import pformat
 from traceback import print_exception
 from substrateinterface.base import SubstrateInterface
+from dotenv import load_dotenv
 
 from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
@@ -55,6 +56,8 @@ from storage.validator.weights import (
 )
 from storage.validator.forward import forward
 from storage.validator.encryption import setup_encryption_wallet
+
+load_dotenv()
 
 
 def MockDendrite():
