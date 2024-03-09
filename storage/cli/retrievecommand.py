@@ -148,7 +148,7 @@ class RetrieveData:
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    async def _run(cli, sub: "bt.subtensor", outpath: str, wallet: "bt.wallet", hotkeys: List[str] = None):
+    async def _run(cli, sub: "bittensor.subtensor", outpath: str, wallet: "bittensor.wallet", hotkeys: List[str] = None):
         r"""Retrieve data from the Bittensor network for the given data_hash."""
 
         success = False

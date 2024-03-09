@@ -159,7 +159,7 @@ class StoreData:
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    async def _run(cli, raw_data: bytes, subtensor: "bt.subtensor", wallet: "bt.wallet", hash_filepath: str):
+    async def _run(cli, raw_data: bytes, subtensor: "bittensor.subtensor", wallet: "bittensor.wallet", hash_filepath: str):
         r"""Store data from local disk on the Bittensor network."""
 
         success = False
