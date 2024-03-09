@@ -63,7 +63,7 @@ def get_hash_mapping(hash_file, filename):
         return None
 
 
-def save_hash_mapping(hash_file, filename, data_hash):
+def save_hash_mapping(hash_file: str, filename: str, data_hash: str, hotkeys: List[str]):
     base_dir = os.path.basename(hash_file)
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
@@ -75,6 +75,7 @@ def save_hash_mapping(hash_file, filename, data_hash):
         hashes = {}
 
     hashes[filename] = data_hash
+    hashes[filename + "_hotkeys"] = hotkeys
 
     with open(hash_file, "w") as file:
         json.dump(hashes, file)
@@ -184,7 +185,7 @@ class StoreData:
         if success:
             # Save hash mapping after successful storage
             filename = os.path.basename(cli.config.filepath)
-            save_hash_mapping(hash_filepath, filename=filename, data_hash=data_hash)
+            save_hash_mapping(hash_filepath, filename=filename, data_hash=data_hash, hotkeys=stored_hotkeys)
             bittensor.logging.info(
                 f"Stored {filename} on the Bittensor network with CID {data_hash}"
             )
