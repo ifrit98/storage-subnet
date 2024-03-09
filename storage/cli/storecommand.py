@@ -121,7 +121,7 @@ class StoreData:
     """
 
     @staticmethod
-    def run(cli):
+    async def run(cli):
         r"""Store data from local disk on the Bittensor network."""
 
         wallet = bittensor.wallet(
@@ -151,22 +151,20 @@ class StoreData:
         try:
             sub = bittensor.subtensor(network=cli.config.subtensor.network)
             bittensor.logging.debug("subtensor:", sub)
-            StoreData._run(cli, raw_data, sub, wallet, hash_filepath)
+            await StoreData._run(cli, raw_data, sub, wallet, hash_filepath)
         finally:
             if "sub" in locals():
                 sub.close()
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    def _run(cli, raw_data: bytes, subtensor: "bt.subtensor", wallet: "bt.wallet", hash_filepath: str):
+    async def _run(cli, raw_data: bytes, subtensor: "bt.subtensor", wallet: "bt.wallet", hash_filepath: str):
         r"""Store data from local disk on the Bittensor network."""
 
-        def run_async():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        success = False
+        with bittensor.__console__.status(":satellite: Storing data..."):
 
-            async def run_store():
-                coro = store(
+            data_hash, stored_hotkeys = await store(
                     data=raw_data,
                     wallet=wallet,
                     subtensor=subtensor,
@@ -176,17 +174,6 @@ class StoreData:
                     encoding=cli.config.encoding,
                     timeout=cli.config.timeout,
                 )
-
-                return await asyncio.gather(coro)
-
-            return loop.run_until_complete(run_store()) 
-
-        success = False
-        with bittensor.__console__.status(":satellite: Storing data..."):
-
-            result = run_async()
-
-            data_hash, stored_hotkeys = result[0]
 
             if len(stored_hotkeys) > 0:
                 bittensor.logging.info(
