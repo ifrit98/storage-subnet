@@ -50,11 +50,9 @@ from storage.validator.state import (
     init_wandb,
     log_event,
 )
-from storage.validator.weights import (
-    set_weights_for_validator,
-)
 from storage.validator.forward import forward
 from storage.validator.encryption import setup_encryption_wallet
+from storage.validator.run import run as run_validator
 
 
 def MockDendrite():
@@ -203,127 +201,7 @@ class neuron:
         self.last_purged_epoch = 0
 
     def run(self):
-        bt.logging.info("run()")
-
-        load_state(self)
-        checkpoint(self)
-
-        bt.logging.info("starting subscription handler")
-        self.run_subscription_thread()
-
-        try:
-            while 1:
-                start_epoch = time.time()
-
-                self.metagraph.sync(subtensor=self.subtensor)
-                prev_set_weights_block = self.metagraph.last_update[
-                    self.my_subnet_uid
-                ].item()
-
-                # --- Wait until next step epoch.
-                current_block = self.subtensor.get_current_block()
-                while current_block - self.prev_step_block < 3:
-                    # --- Wait for next block.
-                    time.sleep(1)
-                    current_block = self.subtensor.get_current_block()
-
-                time.sleep(5)
-                if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
-                    raise Exception(
-                        f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
-                    )
-
-                bt.logging.info(
-                    f"step({self.step}) block({get_current_block(self.subtensor)})"
-                )
-
-                # Run multiple forwards.
-                async def run_forward():
-                    coroutines = [
-                        forward(self)
-                        for _ in range(self.config.neuron.num_concurrent_forwards)
-                    ]
-                    await asyncio.gather(*coroutines)
-
-                self.loop.run_until_complete(run_forward())
-
-                # Init wandb.
-                if not self.config.wandb.off and self.wandb is not None:
-                    bt.logging.debug("loading wandb")
-                    init_wandb(self)
-
-                # Resync the network state
-                bt.logging.info("Checking if should checkpoint")
-                current_block = get_current_block(self.subtensor)
-                should_checkpoint_validator = should_checkpoint(
-                    current_block,
-                    self.prev_step_block,
-                    self.config.neuron.checkpoint_block_length,
-                )
-                bt.logging.debug(
-                    f"should_checkpoint() params: (current block) {current_block} (prev block) {self.prev_step_block} (checkpoint_block_length) {self.config.neuron.checkpoint_block_length}"
-                )
-                bt.logging.debug(f"should checkpoint ? {should_checkpoint_validator}")
-                if should_checkpoint_validator:
-                    bt.logging.info("Checkpointing...")
-                    checkpoint(self)
-
-                # Set the weights on chain.
-                bt.logging.info("Checking if should set weights")
-                validator_should_set_weights = should_set_weights(
-                    get_current_block(self.subtensor),
-                    prev_set_weights_block,
-                    360,  # tempo
-                    self.config.neuron.disable_set_weights,
-                )
-                bt.logging.debug(
-                    f"Should validator check weights? -> {validator_should_set_weights}"
-                )
-                if validator_should_set_weights:
-                    bt.logging.debug(f"Setting weights {self.moving_averaged_scores}")
-                    event = set_weights_for_validator(
-                        subtensor=self.subtensor,
-                        wallet=self.wallet,
-                        metagraph=self.metagraph,
-                        netuid=self.config.netuid,
-                        moving_averaged_scores=self.moving_averaged_scores,
-                        wandb_on=self.config.wandb.on,
-                    )
-                    prev_set_weights_block = get_current_block(self.subtensor)
-                    save_state(self)
-
-                    if event is not None:
-                        log_event(self, event)
-
-                # Rollover wandb to a new run.
-                if should_reinit_wandb(self):
-                    bt.logging.info("Reinitializing wandb")
-                    reinit_wandb(self)
-
-                self.prev_step_block = get_current_block(self.subtensor)
-                if self.config.neuron.verbose:
-                    bt.logging.debug(f"block at end of step: {self.prev_step_block}")
-                    bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
-                self.step += 1
-
-        except Exception as err:
-            bt.logging.error("Error in training loop", str(err))
-            bt.logging.debug(print_exception(type(err), err, err.__traceback__))
-
-        except KeyboardInterrupt:
-            if not self.config.wandb.off:
-                bt.logging.info(
-                    "KeyboardInterrupt caught, gracefully closing the wandb run..."
-                )
-                if self.wandb is not None:
-                    self.wandb.finish()
-
-        # After all we have to ensure subtensor connection is closed properly
-        finally:
-            if hasattr(self, "subtensor"):
-                bt.logging.debug("Closing subtensor connection")
-                self.subtensor.close()
-                self.stop_subscription_thread()
+        run_validator(self)
 
     def log(self, log: str):
         bt.logging.debug(log)
