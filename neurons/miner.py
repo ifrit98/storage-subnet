@@ -50,9 +50,7 @@ from storage.shared.utils import (
 
 from storage.shared.checks import check_environment, check_registration
 
-from storage.miner import (
-    run,
-)
+from storage.miner import run as run_miner
 
 from storage.miner.utils import (
     compute_subsequent_commitment,
@@ -954,7 +952,7 @@ class miner:
         return synapse
 
     def run(self):
-        run(self)
+        run_miner(self)
 
     def run_in_background_thread(self):
         """
