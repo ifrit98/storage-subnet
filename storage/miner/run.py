@@ -19,7 +19,8 @@
 import bittensor as bt
 from substrateinterface import SubstrateInterface
 from storage.shared.checks import check_registration
-from .utils import update_storage_stats
+from storage.shared.substrate import is_block_first_in_new_epoch
+from storage.miner.utils import update_storage_stats
 
 
 def run(self):
@@ -75,9 +76,7 @@ def run(self):
             f"Blocks since epoch: {(current_block + netuid + 1) % (tempo + 1)}"
         )
 
-        new_epoch = ((current_block + netuid + 1) % (tempo + 1) == 0)
-        if new_epoch:
-
+        if is_block_first_in_new_epoch(netuid, tempo, current_block):
             # --- Update the miner storage information periodically.
             update_storage_stats(self)
             bt.logging.debug("Storage statistics updated...")
