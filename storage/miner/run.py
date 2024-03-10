@@ -19,7 +19,7 @@
 import bittensor as bt
 from substrateinterface import SubstrateInterface
 from storage.shared.checks import check_registration
-from storage.shared.substrate import is_block_first_in_new_epoch
+from storage.shared.subtensor import is_block_first_in_new_epoch
 from storage.miner.utils import update_storage_stats
 
 
