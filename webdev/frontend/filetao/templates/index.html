@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home</title>
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <div class="top-bar">
+    <div class="nav-links">
+        {% if not request.session.token %}
+            <a href="{% url 'register' %}">Register</a>
+            <a href="{% url 'login' %}">Login</a>
+        {% else %}
+            <a href="{% url 'upload_file' %}">Upload File</a>
+            <a href="{% url 'retrieve_file' %}">Retrieve File</a>
+        {% endif %}
+    </div>
+    {% if request.session.token %}
+        <form action="{% url 'logout' %}" method="post">
+            {% csrf_token %}
+            <input type="submit" name="submit" value="Logout">
+        </form>
+        {% endif %}
+</div>
+    {% if request.session.username %}
+    <p>Welcome, {{ request.session.username }}: {{ request.session.token }}!</p>
+    {% else %}
+    <p>You are not logged in.</p>
+    {% endif %}
+</body>
+</html>

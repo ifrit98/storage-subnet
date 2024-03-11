@@ -44,6 +44,10 @@ retrieve_handler = RetrieveUserAPI(server_wallet)
 # OAuth2 and JWT Token Management
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+class UserInfo(BaseModel):
+    username: str
+    password: str
+
 # Managmeent of Passwords
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -70,7 +74,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        user = get_user(redis_db, username)
+        user = get_user(username)
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
@@ -79,7 +83,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 # User Registration Endpoint
 @app.post("/register/")
-async def register_user(username: str, password: str):
+async def register_user(user_info: UserInfo):
+    username=user_info.username
+    password=user_info.password
     if get_user(username) is not None:
         raise HTTPException(status_code=400, detail="Username already registered")
 
