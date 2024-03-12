@@ -32,7 +32,6 @@ Currently supporting `python>=3.9,<3.11`.
    - [API Storing Data](#api-storing-data)
    - [API Retrieving Data](#api-retrieving-data)
 4. [Storage CLI Interface](#storage-cli-interface)
-   - [Prerequisites](#prerequisites)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
      - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
@@ -222,6 +221,15 @@ sudo npm install pm2 -g
 ```
 
 ## Storage API
+
+There are three (3) main ways you can interact with the `FileTao` network to store and retrieve data. (4th coming soon through the website interface!):
+
+1. API Wrappers (python) - this is the most convenient way for developers to interact
+2. SubnetsAPI (lower-level python) - if you need more control over how you interface with FileTao
+3. FileTao CLI (command-line) - most convenient for non-developers just wanting to store files using the cli
+
+The following three sections will describe each of these in more detail.
+
 ### Using API Wrappers
 There are two high-level wrapper functions that allow easy access to FileTao's storage mechanism through bittensor abstractions, `store` and `retrieve`.
 
@@ -265,7 +273,6 @@ wallet = bt.wallet(name="sn21", hotkey="query")
 store = StoreUserAPI(wallet)
 ```
 
-### API Storing Data
 Here is a complete example to store data on `FileTao` programmatically.
 
 ```python
@@ -357,43 +364,42 @@ decoded_hash == expected_hash
 > True
 ```
 
-### Prerequisites
-Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+> Prerequisites: Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
 
 
-## Commands
+### Commands
 
-### 1. Store: Storing Data on the Network
+#### 1. Store: Storing Data on the Network
 This command encrypts and stores data on the Bittensor network.
 
-#### Subcommands
+##### Subcommands
 - `put`: Encrypt and store data.
 
-#### Usage
+##### Usage
 ```bash
 filetao store put --filepath <path-to-data> [options]
 ```
 
-#### Options
+##### Options
 - `--filepath <path-to-data>`: Path to the data file to be stored.
 - `--hash_basepath <path>`: (Optional) Path to store the data hashes.
 - `--stake_limit <float>`: (Optional) Stake limit to filter validator axons.
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 - `--wallet.hotkey <name>`: (Optional) Hotkey name.
 
-### 2. Retrieve: Retrieving Data from the Network
+#### 2. Retrieve: Retrieving Data from the Network
 This command retrieves previously stored data from the Bittensor network.
 
-#### Subcommands
+##### Subcommands
 - `list`: Lists all data associated with a specific coldkey.
 - `get`: Retrieve and decrypt data.
 
-#### Usage
+##### Usage
 ```bash
 filetao retrieve get --data_hash <hash> [options]
 ```
 
-#### Options
+##### Options
 - `--data_hash <hash>`: Hash of the data to retrieve.
 - `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
 - `--stake_limit <float>`: (Optional) Stake limit for validator axons.
@@ -401,31 +407,31 @@ filetao retrieve get --data_hash <hash> [options]
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 - `--wallet.hotkey <name>`: (Optional) Hotkey name.
 
-### Listing Stored Data
+#### Listing Stored Data
 Lists all data hashes stored on the network associated with the specified coldkey.
 
-#### Usage
+##### Usage
 ```bash
 filetao retrieve list [options]
 ```
 
-#### Options
+##### Options
 - `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 
-## Examples
+### Examples
 
-### Storing Data
+#### Storing Data
 ```bash
 filetao store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
-### Retrieving Data
+#### Retrieving Data
 ```bash
 filetao retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
-### Listing Data
+#### Listing Data
 ```bash
 filetao retrieve list --wallet.name mywallet
 ```
@@ -433,7 +439,7 @@ filetao retrieve list --wallet.name mywallet
 ![list](assets/list.png)
 
 
-## Miner statistics
+### Miner statistics
 
 If you are running a validator and have a locally running instance of Redis, you may use this command to view the miner statistics gathered. This command will display a list of all hotkeys and their associated statistics, such as `total successes`, `attempts` vs `successes` for each category, `tier`, `current storage`, and `total storage limit`.
 
@@ -442,11 +448,11 @@ filetao miner stats --index 0
 ```
 ![stats](assets/miner_stats.png)
 
-### Options
+#### Options
 - `--index <id>`: (Optional) Integer index of the Redis database (default: 0)
 
 
-### Notes
+#### Notes
 - Ensure your wallet is configured and accessible.
 - File paths should be absolute or relative to your current directory.
 - Data hashes are unique identifiers for your stored data on the Bittensor network.
