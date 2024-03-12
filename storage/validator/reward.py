@@ -161,15 +161,12 @@ def scale_rewards(
     bt.logging.trace(f"Unnormalized data sizes: {data_sizes}")
     log_data_sizes_np = np.log1p(data_sizes)
     bt.logging.trace(f"Logarithmically scaled data sizes: {log_data_sizes_np}")
-    log_data_sizes = torch.tensor(log_data_sizes_np)
-    normalized_log_data_sizes = log_data_sizes / torch.sum(log_data_sizes)
-    bt.logging.trace(f"Normalized data sizes: {normalized_log_data_sizes}")
 
-    # Scale initial rewards by normalized data sizes
-    data_size_scaled_rewards = rewards.to(device) * normalized_log_data_sizes.to(device)
+    # Normalize the response times by data size (unit time)
+    data_normalized_process_times = np.array(process_times) / log_data_sizes_np
 
     # Normalize the response times
-    normalized_times = sigmoid_normalize(process_times, max_time)
+    normalized_times = sigmoid_normalize(data_normalized_process_times, max(data_normalized_process_times))
 
     # Create a dictionary mapping UIDs to normalized times
     uid_to_normalized_time = {
@@ -179,8 +176,8 @@ def scale_rewards(
 
     # Scale the data size-scaled rewards with normalized times
     time_scaled_rewards = torch.tensor(
-        [
-            data_size_scaled_rewards[i] * uid_to_normalized_time[uid]
+        [   # tier reward * latency based normalized reward
+            rewards[i] * uid_to_normalized_time[uid]
             for i, uid in enumerate(uids)
         ]
     )
