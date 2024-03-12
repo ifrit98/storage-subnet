@@ -163,7 +163,7 @@ def scale_rewards(
     bt.logging.trace(f"Logarithmically scaled data sizes: {log_data_sizes_np}")
 
     # Normalize the response times by data size (unit time)
-    data_normalized_process_times = np.array(process_times) / log_data_sizes_np
+    data_normalized_process_times = np.asarray(np.array(process_times) / log_data_sizes_np)
 
     # Normalize the response times
     normalized_times = sigmoid_normalize(data_normalized_process_times, max(data_normalized_process_times))
