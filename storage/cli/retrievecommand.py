@@ -24,6 +24,7 @@ import argparse
 
 import storage
 from storage.validator.encryption import decrypt_data_with_private_key
+from storage.api.retrieve_api import retrieve
 
 import bittensor
 
@@ -95,7 +96,7 @@ class RetrieveData:
     """
 
     @staticmethod
-    def run(cli):
+    async def run(cli):
         r"""Retrieve data from the Bittensor network for the given data_hash."""
 
         wallet = bittensor.wallet(
@@ -122,90 +123,51 @@ class RetrieveData:
                 )
                 hashes_dict = list_all_hashes(hash_file)
                 bittensor.logging.debug(f"hashes dict: {hashes_dict}")
-                reverse_hashes_dict = {v: k for k, v in hashes_dict.items()}
+                reverse_hashes_dict = {v: k for k, v in hashes_dict.items() if "hotkeys" not in k}
                 if cli.config.cid in reverse_hashes_dict:
                     filename = reverse_hashes_dict[cli.config.cid]
                     outpath = os.path.join(base_outpath, filename)
                     bittensor.logging.debug(f"set filename: {filename}")
+                    hotkeys = hashes_dict[filename + "_hotkeys"]
+
         except Exception as e:
             bittensor.logging.warning(
                 "Failed to lookup filename for CID: {} ".format(e),
                 "Reverting to hash value as filename {outpath}",
             )
 
+        # TODO: Pull hotkeys from the cache for the given cid.
+
         try:
             sub = bittensor.subtensor(network=cli.config.subtensor.network)
             bittensor.logging.debug("subtensor:", sub)
-            RetrieveData._run(cli, sub, outpath, wallet)
+            await RetrieveData._run(cli, sub, outpath, wallet, hotkeys)
         finally:
             if "sub" in locals():
                 sub.close()
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    def _run(cli, sub, outpath, wallet):
+    async def _run(cli, sub: "bittensor.subtensor", outpath: str, wallet: "bittensor.wallet", hotkeys: List[str] = None):
         r"""Retrieve data from the Bittensor network for the given data_hash."""
-        dendrite = bittensor.dendrite(wallet=wallet)
-        bittensor.logging.debug("dendrite:", dendrite)
 
-        synapse = storage.protocol.RetrieveUser(data_hash=cli.config.cid)
-        bittensor.logging.debug("synapse:", synapse)
-
-        mg = sub.metagraph(cli.config.netuid)
-        bittensor.logging.debug("metagraph:", mg)
-
-        # Determine axons to query from metagraph
-        vpermits = mg.validator_permit
-        vpermit_uids = [uid for uid, permit in enumerate(vpermits) if permit]
-        vpermit_uids = torch.where(vpermits)[0]
-
-        query_uids = torch.where(mg.S[vpermit_uids] > cli.config.stake_limit)[0]
-        axons = [mg.axons[uid] for uid in query_uids]
-        bittensor.logging.debug("query axons:", axons)
-
+        success = False
         with bittensor.__console__.status(":satellite: Retreiving data..."):
-            # Query axons
-            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-            success = False
-            for response in responses:
-                bittensor.logging.trace(f"response: {response.dendrite.dict()}")
-                if (
-                    response.dendrite.status_code != 200
-                    or response.encrypted_data is None
-                ):
-                    continue
 
-                # Decrypt the response
-                bittensor.logging.trace(
-                    f"encrypted_data: {response.encrypted_data[:100]}"
-                )
-                encrypted_data = base64.b64decode(response.encrypted_data)
-                bittensor.logging.debug(
-                    f"encryption_payload: {response.encryption_payload}"
-                )
-                if (
-                    response.encryption_payload is None
-                    or response.encryption_payload == ""
-                    or response.encryption_payload == "{}"
-                ):
-                    bittensor.logging.warning(
-                        "No encryption payload found. Unencrypted data."
-                    )
-                    decrypted_data = encrypted_data
-                else:
-                    decrypted_data = decrypt_data_with_private_key(
-                        encrypted_data,
-                        response.encryption_payload,
-                        bytes(wallet.coldkey.private_key.hex(), "utf-8"),
-                    )
-                bittensor.logging.trace(f"decrypted_data: {decrypted_data[:100]}")
-                success = True
-                break  # No need to keep going if we returned data.
+            data = await retrieve(
+                cli.config.cid,
+                wallet,
+                sub,
+                netuid=cli.config.netuid,
+                hotkeys=hotkeys,
+            )
+
+            success = True
 
         if success:
             # Save the data
             with open(outpath, "wb") as f:
-                f.write(decrypted_data)
+                f.write(data)
 
             bittensor.logging.info("Saved retrieved data to: {}".format(outpath))
         else:

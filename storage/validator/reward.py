@@ -23,6 +23,7 @@ import bittensor as bt
 from bittensor import Synapse
 from typing import Union, List
 from functools import partial
+from pprint import pformat
 
 from storage.validator.verify import (
     verify_store_with_seed,
@@ -72,8 +73,8 @@ def calculate_sigmoid_params(timeout):
     - tuple: A tuple containing the 'steepness' and 'shift' values for the current timeout.
     """
     base_timeout = 1
-    base_steepness = 5
-    base_shift = 0.6
+    base_steepness = 7
+    base_shift = 0.3
 
     # Calculate the ratio of the current timeout to the base timeout
     ratio = timeout / base_timeout
@@ -85,7 +86,7 @@ def calculate_sigmoid_params(timeout):
     return steepness, shift
 
 
-def get_sorted_response_times(uids, responses, timeout: float):
+def get_sorted_response_times(uids, responses, max_time: float):
     """
     Sorts a list of axons based on their response times.
 
@@ -95,6 +96,7 @@ def get_sorted_response_times(uids, responses, timeout: float):
     Args:
         uids (List[int]): List of unique identifiers for each axon.
         responses (List[Response]): List of Response objects corresponding to each axon.
+        max_time (float): The maximum response time for the current batch of axons.
 
     Returns:
         List[Tuple[int, float]]: A sorted list of tuples, where each tuple contains an axon's uid and its response time.
@@ -108,7 +110,7 @@ def get_sorted_response_times(uids, responses, timeout: float):
             uids[idx],
             response.dendrite.process_time
             if response.dendrite.process_time is not None
-            else timeout,
+            else max_time,
         )
         for idx, response in enumerate(responses)
     ]
@@ -118,19 +120,19 @@ def get_sorted_response_times(uids, responses, timeout: float):
     return sorted_axon_times
 
 
-def sigmoid_normalize(process_times, timeout):
+def sigmoid_normalize(process_times, max_time):
     # Center the completion times around 0 for effective sigmoid scaling
     centered_times = process_times - np.mean(process_times)
 
-    # Calculate steepness and shift based on timeout
-    steepness, shift = calculate_sigmoid_params(timeout)
+    # Calculate steepness and shift based on maximum time in the batch
+    steepness, shift = calculate_sigmoid_params(max_time)
 
     # Apply adjusted sigmoid function to scale the times
     return adjusted_sigmoid_inverse(centered_times, steepness, shift)
 
 
 def scale_rewards(
-    uids, responses, rewards, timeout: float, data_sizes: List[float], device
+    uids, responses, rewards, data_sizes: List[float], device
 ):
     """
     Scales the rewards for each axon based on their response times using sigmoid normalization.
@@ -138,13 +140,19 @@ def scale_rewards(
         uids (List[int]): A list of unique identifiers for each axon.
         responses (List[Response]): A list of Response objects corresponding to each axon.
         rewards (List[float]): A list of initial reward values for each axon.
-        timeout (float): The timeout value used for response time calculations.
         data_sizes (List[int]): A list of data sizes corresponding to each axon.
 
     Returns:
         List[float]: A list of scaled rewards for each axon.
     """
-    sorted_axon_times = get_sorted_response_times(uids, responses, timeout=timeout)
+    max_time = max(
+        [
+            response.dendrite.process_time for response in responses
+            if response.dendrite.process_time is not None
+        ] or [1] # nobody responded successfully
+    )
+
+    sorted_axon_times = get_sorted_response_times(uids, responses, max_time=max_time)
 
     # Extract only the process times
     process_times = [proc_time for _, proc_time in sorted_axon_times]
@@ -153,15 +161,12 @@ def scale_rewards(
     bt.logging.trace(f"Unnormalized data sizes: {data_sizes}")
     log_data_sizes_np = np.log1p(data_sizes)
     bt.logging.trace(f"Logarithmically scaled data sizes: {log_data_sizes_np}")
-    log_data_sizes = torch.tensor(log_data_sizes_np)
-    normalized_log_data_sizes = log_data_sizes / torch.sum(log_data_sizes)
-    bt.logging.trace(f"Normalized data sizes: {normalized_log_data_sizes}")
 
-    # Scale initial rewards by normalized data sizes
-    data_size_scaled_rewards = rewards.to(device) * normalized_log_data_sizes.to(device)
+    # Normalize the response times by data size (unit time)
+    data_normalized_process_times = np.asarray(np.array(process_times) / log_data_sizes_np)
 
     # Normalize the response times
-    normalized_times = sigmoid_normalize(process_times, timeout)
+    normalized_times = sigmoid_normalize(data_normalized_process_times, max(data_normalized_process_times))
 
     # Create a dictionary mapping UIDs to normalized times
     uid_to_normalized_time = {
@@ -171,8 +176,8 @@ def scale_rewards(
 
     # Scale the data size-scaled rewards with normalized times
     time_scaled_rewards = torch.tensor(
-        [
-            data_size_scaled_rewards[i] * uid_to_normalized_time[uid]
+        [   # tier reward * latency based normalized reward
+            rewards[i] * uid_to_normalized_time[uid]
             for i, uid in enumerate(uids)
         ]
     )
@@ -191,7 +196,6 @@ def apply_reward_scores(
     responses,
     rewards,
     data_sizes: List[float],
-    timeout: float,
 ):
     """
     Adjusts the moving average scores for a set of UIDs based on their response times and reward values.
@@ -203,7 +207,6 @@ def apply_reward_scores(
         responses (List[Response]): A list of response objects received from the nodes.
         rewards (torch.FloatTensor): A tensor containing the computed reward values.
         data_sizes (List[float]): The size of each data piece used for the forward pass.
-        timeout (float): The timeout value used for response time calculations.
     """
     if self.config.neuron.verbose:
         bt.logging.debug(f"Applying rewards: {rewards}")
@@ -215,7 +218,6 @@ def apply_reward_scores(
         uids,
         responses,
         rewards,
-        timeout=timeout,
         data_sizes=data_sizes,
         device=self.device,
     )
@@ -277,6 +279,20 @@ async def create_reward_vector(
     else:
         raise ValueError(f"Invalid synapse type: {type(synapse)}")
 
+    times = [
+        response.dendrite.process_time or synapse.timeout
+        for response in responses
+    ]
+    bt.logging.debug(f"Dendrite Times: {times}")
+    sorted_times = sorted(list(zip(uids, times)), key=lambda x: x[1])
+
+    bt.logging.debug(f"Sorted Times: {sorted_times}")
+    in_top_2_dict = {
+        uid: True if time < synapse.timeout else False
+        for (uid, time) in sorted_times[:2]
+    }
+    bt.logging.debug(f"Is Top 2 Dict: {pformat(in_top_2_dict)}")
+
     for idx, (uid, response) in enumerate(zip(uids, responses)):
         # Verify the commitment
         hotkey = self.metagraph.hotkeys[uid]
@@ -303,7 +319,9 @@ async def create_reward_vector(
         )
 
         # Apply reward for this task
-        tier_factor = await get_tier_factor(hotkey, self.database)
+        tier_factor = await get_tier_factor(
+            hotkey, self.database, in_top_2=in_top_2_dict.get(uid, False)
+        )
         rewards[idx] = 1.0 * tier_factor if success else failure_reward * tier_factor
 
         event.successful.append(success)

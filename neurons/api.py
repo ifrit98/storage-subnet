@@ -29,7 +29,7 @@ import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
 from storage.validator.config import config, check_config, add_args
@@ -37,7 +37,7 @@ from storage.validator.state import should_checkpoint
 from storage.validator.encryption import encrypt_data, setup_encryption_wallet
 from storage.validator.store import store_broadband
 from storage.validator.retrieve import retrieve_broadband
-from storage.validator.database import retrieve_encryption_payload
+from storage.validator.database import retrieve_encryption_payload, get_ordered_metadata
 from storage.validator.cid import generate_cid_string
 from storage.validator.encryption import decrypt_data_with_private_key
 
@@ -108,12 +108,7 @@ class neuron:
         self.wallet.create_if_non_existent()
 
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
@@ -234,12 +229,19 @@ class neuron:
             if isinstance(decoded_data, str)
             else decoded_data
         )
-        validator_encrypted_data, validator_encryption_payload = encrypt_data(
-            decoded_data, self.encryption_wallet
-        )
 
         # Hash the original data to avoid data confusion
         content_id = generate_cid_string(decoded_data)
+
+        # Check and see if hash already exists, reject if so.
+        if await get_ordered_metadata(content_id, self.database):
+            bt.logging.warning(f"Hash {content_id} already exists on the network.")
+            synapse.data_hash = content_id
+            return synapse
+
+        validator_encrypted_data, validator_encryption_payload = encrypt_data(
+            decoded_data, self.encryption_wallet
+        )
 
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)
@@ -261,8 +263,12 @@ class neuron:
         self, synapse: protocol.StoreUser
     ) -> typing.Tuple[bool, str]:
         # If debug mode, whitelist everything (NOT RECOMMENDED)
+
         if self.config.api.open_access:
             return False, "Open access: WARNING all whitelisted"
+
+        if synapse.dendrite.hotkey in self.config.api.blacklisted_hotkeys:
+            return True, f"Hotkey {synapse.dendrite.hotkey} blacklisted."
 
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:

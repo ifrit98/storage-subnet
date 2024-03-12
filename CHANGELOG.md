@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0 / 2024-03-08
+
+## What's Changed
+* Validator DB edge case fix by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/151
+* Remove miner set weight by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/153
+* Reward/better fairer stronger by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/155
+* Add json event logger and plotting utils by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/154
+* Reward/add top boost per batch by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/157
+* Api/updates fixes by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/158
+
+
+**Full Changelog**: https://github.com/ifrit98/storage-subnet/compare/v2.0.1...v2.1.0
+
+
 ## 2.0.1 / 2024-02-22
 
 ## What's Changed
