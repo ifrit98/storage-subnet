@@ -645,25 +645,25 @@ Importance of Tier System:
    - **Storage Limit:** 1 Petabyte (PB)
    - **Store Wilson Score:**  0.77
    - **Minimum Successes Required:** 5,000
-   - **Reward Factor:** 0.888 (88.8% rewards)
+   - **Reward Factor:** 0.9 (90% rewards)
 
 3. 🥇 **Gold Tier:**
    - **Storage Limit:** 100 Terabytes (TB)
    - **Store Wilson Score:** 0.66
    - **Minimum Successes Required:** 2,000
-   - **Reward Factor:** 0.777 (77.7% rewards)
+   - **Reward Factor:** 0.8 (80% rewards)
 
 4. 🥈 **Silver Tier:**
    - **Storage Limit:** 10 Terabytes (TB)
    - **Store Wilson Score:** 0.55
    - **Minimum Successes Required:** 1,000
-   - **Reward Factor:** 0.666 (66.6% rewards)
+   - **Reward Factor:** 0.7 (70% rewards)
 
 5. 🥉 **Bronze Tier:**
    - **Storage Limit:** 1 Terabyte (TB)
    - **Store Wilson Score:** Not specifically defined for this tier
    - **Minimum Successes Required:** Not specifically defined for this tier
-   - **Reward Factor:** 0.555 (55.5% rewards)
+   - **Reward Factor:** 0.6 (60% rewards)
 
 #### Maintaining and Advancing Tiers:
 - To advance to a higher tier, miners must consistently achieve the required minimum Wilson Scores in their operations.
@@ -680,6 +680,29 @@ Assuming perfect performance, that out of ~200 miner UIDs, each of which is quer
 hours = total_successes / prob_of_query_per_round * time_per_round / 3600
 hours = 98 # roughly 4 days at perfect performance to top tier (no challenge failures)
 ```
+
+#### Miner Advancement Program
+The top two (2) performers per batch of `store`, `challenge` or `retrieve` requests will recieve a one-time tier appropriate boost. These tier-specific boosts decrease as you ascend the tier structure, and are defined in `constants.py`. For example:
+
+```bash
+TIER_BOOSTS = {
+    b"Super Saiyan": 1.02, # 2%  -> 1.02
+    b"Diamond": 1.05,      # 5%  -> 0.945
+    b"Gold": 1.1,          # 10% -> 0.88
+    b"Silver": 1.15,       # 15% -> 0.805
+    b"Bronze": 1.2,        # 20% -> 0.72
+}
+```
+
+Concretely, a `Bronze` miner who is one of the top 2 within a batch of requests will receive a proportionally larger boost than a `Diamond` miner who is also in the top 2.
+
+```
+REWARD = TIER * REWARD * BOOST
+Bronze  -> 0.72 = 0.6 * 1.0 * 1.2
+Diamond -> 0.84 = 0.8 * 1.0 * 1.05
+```
+
+This mechansim *significantly* closes the gap for newer miners who perform well and should be able to ascned the tier structure honestly and faithfully.
 
 #### Periodic Statistics Rollover
 
@@ -698,23 +721,16 @@ total_attempts_epoch = 8
 wilson_score = 0.73 # would qualify for Diamond tier this round
 ```
 
-The scores are then reset to the minimum level by last tier achieved so that 1 failure would not lower their rank:
+The scores are then reset, while keeping the total successes for tier recognition:
 ```bash
-store_attempts = 3
-store_successes = 3
-challenge_successes = 3
-challenge_attempts = 3
-retrieve_successes = 3
-retrieve_attempts = 3
-
-# Infer 1 failure
-attempts = 9
-successes = 10
-wilson_score = 0.883 # Still qualifies for Diamond tier
+store_attempts = 0
+store_successes = 0
+challenge_successes = 0
+challenge_attempts = 0
+retrieve_successes = 0
+retrieve_attempts = 0
+total_successes = 6
 ```
-
-The next consecutive failure would potential return the miner below the threshold back down to Gold. This is a much more flexible and dynamic approach to fairly assign tiers without strict determinism and simple ratios.
-
 
 ### Speed and Reliability in Decentralized Storage Mining
 
