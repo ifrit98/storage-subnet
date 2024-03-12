@@ -334,24 +334,14 @@ The benefits of using CIDs in the FileTao Storage CLI on Bittensor include:
 1. Future-Proofing: The CID system is designed to be future-proof. As new hashing algorithms and encodings emerge, CIDs can adapt to include this new information without disrupting the existing system. This ensures long-term viability of the storage system on the Bittensor network.
 1. Immutable and Tamper-Proof: The use of CIDs ensures immutability and tamper-proofing of data. Since the CID is a unique identifier for a specific version of the content, any changes in the content result in a different CID. This makes it easy to verify the integrity of the data and detect any unauthorized modifications.
 
-CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate both CIDv0 and CIDv1 by calling `make_cid(data: Union[str,bytes], version: int)`
+CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate CIDv1 by calling `make_cid(data: Union[str,bytes])`
 
 ```python
 from storage.validator.cid import make_cid
 
-# Generate CID objects
-cid0 = make_cid("abc", 0)
-cid0
-> CIDv0(version=0, codec=dag-pb, multihash=b'QmQpeUrxtQE5N2SVog1Z..')
-
-cid1 = make_cid("abc", 1)
+cid1 = make_cid("abc")
 cid1
 > CIDv1(version=1, codec=sha2-256, multihash=b'bafkreif2pall7dybz7v..')
-
-# Get the multihash out
-multihash = make_cid("abc", 0).multihash
-multihash
-> b'QmQpeUrxtQE5N2SVog1ZCxd7c7RN4fBNQu5aLwkk5RY9ER'
 
 from storage.validator.cid import decode_cid
 # Decode a CIDv1 object to get the original data hash, produced by `sha256` (CIDv1)
