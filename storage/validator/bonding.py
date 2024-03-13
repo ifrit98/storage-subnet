@@ -61,69 +61,18 @@ async def reset_storage_stats(stats_key: str, database: aioredis.Redis):
         ss58_address (str): The unique address (hotkey) of the miner.
         database (redis.Redis): The Redis client instance for database operations.
     """
-    stats = await database.hgetall(stats_key)
-    tier = stats.get(b"tier", b"Bronze").decode()
-    # Set min wilson score for each tier to preserve tier and can drop/go up from there based on future behavior
-    if tier == "Super Saiyan":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 7,
-                "store_successes": 7,
-                "challenge_successes": 8,
-                "challenge_attempts": 8,
-                "retrieve_successes": 8,
-                "retrieve_attempts": 8,
-            },
-        )
-    elif tier == "Diamond":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 3,
-                "store_successes": 3,
-                "challenge_successes": 3,
-                "challenge_attempts": 3,
-                "retrieve_successes": 3,
-                "retrieve_attempts": 3,
-            },
-        )
-    elif tier == "Gold":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 2,
-                "store_successes": 2,
-                "challenge_successes": 2,
-                "challenge_attempts": 2,
-                "retrieve_successes": 1,
-                "retrieve_attempts": 1,
-            },
-        )
-    elif tier == "Silver":
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 1,
-                "store_successes": 1,
-                "challenge_successes": 1,
-                "challenge_attempts": 1,
-                "retrieve_successes": 0,
-                "retrieve_attempts": 0,
-            },
-        )
-    else:  # Bronze
-        await database.hmset(
-            stats_key,
-            {
-                "store_attempts": 0,
-                "store_successes": 0,
-                "challenge_successes": 0,
-                "challenge_attempts": 0,
-                "retrieve_successes": 0,
-                "retrieve_attempts": 0,
-            },
-        )
+    # Hard reset statistics
+    await database.hmset(
+        stats_key,
+        {
+            "store_attempts": 0,
+            "store_successes": 0,
+            "challenge_successes": 0,
+            "challenge_attempts": 0,
+            "retrieve_successes": 0,
+            "retrieve_attempts": 0,
+        },
+    )
 
 
 async def rollover_storage_stats(database: aioredis.Redis):
@@ -223,11 +172,30 @@ async def update_statistics(
 
     # Update the total successes that we rollover every epoch
     if await database.hget(stats_key, "total_successes") is None:
-        store_successes = int(await database.hget(stats_key, "store_successes"))
-        challenge_successes = int(await database.hget(stats_key, "challenge_successes"))
-        retrieval_successes = int(await database.hget(stats_key, "retrieve_successes"))
+        store_successes = await database.hget(stats_key, "store_successes")
+        if store_successes is None:
+            store_successes = 0
+            database.hset(stats_key, "store_successes", 0) # ensure field exists
+        else:
+            store_successes = int(store_successes)
+
+        challenge_successes = await database.hget(stats_key, "challenge_successes")
+        if challenge_successes is None:
+            challenge_successes = 0
+            database.hset(stats_key, "challenge_successes", 0) # ensure field exists
+        else:
+            challenge_successes = int(challenge_successes)
+
+        retrieval_successes = await database.hget(stats_key, "retrieve_successes")
+        if retrieval_successes is None:
+            retrieval_successes = 0
+            database.hset(stats_key, "retrieve_successes", 0) # ensure field exists
+        else:
+            retrieval_successes = int(retrieval_successes)
+
         total_successes = store_successes + retrieval_successes + challenge_successes
         await database.hset(stats_key, "total_successes", total_successes)
+
     if success:
         await database.hincrby(stats_key, "total_successes", 1)
 
@@ -306,8 +274,14 @@ async def compute_tier(stats_key: str, database: aioredis.Redis, confidence=0.95
         storage_limit = STORAGE_LIMIT_BRONZE
 
     current_limit = await database.hget(stats_key, "storage_limit")
+    if current_limit is None:
+        current_limit = STORAGE_LIMIT_BRONZE
+        await database.hset(stats_key, "storage_limit", current_limit) # Ensure field exists
+    else:
+        current_limit = int(current_limit.decode())
+
     bt.logging.trace(f"Current storage limit for {stats_key}: {current_limit}")
-    if current_limit.decode() != storage_limit:
+    if current_limit != storage_limit:
         await database.hset(stats_key, "storage_limit", storage_limit)
         bt.logging.trace(
             f"Storage limit for {stats_key} set from {current_limit} -> {storage_limit} bytes."
@@ -332,7 +306,7 @@ async def compute_all_tiers(database: aioredis.Redis):
     await rollover_storage_stats(database)
 
 
-async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
+async def get_tier_factor(ss58_address: str, database: aioredis.Redis, in_top_2: bool = False) -> float:
     """
     Retrieves the reward factor based on the tier of a given miner.
     This function returns a factor that represents the proportion of rewards a miner
@@ -340,17 +314,28 @@ async def get_tier_factor(ss58_address: str, database: aioredis.Redis):
     Args:
         ss58_address (str): The unique address (hotkey) of the miner.
         database (redis.Redis): The Redis client instance for database operations.
+        in_top_3 (bool): Whether the miner is in the top 3 tiers. Defaults to False.
     Returns:
         float: The reward factor corresponding to the miner's tier.
     """
     tier = await database.hget(f"stats:{ss58_address}", "tier")
-    if tier == b"Super Saiyan":
-        return SUPER_SAIYAN_TIER_REWARD_FACTOR
-    elif tier == b"Diamond":
-        return DIAMOND_TIER_REWARD_FACTOR
-    elif tier == b"Gold":
-        return GOLD_TIER_REWARD_FACTOR
-    elif tier == b"Silver":
-        return SILVER_TIER_REWARD_FACTOR
-    else:
+
+    if tier is None:
         return BRONZE_TIER_REWARD_FACTOR
+
+    if tier == b"Super Saiyan":
+        factor = SUPER_SAIYAN_TIER_REWARD_FACTOR
+    elif tier == b"Diamond":
+        factor = DIAMOND_TIER_REWARD_FACTOR
+    elif tier == b"Gold":
+        factor = GOLD_TIER_REWARD_FACTOR
+    elif tier == b"Silver":
+        factor = SILVER_TIER_REWARD_FACTOR
+    else:
+        factor = BRONZE_TIER_REWARD_FACTOR
+
+    # Boost the factor for the top 3 tiers by x% given their current tier
+    if in_top_2:
+        factor *= TIER_BOOSTS[tier]
+
+    return factor

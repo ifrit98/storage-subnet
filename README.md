@@ -17,47 +17,52 @@ Currently supporting `python>=3.9,<3.11`.
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
 # Table of Contents for Subnet 21 (FileTAO)
-
-1. [FileTAO](#FileTAO)
-1. [Installation](#installation)
+1. [FileTAO Overview](#filetao)
+2. [Installation](#installation)
    - [Install Redis](#install-redis)
+   - [Secure Redis Configuration](#secure-redis-configuration)
+     - [Close external traffic to Redis](#close-external-traffic-to-redis)
+     - [Automated Redis Password Configuration](#automated-redis-password-configuration)
+     - [Enable persistence](#enable-persistence)
+     - [Redis Troubleshooting](#redis-troubleshooting)
    - [Install PM2](#install-pm2)
-1. [Storage API](#storage-api)
-1. [Storage CLI Interface](#storage-cli-interface)
-   - [Overview](#overview)
-   - [Prerequisites](#prerequisites)
+3. [Storage API](#storage-api)
+   - [Using API Wrappers](#using-api-wrappers)
+   - [Using SubnetsAPI](#using-subnetsapi)
+   - [API Storing Data](#api-storing-data)
+   - [API Retrieving Data](#api-retrieving-data)
+4. [Storage CLI Interface](#storage-cli-interface)
    - [Commands](#commands)
      - [Store: Storing Data on the Network](#store-storing-data-on-the-network)
      - [Retrieve: Retrieving Data from the Network](#retrieve-retrieving-data-from-the-network)
      - [Listing Stored Data](#listing-stored-data)
    - [Examples](#examples)
-   - [General Options](#general-options)
-   - [Notes](#notes)
-1. [Miner Stats](#miner-stats)
-1. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
+   - [Miner Statistics](#miner-statistics)
+5. [What is a Decentralized Storage Network (DSN)?](#what-is-a-decentralized-storage-network-dsn)
    - [Role of a Miner (Prover)](#role-of-a-miner-prover)
    - [Role of a Validator (Verifier)](#role-of-a-validator-verifier)
-1. [Main Features of Subnet 21](#main-features-of-subnet-21)
+6. [Main Features of Subnet 21](#main-features-of-subnet-21)
    - [Zero-Knowledge Proof of Space-Time System](#zero-knowledge-proof-of-space-time-system)
    - [Chained Proof Challenges](#chained-proof-challenges)
    - [Data Encryption and Zero-Knowledge Proofs for Privacy Preservation](#data-encryption-and-zero-knowledge-proofs-for-privacy-preservation)
    - [Scalability and Reliability](#scalability-and-reliability)
    - [Advanced Cryptographic Techniques](#advanced-cryptographic-techniques)
    - [User-Centric Approach](#user-centric-approach)
-1. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
+7. [Zero Knowledge Proof-of-Spacetime](#zero-knowledge-proof-of-spacetime)
    - [Storage Phase](#storage-phase)
    - [Challenge Phase](#challenge-phase)
    - [Retrieval Phase](#retrieval-phase)
-1. [Reward System](#reward-system)
-1. [Epoch UID Selection](#epoch-uid-selection)
-1. [Running FileTao](#running-filetao)
-   - [Running a Miner](#running-a-miner)
-   - [Running a Validator](#running-a-validator)
-   - [Running the API](#running-the-api)
-   - [(Optional) Setup WandB](#setup-wandb)
-1. [Local Subtensor](#local-subtensor)
-1. [Database Migration](#database-schema-migration)
-1. [Disable RDB](#disable-rdb)
+8. [Reward System](#reward-system)
+   - [Speed and Reliability in Decentralized Storage Mining](#speed-and-reliability-in-decentralized-storage-mining)
+9. [Epoch UID Selection](#epoch-uid-selection)
+10. [Running FileTAO](#running-filetao)
+    - [Running a Miner](#running-a-miner)
+    - [Running a Validator](#running-a-validator)
+    - [Running the API](#running-the-api)
+    - [Setup WandB](#setup-wandb)
+11. [Local Subtensor](#local-subtensor)
+12. [Database Schema Migration](#database-schema-migration)
+13. [Disable RDB](#disable-rdb)
 
 
 ## Installation
@@ -216,7 +221,43 @@ sudo npm install pm2 -g
 ```
 
 ## Storage API
-In addition to the command-line interface, FileTao can be accessed via the bittensor subnets python API.
+
+There are three (3) main ways you can interact with the `FileTao` network to store and retrieve data. (4th coming soon through the website interface!):
+
+1. API Wrappers (python) - this is the most convenient way for developers to interact
+2. SubnetsAPI (lower-level python) - if you need more control over how you interface with FileTao
+3. FileTao CLI (command-line) - most convenient for non-developers just wanting to store files using the cli
+
+The following three sections will describe each of these in more detail.
+
+### Using API Wrappers
+There are two high-level wrapper functions that allow easy access to FileTao's storage mechanism through bittensor abstractions, `store` and `retrieve`.
+
+It's as convenient as importing, preparing data, and firing away:
+```python
+import random
+import bittensor as bt
+from storage.api import store, retrieve
+
+# Store data
+wallet = bt.wallet()
+subtensor = bt.subtensor()
+
+data = b"Some bytestring data!"
+cid, hotkeys = await store(data, wallet, subtensor, netuid=22)
+print("Stored {} with {} hotkeys".format(cid, hotkeys))
+> Stored bafkreid6mhmfptdpfvljyavss77zmo6b2oert2pula2gy4tosekupm4nqa with validator hotkeys [5CaFuijc2ucdoWhkjLaYgnzYrpv62KGt1fWWtUxhFHXPA3KK, 5FKwbwguHU1SVQiGot5YKSTQ6fWGVv2wRHFrWfwp9X9nWbyU]
+```
+
+Now you can retrieve the data using the content identifier `CID` and the `hotkey`s directly:
+```python
+data = await retrieve(cid, wallet, subtensor, netuid=22, hotkeys=hotkeys)
+print(data)
+> b"Some bytestring data!"
+```
+
+### Using SubnetsAPI 
+In addition to the convenience wrappers and command-line interface, FileTao can be accessed via the bittensor subnets python API.
 
 The subnets API requires two abstract functions to be implemented: `prepare_synapse`, and `process_responses`. This allows for all subnets to be queried through exposed axons, typically on the validator side.
 
@@ -232,7 +273,6 @@ wallet = bt.wallet(name="sn21", hotkey="query")
 store = StoreUserAPI(wallet)
 ```
 
-### API Storing Data
 Here is a complete example to store data on `FileTao` programmatically.
 
 ```python
@@ -301,24 +341,14 @@ The benefits of using CIDs in the FileTao Storage CLI on Bittensor include:
 1. Future-Proofing: The CID system is designed to be future-proof. As new hashing algorithms and encodings emerge, CIDs can adapt to include this new information without disrupting the existing system. This ensures long-term viability of the storage system on the Bittensor network.
 1. Immutable and Tamper-Proof: The use of CIDs ensures immutability and tamper-proofing of data. Since the CID is a unique identifier for a specific version of the content, any changes in the content result in a different CID. This makes it easy to verify the integrity of the data and detect any unauthorized modifications.
 
-CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate both CIDv0 and CIDv1 by calling `make_cid(data: Union[str,bytes], version: int)`
+CIDs can also be generated using the FileTao repo directly that have parity with IPFS out-of-the box. You can generate CIDv1 by calling `make_cid(data: Union[str,bytes])`
 
 ```python
 from storage.validator.cid import make_cid
 
-# Generate CID objects
-cid0 = make_cid("abc", 0)
-cid0
-> CIDv0(version=0, codec=dag-pb, multihash=b'QmQpeUrxtQE5N2SVog1Z..')
-
-cid1 = make_cid("abc", 1)
+cid1 = make_cid("abc")
 cid1
 > CIDv1(version=1, codec=sha2-256, multihash=b'bafkreif2pall7dybz7v..')
-
-# Get the multihash out
-multihash = make_cid("abc", 0).multihash
-multihash
-> b'QmQpeUrxtQE5N2SVog1ZCxd7c7RN4fBNQu5aLwkk5RY9ER'
 
 from storage.validator.cid import decode_cid
 # Decode a CIDv1 object to get the original data hash, produced by `sha256` (CIDv1)
@@ -334,43 +364,42 @@ decoded_hash == expected_hash
 > True
 ```
 
-### Prerequisites
-Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
+> Prerequisites: Before using the Storage CLI, ensure that Bittensor is installed and your wallet (hotkey and coldkey) is properly configured.
 
 
-## Commands
+### Commands
 
-### 1. Store: Storing Data on the Network
+#### 1. Store: Storing Data on the Network
 This command encrypts and stores data on the Bittensor network.
 
-#### Subcommands
+##### Subcommands
 - `put`: Encrypt and store data.
 
-#### Usage
+##### Usage
 ```bash
 filetao store put --filepath <path-to-data> [options]
 ```
 
-#### Options
+##### Options
 - `--filepath <path-to-data>`: Path to the data file to be stored.
 - `--hash_basepath <path>`: (Optional) Path to store the data hashes.
 - `--stake_limit <float>`: (Optional) Stake limit to filter validator axons.
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 - `--wallet.hotkey <name>`: (Optional) Hotkey name.
 
-### 2. Retrieve: Retrieving Data from the Network
+#### 2. Retrieve: Retrieving Data from the Network
 This command retrieves previously stored data from the Bittensor network.
 
-#### Subcommands
+##### Subcommands
 - `list`: Lists all data associated with a specific coldkey.
 - `get`: Retrieve and decrypt data.
 
-#### Usage
+##### Usage
 ```bash
 filetao retrieve get --data_hash <hash> [options]
 ```
 
-#### Options
+##### Options
 - `--data_hash <hash>`: Hash of the data to retrieve.
 - `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
 - `--stake_limit <float>`: (Optional) Stake limit for validator axons.
@@ -378,31 +407,31 @@ filetao retrieve get --data_hash <hash> [options]
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 - `--wallet.hotkey <name>`: (Optional) Hotkey name.
 
-### Listing Stored Data
+#### Listing Stored Data
 Lists all data hashes stored on the network associated with the specified coldkey.
 
-#### Usage
+##### Usage
 ```bash
 filetao retrieve list [options]
 ```
 
-#### Options
+##### Options
 - `--hash_basepath <path>`: (Optional) Path where data hashes are stored.
 - `--wallet.name <name>`: (Optional) Wallet coldkey name.
 
-## Examples
+### Examples
 
-### Storing Data
+#### Storing Data
 ```bash
 filetao store put --filepath ./example.txt --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
-### Retrieving Data
+#### Retrieving Data
 ```bash
 filetao retrieve get --data_hash 123456789 --storage_basepath ./retrieved --wallet.name mywallet --wallet.hotkey myhotkey
 ```
 
-### Listing Data
+#### Listing Data
 ```bash
 filetao retrieve list --wallet.name mywallet
 ```
@@ -410,7 +439,7 @@ filetao retrieve list --wallet.name mywallet
 ![list](assets/list.png)
 
 
-## Miner statistics
+### Miner statistics
 
 If you are running a validator and have a locally running instance of Redis, you may use this command to view the miner statistics gathered. This command will display a list of all hotkeys and their associated statistics, such as `total successes`, `attempts` vs `successes` for each category, `tier`, `current storage`, and `total storage limit`.
 
@@ -419,11 +448,11 @@ filetao miner stats --index 0
 ```
 ![stats](assets/miner_stats.png)
 
-### Options
+#### Options
 - `--index <id>`: (Optional) Integer index of the Redis database (default: 0)
 
 
-### Notes
+#### Notes
 - Ensure your wallet is configured and accessible.
 - File paths should be absolute or relative to your current directory.
 - Data hashes are unique identifiers for your stored data on the Bittensor network.
@@ -569,17 +598,26 @@ In FileTAO's decentralized storage system, optimal behavior is crucial for the o
 Failing to pass either challenge or retrieval verifications incur negative rewards. This is doubly destructive, as rolling statistics are continuously logged to periodically compute which tier a given miner hotkey belongs to. When a miner achieves the threshold for the next tier, the rewards that miner receives proportionally increase. Conversely, when a miner drops below the threshold of the previous tier, that miner's rewards are slashed such that they receive rewards proportionally to the immediately lower tier.
 
 **Why Optimal Behavior Matters:**
-1. **Reliability:** Miners who consistently store, retrieve, and pass challenges with high success rates ensure the reliability and integrity of the network.
+1. **Reliability:** Miners who consistently store, retrieve, and pass challenges with high Wilson Scores ensure the reliability and integrity of the network.
 2. **Trust:** High-performing miners build trust in the network, attracting more users and increasing the overall value of the system.
 3. **Efficiency:** Optimal behavior leads to a more efficient network, reducing the likelihood of data loss and ensuring fast, reliable access to stored information.
 
 **Tier-Based Reward System:**
 - **Tiers:** We classify miners into four tiers – Diamond, Gold, Silver, and Bronze – based on their performance metrics.
-- **Performance Metrics:** These include the success rate in storage, retrieval, and challenge tasks, as well as the total number of successful operations.
+- **Performance Metrics:** These include the Wilson Score in storage, retrieval, and challenge tasks, as well as the total number of successful operations.
 - **Higher Rewards for Higher Tiers:** Miners in higher tiers receive a greater proportion of the rewards, reflecting their superior performance and contribution to the network.
 
+### **Wilson Score**
+A measure of confidence is required to assess reliability in low sample environments. For miners who have less history, it is unfair to expect perfection early on and is account for by using a statistical tool, the `Wilson Score`. 
+
+For example, if a miner succeeds 4/5 times, it has a success rate of 80%. However it may not be indicative of true performance and reliability. Thus we have added Wilson Scores to accomodate low sample populations to get a more balanced approach to scoring miners.
+
+This effectively allows for forgiveness for early failures and facilitates miners who are faithful actors to still rise through the tier system without being perpetually punished for early mistakes or poor optimization.
+
+The equivalent wilson score for 4 of 5 attempts is `0.77`, which indicates with 95% statistical confidence that this miner is AT least this successful 80% of the time. Functionally, this allows for lowering of the tier requirements while having statistical confidence that over time, the miner may continue to improve performance from there while being considered reliable.
+
 **Moving Up Tiers:**
-- To ascend to a higher tier, a miner must maintain high success rates and achieve a set number of total successes.
+- To ascend to a higher tier, a miner must maintain high Wilson Scores and achieve a set number of total successes.
 - This progression system incentivizes continuous improvement and excellence in mining operations.
 
 **Graphical Representation:**
@@ -593,54 +631,44 @@ Failing to pass either challenge or retrieval verifications incur negative rewar
 The tier system classifies miners into five distinct categories, each with specific requirements and storage limits. These tiers are designed to reward miners based on their performance, reliability, and the total volume of data they can store.
 
 Importance of Tier System:
-- **Encourages High Performance:** Higher tiers reward miners with greater benefits, motivating them to maintain high success rates.
+- **Encourages High Performance:** Higher tiers reward miners with greater benefits, motivating them to maintain high Wilson Scores.
 - **Enhances Network Reliability:** The tier system ensures that only the most reliable and efficient miners handle significant volumes of data, enhancing the overall reliability of the network.
 - **Fair Reward Distribution:** The reward factors are proportional to the miners' tier, ensuring a fair distribution of rewards based on performance.
 
 1. 🎇 **Super Saiyan Tier:** 
    - **Storage Limit:** 1 Exabyte (EB)
-   - **Store Success Rate:** 99.9% (1/1000 chance of failure)
-   - **Retrieval Success Rate:** 99.9%
-   - **Challenge Success Rate:** 99.9%
-   - **Minimum Successes Required:** 100,000
+   - **Store Wilson Score:** 0.88
+   - **Minimum Successes Required:** 10,000
    - **Reward Factor:** 1.0 (100% rewards)
 
 2. 💎 **Diamond Tier:**
    - **Storage Limit:** 1 Petabyte (PB)
-   - **Store Success Rate:** 99% (1/100 chance of failure)
-   - **Retrieval Success Rate:** 99%
-   - **Challenge Success Rate:** 99%
-   - **Minimum Successes Required:** 50,000
-   - **Reward Factor:** 0.888 (88.8% rewards)
+   - **Store Wilson Score:**  0.77
+   - **Minimum Successes Required:** 5,000
+   - **Reward Factor:** 0.9 (90% rewards)
 
 3. 🥇 **Gold Tier:**
    - **Storage Limit:** 100 Terabytes (TB)
-   - **Store Success Rate:** 97.5% (1/50 chance of failure)
-   - **Retrieval Success Rate:** 97.5%
-   - **Challenge Success Rate:** 97.5%
-   - **Minimum Successes Required:** 5,000
-   - **Reward Factor:** 0.777 (77.7% rewards)
+   - **Store Wilson Score:** 0.66
+   - **Minimum Successes Required:** 2,000
+   - **Reward Factor:** 0.8 (80% rewards)
 
 4. 🥈 **Silver Tier:**
    - **Storage Limit:** 10 Terabytes (TB)
-   - **Store Success Rate:** 95% (1/20 chance of failure)
-   - **Retrieval Success Rate:** 95%
-   - **Challenge Success Rate:** 95%
+   - **Store Wilson Score:** 0.55
    - **Minimum Successes Required:** 1,000
-   - **Reward Factor:** 0.555 (55.5% rewards)
+   - **Reward Factor:** 0.7 (70% rewards)
 
 5. 🥉 **Bronze Tier:**
    - **Storage Limit:** 1 Terabyte (TB)
-   - **Store Success Rate:** Not specifically defined for this tier
-   - **Retrieval Success Rate:** Not specifically defined for this tier
-   - **Challenge Success Rate:** Not specifically defined for this tier
+   - **Store Wilson Score:** Not specifically defined for this tier
    - **Minimum Successes Required:** Not specifically defined for this tier
-   - **Reward Factor:** 0.444 (44.4% rewards)
+   - **Reward Factor:** 0.6 (60% rewards)
 
 #### Maintaining and Advancing Tiers:
-- To advance to a higher tier, miners must consistently achieve the required success rates in their operations.
+- To advance to a higher tier, miners must consistently achieve the required minimum Wilson Scores in their operations.
 - Periodic evaluations are conducted to ensure miners maintain the necessary performance standards to stay in their respective tiers.
-- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 successful requests, whether they are challenge requests, store requests, or retry requests and must maintain a 95% success rate in all categories. 
+- Advancing to a higher tier takes time. In order to ascend to the first higher tier (Silver), it takes at least 1000 successful requests, whether they are challenge requests, store requests, or retry requests and must maintain a 95% Wilson Score in all categories. 
 - Depending on how often a miner is queried, how many validators are operating at one given time, and primarily the performance of the miner, this can take several hours to several days. Assuming full 64 validator slots are occupied, this should take a matter of hours.
 
 Here is a distribution of UIDs queried over 1000 blocks based on block hash:
@@ -650,31 +678,58 @@ Assuming perfect performance, that out of ~200 miner UIDs, each of which is quer
 
 ```bash
 hours = total_successes / prob_of_query_per_round * time_per_round / 3600
-hours = 98 # roughly 4 days at perfect performance (no challenge failures)
+hours = 98 # roughly 4 days at perfect performance to top tier (no challenge failures)
 ```
+
+#### Miner Advancement Program
+The top two (2) performers per batch of `store`, `challenge` or `retrieve` requests will recieve a one-time tier appropriate boost. These tier-specific boosts decrease as you ascend the tier structure, and are defined in `constants.py`. For example:
+
+```bash
+TIER_BOOSTS = {
+    b"Super Saiyan": 1.02, # 2%  -> 1.02
+    b"Diamond": 1.05,      # 5%  -> 0.945
+    b"Gold": 1.1,          # 10% -> 0.88
+    b"Silver": 1.15,       # 15% -> 0.805
+    b"Bronze": 1.2,        # 20% -> 0.72
+}
+```
+
+Concretely, a `Bronze` miner who is one of the top 2 within a batch of requests will receive a proportionally larger boost than a `Diamond` miner who is also in the top 2.
+
+```
+REWARD = TIER * REWARD * BOOST
+Bronze  -> 0.72 = 0.6 * 1.0 * 1.2
+Diamond -> 0.84 = 0.8 * 1.0 * 1.05
+```
+
+This mechansim *significantly* closes the gap for newer miners who perform well and should be able to ascned the tier structure honestly and faithfully.
 
 #### Periodic Statistics Rollover
 
-Statistics for `store_successes/attempts`, `challenge_attempts/successes`, and `retrieve_attempts/successes` are reset every epoch, while the `total_successes` are carried over for accurate tier computation. This "sliding window" of the previous 360 blocks of `N` successes vs `M` attempts effectively resets the `N / M`ratio. This facilitates a less punishing tier calculation for early failures that then have to be "outpaced", while simultaneously discouraging grandfathering in of older miners who were able to succeed early and cement their status in a higher tier. The net effect is greater mobility across the tiers, keeping the network competitive while incentivizing reliability and consistency.
+Statistics for `store_successes/attempts`, `challenge_attempts/successes`, and `retrieve_attempts/successes` are reset every epoch, while the `total_successes` are carried over for accurate tier computation. This "sliding window" of the previous 360 blocks of `N` successes vs `M` attempts effectively resets the `N / M` ratio and applies Wilson Scoring. This facilitates a less punishing tier calculation for early failures that then have to be "outpaced", while simultaneously discouraging grandfathering in of older miners who were able to succeed early and cement their status in a higher tier. The net effect is greater mobility across the tiers, keeping the network competitive while incentivizing reliability and consistency.
 
 For example:
 ```bash
-# Initial 10 challenges failed
+store_successes = 2
+store_attempts = 2
+challenge_successes = 3
+challenge_attempts = 5
+retrieve_successes = 1
+retireve_attempts = 1
+total_successes_epoch = 6
+total_attempts_epoch = 8
+wilson_score = 0.73 # would qualify for Diamond tier this round
+```
 
-# 10 early failures really punishing this miner even after 90 perfect attempts in a row
-total_successes = 1200
-challenge_successes = 90
-challenge_attempts = 100
-ratio = 0.9 # won't qualify for silver, would take 100 more perfect requests
-
-# Resets after 1 epoch
+The scores are then reset, while keeping the total successes for tier recognition:
+```bash
+store_attempts = 0
+store_successes = 0
 challenge_successes = 0
 challenge_attempts = 0
-
-# At the end of the following epoch, missed only 1 challenge
-challenge_attempts = 29
-challenge_successes = 30
-ratio = 0.967 # now qualifies for silver, only took 30 more requests and allowed 1 failure
+retrieve_successes = 0
+retrieve_attempts = 0
+total_successes = 6
 ```
 
 ### Speed and Reliability in Decentralized Storage Mining
@@ -688,7 +743,7 @@ In the context of FileTAO's decentralized storage system, speed and reliability 
 
 #### Importance of Reliability:
 1. **Data Integrity:** Reliable storage and retrieval ensure that data remains intact and accessible when needed. This is vital for maintaining the trust of users who rely on the network for data storage.
-2. **Challenge Success Rate:** A high success rate in passing challenges signifies a miner's reliability. It shows their commitment to maintaining the network's integrity and their capability to meet the required standards.
+2. **Challenge Wilson Score:** A high Wilson Score in passing challenges signifies a miner's reliability. It shows their commitment to maintaining the network's integrity and their capability to meet the required standards.
 3. **Tier Advancement and Stability:** Reliable miners have a better chance of advancing to higher tiers and maintaining their position. This stability is rewarded with increased earning potential and recognition within the network.
 
 #### Reward Scaling Mechanism:
@@ -697,16 +752,16 @@ In the context of FileTAO's decentralized storage system, speed and reliability 
 The sigmoid function is modified to incentivize faster response times while still sufficiently rewarding proper behavior. See the curve below:
 ![sigmoid](assets/sigmoid-scale.png)
 
-2. **Tier-Based Reward Factors:** Each tier has an associated reward factor, which determines the proportion of rewards received by the miner. Higher tiers, achieved through consistent performance, offer greater rewards. Miner rewards and punishments are symmetrically scaled by their tier. Miners who have a lower tier are penalized proportionally less than miners who have a higher tier. This encourages top miners to have higher success rates, and allows for lower tier miners the ability to work their way up the ladder.
+2. **Tier-Based Reward Factors:** Each tier has an associated reward factor, which determines the proportion of rewards received by the miner. Higher tiers, achieved through consistent performance, offer greater rewards. Miner rewards and punishments are symmetrically scaled by their tier. Miners who have a lower tier are penalized proportionally less than miners who have a higher tier. This encourages top miners to have higher Wilson Scores, and allows for lower tier miners the ability to work their way up the ladder.
 
 e.g.
 ```python
 reward = 1.0 * TIER_FACTOR if task_successful else TASK_NEGATIVE_REWARD * TIER_FACTOR
 
 # For Bronze and challenges
-reward = 1.0 * 0.444 if challenge_successful else -0.05 * 0.444
+reward = 1.0 * 0.555 if challenge_successful else -0.05 * 0.555
 reward
-> 0.444 | -0.0222 # lighter punishment for lower tier failure
+> 0.555 | -0.02775 # lighter punishment for lower tier failure
 
 # However for Gold
 reward = 1.0 * 0.777 if challenge_successful else -0.05 * 0.777
@@ -866,6 +921,15 @@ Run a validator using `pm2`:
 pm2 start /home/user/storage-subnet/neurons/validator.py --interpreter /home/user/miniconda3/envs/sn21/bin/python --name validator -- --netuid 21 --logging.debug --wallet.name default --wallet.hotkey validator
 ```
 
+> Note: It is imperative to specify the env var for the absolute path to `rebalance_deregistration.sh` script for rebalancing data appropriately on the network. This can be done by `.env` file or explicitly by exporting the path
+
+For example,
+```bash
+REBALANCE_SCRIPT_PATH=/home/user/storage-subnet/scripts/rebalance_deregistration.sh
+```
+
+This way you are able to run your process from anywhere and not rely on relative path resolution to ensure proper functioning of the validator.
+
 #### Options
 
 - `--neuron.name`: Specifies the name of the validator neuron. Default: "core_storage_validator".
@@ -896,11 +960,19 @@ These options allow you to fine-tune the behavior, storage, and network interact
 > Note: Challenge data lives by default for 5000 blocks in the validator index. This means after 7 days the data is removed and is no longer queried by the validator. This allows miners to recover who have lost challenge data
 
 ### Running the API
-Similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered hotkey on SN21. You can gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
+
+Running an API node at `neurons.api.py` allows you to create an entry node into the FileTao network for storing data. This can be connected to a back-end service, or used similarly to an IPFS node as an entrypoint for public use.
+
+It is important to run an API to improve decentralization of the network and allow for a greater surface area of queryable nodes for end users.
+
+This is similar to running a validator, however this exposes two axon endpoints to `store` and `retrieve` data using your registered validator hotkey on SN21. Miners cannot run an API node. You may gate access however you choose using the blacklist functions for each endpoint, and as a default all hotkeys are blacklisted except explicitly whitelisted ones in the `storage/validator/config.py` file. It is also possible to whitelist all hotkeys and allow data to be stored from any bittensor wallet, regardless of registration status by using the `--api.open_access` flag. 
+
+It is **strongly** encouraged to carefully consider your use case and how you will expose this endpoint.
 
 ```bash
 python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 ```
+> Note: this *must* be the same validator wallet used for running your validator. Miners cannot run an API node.
 
 #### Options
 
@@ -911,6 +983,8 @@ python neurons/api.py --wallet.name <NAME> --wallet.hotkey <HOTKEY>
 - `--api.ping_timeout`: The timeout (in seconds) for ping data queries. This is the time allowed for a ping operation before it times out. Useful for checking network latency and availability. Default: 2 seconds.
 
 - `--api.whitelisted_hotkeys`: A list of whitelisted hotkeys. Only these hotkeys will be allowed to interact with the API. Default: [] (empty list, meaning no restrictions unless specified).
+
+- `--api.open_access`: This flag completely whitelists all hotkeys and exposes the endpoint to the any hotkey, regardless of registration status. *USE WITH CAUTION*
 
 These options are crucial for managing the behavior and security of your API interactions. The timeouts ensure that operations do not hang indefinitely, while the whitelisted hotkeys provide a mechanism to restrict access to trusted entities. Adjust these settings based on your operational requirements and security considerations.
 

@@ -19,12 +19,14 @@
 import os
 import json
 import base64
+import asyncio
 import argparse
 
 import storage
 from storage.validator.encryption import encrypt_data
 from storage.validator.cid import generate_cid_string
 from storage.shared.ecc import hash_data
+from storage.api.store_api import store
 
 import bittensor
 
@@ -61,7 +63,7 @@ def get_hash_mapping(hash_file, filename):
         return None
 
 
-def save_hash_mapping(hash_file, filename, data_hash):
+def save_hash_mapping(hash_file: str, filename: str, data_hash: str, hotkeys: List[str]):
     base_dir = os.path.basename(hash_file)
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
@@ -73,6 +75,7 @@ def save_hash_mapping(hash_file, filename, data_hash):
         hashes = {}
 
     hashes[filename] = data_hash
+    hashes[filename + "_hotkeys"] = hotkeys
 
     with open(hash_file, "w") as file:
         json.dump(hashes, file)
@@ -119,7 +122,7 @@ class StoreData:
     """
 
     @staticmethod
-    def run(cli):
+    async def run(cli):
         r"""Store data from local disk on the Bittensor network."""
 
         wallet = bittensor.wallet(
@@ -142,27 +145,6 @@ class StoreData:
         with open(cli.config.filepath, "rb") as f:
             raw_data = f.read()
 
-        if cli.config.encrypt:
-            encrypted_data, encryption_payload = encrypt_data(
-                bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
-                wallet,
-            )
-        else:
-            encrypted_data = raw_data
-            encryption_payload = "{}"
-
-        expected_cid = generate_cid_string(encrypted_data)
-        encoded_data = base64.b64encode(encrypted_data)
-        bittensor.logging.trace(f"CLI encrypted_data : {encrypted_data[:100]}")
-        bittensor.logging.trace(f"CLI encryption_pay : {encryption_payload}")
-        bittensor.logging.trace(f"CLI B64ENCODED DATA: {encoded_data[:100]}")
-        synapse = storage.protocol.StoreUser(
-            encrypted_data=encoded_data,
-            encryption_payload=encryption_payload,
-            ttl=cli.config.ttl,
-        )
-        bittensor.logging.debug(f"sending synapse: {synapse.dendrite.dict()}")
-
         hash_basepath = os.path.expanduser(cli.config.hash_basepath)
         hash_filepath = os.path.join(hash_basepath, wallet.name + ".json")
         bittensor.logging.debug("store hashes path:", hash_filepath)
@@ -170,72 +152,45 @@ class StoreData:
         try:
             sub = bittensor.subtensor(network=cli.config.subtensor.network)
             bittensor.logging.debug("subtensor:", sub)
-            StoreData._run(cli, synapse, sub, wallet, hash_filepath, expected_cid)
+            await StoreData._run(cli, raw_data, sub, wallet, hash_filepath)
         finally:
             if "sub" in locals():
                 sub.close()
                 bittensor.logging.debug("closing subtensor connection")
 
     @staticmethod
-    def _run(cli, synapse, subtensor, wallet, hash_filepath, expected_cid):
+    async def _run(cli, raw_data: bytes, subtensor: "bittensor.subtensor", wallet: "bittensor.wallet", hash_filepath: str):
         r"""Store data from local disk on the Bittensor network."""
-        dendrite = bittensor.dendrite(wallet=wallet)
-        bittensor.logging.debug("dendrite:", dendrite)
 
-        mg = subtensor.metagraph(cli.config.netuid)
-        bittensor.logging.debug("metagraph:", mg)
-
-        self = argparse.Namespace()
-        self.config = cli.config
-        self.metagraph = mg
-
-        # Determine axons to query from metagraph
-        query_uids = get_all_validators(self)
-        bittensor.logging.debug("query uids:", query_uids)
-        axons = [mg.axons[uid] for uid in query_uids]
-        bittensor.logging.debug("query axons:", axons)
-
+        success = False
         with bittensor.__console__.status(":satellite: Storing data..."):
-            # Query axons
-            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
-            bittensor.logging.debug(
-                "axon responses:", [resp.dendrite.dict() for resp in responses]
-            )
 
-            success = False
-            failure_modes = {"code": [], "message": []}
-            for response in responses:
-                if response.dendrite.status_code != 200:
-                    failure_modes["code"].append(response.dendrite.status_code)
-                    failure_modes["message"].append(response.dendrite.status_message)
-                    continue
-
-                data_hash = (
-                    response.data_hash.decode("utf-8")
-                    if isinstance(response.data_hash, bytes)
-                    else response.data_hash
+            data_hash, stored_hotkeys = await store(
+                    data=raw_data,
+                    wallet=wallet,
+                    subtensor=subtensor,
+                    netuid=cli.config.netuid,
+                    ttl=cli.config.ttl,
+                    encrypt=cli.config.encrypt,
+                    encoding=cli.config.encoding,
+                    timeout=cli.config.timeout,
                 )
-                bittensor.logging.debug("received data hash: {}".format(data_hash))
 
-                if data_hash != expected_cid:
-                    bittensor.logging.warning(
-                        f"Received CID {data_hash} does not match expected CID {expected_cid}."
-                    )
+            if len(stored_hotkeys) > 0:
+                bittensor.logging.info(
+                    f"Stored data with hotkeys: {stored_hotkeys}."
+                )
                 success = True
-                break
 
         if success:
             # Save hash mapping after successful storage
             filename = os.path.basename(cli.config.filepath)
-            save_hash_mapping(hash_filepath, filename=filename, data_hash=data_hash)
+            save_hash_mapping(hash_filepath, filename=filename, data_hash=data_hash, hotkeys=stored_hotkeys)
             bittensor.logging.info(
-                f"Stored {filename} on the Bittensor network with hash {data_hash}"
+                f"Stored {filename} on the Bittensor network with CID {data_hash}"
             )
         else:
             bittensor.logging.error(f"Failed to store data at {cli.config.filepath}.")
-            bittensor.logging.error(
-                f"Response failure codes & messages {failure_modes}"
-            )
 
     @staticmethod
     def check_config(config: "bittensor.config"):
@@ -243,7 +198,7 @@ class StoreData:
             network = Prompt.ask(
                 "Enter subtensor network",
                 default=defaults.subtensor.network,
-                choices=["finney", "test"],
+                choices=["finney", "local", "test"],
             )
             config.subtensor.network = str(network)
 
@@ -251,7 +206,7 @@ class StoreData:
             netuid = Prompt.ask(
                 "Enter netuid",
                 default=defaults.netuid
-                if config.subtensor.network == "finney"
+                if config.subtensor.network == "finney" or config.subtensor.network == "local"
                 else "22",
             )
             config.netuid = str(netuid)
@@ -277,6 +232,11 @@ class StoreData:
             "put", help="""Store data on the Bittensor network."""
         )
         store_parser.add_argument(
+            "--filepath",
+            type=str,
+            help="Path to data to store on the Bittensor network.",
+        )
+        store_parser.add_argument(
             "--hash_basepath",
             type=str,
             default=defaults.hash_basepath,
@@ -287,11 +247,6 @@ class StoreData:
             type=float,
             default=500,
             help="Stake limit to exclude validator axons to query.",
-        )
-        store_parser.add_argument(
-            "--filepath",
-            type=str,
-            help="Path to data to store on the Bittensor network.",
         )
         store_parser.add_argument(
             "--netuid",
@@ -315,6 +270,12 @@ class StoreData:
             type=int,
             default=60 * 60 * 24 * 30,
             help="Time to live for the data on the Bittensor network. (Default 30 days)",
+        )
+        store_parser.add_argument(
+            "--timeout",
+            type=int,
+            default=180,
+            help="Timeout for the complete storage request on the Bittensor network.",
         )
 
         bittensor.wallet.add_args(store_parser)

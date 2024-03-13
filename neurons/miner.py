@@ -48,7 +48,7 @@ from storage.shared.utils import (
     get_redis_password,
 )
 
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 
 from storage.miner import (
     run,
@@ -161,12 +161,7 @@ class miner:
         self.wallet = bt.wallet(config=self.config)
         self.wallet.create_if_non_existent()
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 

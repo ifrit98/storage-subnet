@@ -3,6 +3,7 @@ import time
 import asyncio
 import re
 import os
+import bittensor as bt
 from redis import asyncio as aioredis
 
 from storage.shared.utils import is_running_in_docker
@@ -114,3 +115,32 @@ def _get_redis_setting(file_path, setting):
         return result.strip().split("\n")
     except subprocess.CalledProcessError:
         return None
+
+
+def _get_redis_password(redis_conf_path):
+    try:
+        cmd = f"sudo grep -Po '^requirepass \K.*' {redis_conf_path}"
+        result = subprocess.run(
+            cmd, shell=True, text=True, capture_output=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        assert False, f"Command failed: {e}"
+    except Exception as e:
+        assert False, f"An error occurred: {e}"
+
+    return None
+
+
+def check_registration(subtensor, wallet, netuid):
+    if not subtensor.is_hotkey_registered(
+        netuid=netuid,
+        hotkey_ss58=wallet.hotkey.ss58_address,
+    ):
+        bt.logging.error(
+            f"Wallet: {wallet} is not registered on netuid {netuid}"
+            f"Please register the hotkey using `btcli subnets register` before trying again"
+        )
+        exit()
+
+    pass

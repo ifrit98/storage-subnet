@@ -19,6 +19,7 @@
 import sys
 import argparse
 import storage
+import asyncio
 import bittensor
 from rich import print
 from typing import List, Optional
@@ -213,7 +214,7 @@ class cli:
             print(f":cross_mark:[red]Unknown command: {config.command}[/red]")
             sys.exit(1)
 
-    def run(self):
+    async def run(self):
         """
         Executes the command from the configuration.
         """
@@ -224,14 +225,16 @@ class cli:
             command_data = COMMANDS[command]
 
             if isinstance(command_data, dict):
-                command_data["commands"][self.config["subcommand"]].run(self)
+                await command_data["commands"][self.config["subcommand"]].run(self)
             else:
-                command_data.run(self)
+                await command_data.run(self)
         else:
             print(f":cross_mark:[red]Unknown command: {self.config.command}[/red]")
             sys.exit()
 
+async def async_main(args):
+    await cli(args=args).run()
 
 def filetao():
     args = sys.argv[1:]
-    cli(args=args).run()
+    asyncio.run(async_main(args=args))

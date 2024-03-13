@@ -176,6 +176,20 @@ async def challenge_data(self):
         self.device
     )
 
+    times = [
+        response[1][0].dendrite.process_time or 30
+        for response in responses
+    ]
+    bt.logging.debug(f"Dendrite Times: {times}")
+    sorted_times = sorted(list(zip(uids, times)), key=lambda x: x[1])
+
+    bt.logging.debug(f"Sorted Times: {sorted_times}")
+    in_top_2_dict = {
+        uid: True if time < 30 else False
+        for (uid, time) in sorted_times[:2]
+    }
+    bt.logging.debug(f"Is Top 2 Dict: {pformat(in_top_2_dict)}")
+
     remove_reward_idxs = []
     data_sizes = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
@@ -207,7 +221,7 @@ async def challenge_data(self):
         )
 
         # Apply reward for this challenge
-        tier_factor = await get_tier_factor(hotkey, self.database)
+        tier_factor = await get_tier_factor(hotkey, self.database, in_top_2=in_top_2_dict.get(uid, False))
         rewards[idx] = 1.0 * tier_factor if verified else CHALLENGE_FAILURE_REWARD
 
         # Log the event data for this specific challenge
@@ -248,7 +262,6 @@ async def challenge_data(self):
         responses=responses,
         rewards=rewards,
         data_sizes=data_sizes,
-        timeout=30,
     )
 
     # Determine the best UID based on rewards

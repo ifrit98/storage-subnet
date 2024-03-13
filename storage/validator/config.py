@@ -109,6 +109,9 @@ def check_config(cls, config: "bt.Config"):
         config.neuron.total_storage_path = os.path.expanduser(
             os.path.join(config.neuron.full_path + "/" + "total_storage.csv")
         )
+        config.neuron.events_json_log_path = os.path.expanduser(
+            os.path.join(config.neuron.full_path + "/" + "events.json")
+        )
 
     bt.logging.info(f"Loaded config in fullpath: {config.neuron.full_path}")
 
@@ -327,6 +330,13 @@ def add_args(cls, parser):
         type=int,
         help="Ping data query timeout.",
         default=5,
+    )
+    parser.add_argument(
+        "--api.blacklisted_hotkeys",
+        nargs="+",
+        type=list,
+        help="List of blacklisted hotkeys.",
+        default=[],
     )
     parser.add_argument(
         "--api.whitelisted_hotkeys",

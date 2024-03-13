@@ -267,7 +267,7 @@ def update_storage_stats(self):
     the miner is running.
     """
 
-    self.free_memory = get_free_disk_space()
+    self.free_memory = get_free_disk_space(self.config.database.directory)
     bt.logging.info(f"Free memory: {self.free_memory} bytes")
     self.current_storage_usage = get_directory_size(self.config.database.directory)
     bt.logging.info(f"Miner storage usage: {self.current_storage_usage} bytes")
