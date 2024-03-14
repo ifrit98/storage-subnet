@@ -20,6 +20,7 @@
 import torch
 import wandb
 import copy
+import json
 
 from loguru import logger
 from dataclasses import asdict
@@ -204,8 +205,16 @@ def log_event(self, event):
     # Log event
     if not self.config.neuron.dont_save_events:
         logger.log("EVENTS", "events", **event.__dict__)
+        save_event_to_json(event, filepath=self.config.neuron.events_json_log_path)
 
     # Log the event to wandb
     if not self.config.wandb.off and self.wandb is not None:
         wandb_event = EventSchema.from_dict(event.__dict__)
         self.wandb.log(asdict(wandb_event))
+
+
+def save_event_to_json(event, filepath="events_log.json"):
+    """Serialize the event to JSON and append it to a log file."""
+    with open(filepath, "a") as file:
+        json_event = json.dumps(event, default=lambda o: o.__dict__, ensure_ascii=False)
+        file.write(json_event + "\n")  # Write each event as a new line

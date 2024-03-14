@@ -30,6 +30,7 @@ from copy import deepcopy
 from pprint import pformat
 from traceback import print_exception
 from substrateinterface.base import SubstrateInterface
+from dotenv import load_dotenv
 
 from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
@@ -38,7 +39,7 @@ from storage.validator.utils import (
     get_current_validtor_uid_round_robin,
     get_rebalance_script_path,
 )
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 from storage.validator.config import config, check_config, add_args
 from storage.validator.state import (
     should_checkpoint,
@@ -48,12 +49,15 @@ from storage.validator.state import (
     load_state,
     save_state,
     init_wandb,
+    log_event,
 )
 from storage.validator.weights import (
     set_weights_for_validator,
 )
 from storage.validator.forward import forward
 from storage.validator.encryption import setup_encryption_wallet
+
+load_dotenv()
 
 
 def MockDendrite():
@@ -125,12 +129,7 @@ class neuron:
         self.wallet.create_if_non_existent()
 
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
@@ -285,7 +284,7 @@ class neuron:
                 )
                 if validator_should_set_weights:
                     bt.logging.debug(f"Setting weights {self.moving_averaged_scores}")
-                    set_weights_for_validator(
+                    event = set_weights_for_validator(
                         subtensor=self.subtensor,
                         wallet=self.wallet,
                         metagraph=self.metagraph,
@@ -295,6 +294,9 @@ class neuron:
                     )
                     prev_set_weights_block = get_current_block(self.subtensor)
                     save_state(self)
+
+                    if event is not None:
+                        log_event(self, event)
 
                 # Rollover wandb to a new run.
                 if should_reinit_wandb(self):

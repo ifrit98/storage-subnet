@@ -109,6 +109,9 @@ def check_config(cls, config: "bt.Config"):
         config.neuron.total_storage_path = os.path.expanduser(
             os.path.join(config.neuron.full_path + "/" + "total_storage.csv")
         )
+        config.neuron.events_json_log_path = os.path.expanduser(
+            os.path.join(config.neuron.full_path + "/" + "events.json")
+        )
 
     bt.logging.info(f"Loaded config in fullpath: {config.neuron.full_path}")
 

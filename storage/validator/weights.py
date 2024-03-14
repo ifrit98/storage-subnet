@@ -21,8 +21,10 @@
 import torch
 import bittensor as bt
 
+from typing import Optional
 from storage import __spec_version__ as spec_version
 from storage.shared.weights import set_weights
+from storage.validator.event import EventSchema
 
 
 def set_weights_for_validator(
@@ -34,7 +36,7 @@ def set_weights_for_validator(
     wandb_on: bool = False,
     wait_for_inclusion: bool = False,
     wait_for_finalization: bool = False,
-):
+) -> Optional[EventSchema]:
     """
     Sets miners' weights on the Bittensor network.
 
@@ -143,5 +145,29 @@ def set_weights_for_validator(
 
     if success is True:
         bt.logging.info("Set weights on chain successfully!")
+        best_idx = torch.argmax(torch.tensor(uint_weights)).item()
+        bt.logging.debug(f"Best index in set weights: {best_idx}")
+
+        best_uid = uint_uids[best_idx]
+        bt.logging.debug(f"Best UID in set weights: {best_uid}")
+        bt.logging.debug(f"Best weight in set weights: {uint_weights[best_idx]}")
+
+        event = EventSchema(
+            task_name="SetWeights",
+            successful=[],
+            completion_times=[],
+            task_status_messages=[],
+            task_status_codes=[],
+            block=subtensor.get_current_block(),
+            uids=uint_uids,
+            step_length=0.0,
+            best_uid=best_uid,
+            best_hotkey=metagraph.hotkeys[best_uid],
+            rewards=[],
+            set_weights=uint_weights,
+        )
+
+        return event
+
     else:
         bt.logging.error(f"Set weights failed {message}.")
