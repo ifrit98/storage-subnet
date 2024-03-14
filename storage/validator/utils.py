@@ -180,7 +180,7 @@ def current_block_hash(self):
             return block_hash
     except Exception as e:
         bt.logging.warning(f"Failed to get block hash: {e}. Returning a random hash value.")
-    return int(str(random.randint(2 << 32, 2 << 64)))
+    return str(random.randint(2 << 32, 2 << 64))
 
 def get_block_seed(self):
     """
