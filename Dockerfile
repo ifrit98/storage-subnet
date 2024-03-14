@@ -11,6 +11,7 @@ WORKDIR /install
 # Copy our sources
 COPY ./neurons /install/neurons
 COPY ./storage /install/storage
+COPY ./scripts /install/scripts
 COPY ./setup.py /install/setup.py
 COPY ./requirements.txt /install/requirements.txt
 COPY ./requirements-dev.txt /install/requirements-dev.txt
@@ -34,5 +35,6 @@ RUN mkdir -p ~/.bittensor/wallets && \
 
 ENV PATH="${PATH}:/usr/local/bin:/usr/local/lib"
 ENV WANDB_API_KEY=$WANDB_API_KEY
+ENV REBALANCE_SCRIPT_PATH=/install/scripts/rebalance_deregistration.sh
 
 #RUN wandb login

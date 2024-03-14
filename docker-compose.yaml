@@ -17,6 +17,7 @@ services:
     volumes:
       - ${BT_WALLETS_BASE_PATH}/.bittensor/wallets:/root/.bittensor/wallets
       - ${REDIS_CONF}:/etc/redis/redis.conf
+      - ./scripts:/install/scripts
 
   filetao-prod: &filetao-prod
     <<: *common
@@ -81,7 +82,7 @@ services:
     container_name: filetao-redis
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--raw", "incr", "ping"]
       interval: 1s
       timeout: 3s
       retries: 5
