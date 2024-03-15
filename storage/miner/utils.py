@@ -16,25 +16,22 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import json
-import time
-import shutil
-import storage
-import wandb
-import copy
 import asyncio
+import copy
+import json
 import multiprocessing
-import bittensor as bt
+import os
+import shutil
+import time
 from collections import deque
 
-from ..shared.ecc import (
-    ecc_point_to_hex,
-    hash_data,
-)
-from ..shared.merkle import (
-    MerkleTree,
-)
+import bittensor as bt
+import wandb
+
+import storage
+
+from ..shared.ecc import ecc_point_to_hex, hash_data
+from ..shared.merkle import MerkleTree
 
 
 def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
@@ -61,7 +58,11 @@ def commit_data_with_seed(committer, data_chunks, n_chunks, seed):
     merkle_tree = MerkleTree()
 
     # Commit each chunk of data
-    randomness, chunks, points = [None] * n_chunks, [None] * n_chunks, [None] * n_chunks
+    randomness, chunks, points = (
+        [None] * n_chunks,
+        [None] * n_chunks,
+        [None] * n_chunks,
+    )
     for index, chunk in enumerate(data_chunks):
         c, m_val, r = committer.commit(chunk + str(seed).encode())
         c_hex = ecc_point_to_hex(c)
@@ -269,10 +270,16 @@ def update_storage_stats(self):
 
     self.free_memory = get_free_disk_space()
     bt.logging.info(f"Free memory: {self.free_memory} bytes")
-    self.current_storage_usage = get_directory_size(self.config.database.directory)
+    self.current_storage_usage = get_directory_size(
+        self.config.database.directory
+    )
     bt.logging.info(f"Miner storage usage: {self.current_storage_usage} bytes")
-    self.percent_disk_usage = self.current_storage_usage / (self.free_memory + self.current_storage_usage)
-    bt.logging.info(f"Miner % disk usage : {100 * self.percent_disk_usage:.3f}%")
+    self.percent_disk_usage = self.current_storage_usage / (
+        self.free_memory + self.current_storage_usage
+    )
+    bt.logging.info(
+        f"Miner % disk usage : {100 * self.percent_disk_usage:.3f}%"
+    )
 
 
 def load_request_log(request_log_path: str) -> dict:
@@ -394,6 +401,7 @@ def run_async_in_sync_context(
     def sync_wrapper(self):
         async def run_async_coro():
             await asyncio.gather(coroutine_function(*args))
+
         loop.run_until_complete(run_async_coro())
 
     process = multiprocessing.Process(target=sync_wrapper, args=args)

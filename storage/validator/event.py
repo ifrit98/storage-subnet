@@ -23,12 +23,16 @@ from typing import List, Optional
 @dataclass
 class EventSchema:
     task_name: str  # Task type, e.g. 'store', 'challenge', 'retrieve' 'broadcast'
-    successful: List[bool]  # List of whether or not the task was successful or not
+    successful: List[
+        bool
+    ]  # List of whether or not the task was successful or not
     completion_times: List[float]  # List of completion times for a given task
     task_status_messages: List[
         str
     ]  # List of completion status messages for a given prompt
-    task_status_codes: List[str]  # List of completion status codes for a given prompt
+    task_status_codes: List[
+        str
+    ]  # List of completion status codes for a given prompt
     block: float  # Current block at given step
     uids: List[int]  # Queried uids
     step_length: float  # Elapsed time between the beginning of a run step to the end of a run step

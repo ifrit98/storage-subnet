@@ -16,13 +16,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import json
+import os
 import time
-import bittensor as bt
-from typing import Optional, Dict, Any, Union, List
-from redis import asyncio as aioredis
 from traceback import print_exception
+from typing import Any, Dict, List, Optional, Union
+
+import bittensor as bt
+from redis import asyncio as aioredis
 
 
 async def store_chunk_metadata(
@@ -127,7 +128,9 @@ async def store_or_update_chunk_metadata(
         await update_seed_info(r, chunk_hash, hotkey, seed)
     else:
         # Add new entry in new format
-        await store_chunk_metadata(r, chunk_hash, filepath, hotkey, size, seed, ttl)
+        await store_chunk_metadata(
+            r, chunk_hash, filepath, hotkey, size, seed, ttl
+        )
 
 
 async def update_seed_info(
@@ -153,9 +156,9 @@ async def update_seed_info(
         # Store the metadata if it does not exist for some reason
         if metadata is None:
             metadata = {
-                "filepath": "",            # Unknown filepath, will attempt reconstruction on load
-                "size": str(0),            # Unknown size
-                "seed": seed,              # Store seed directly
+                "filepath": "",  # Unknown filepath, will attempt reconstruction on load
+                "size": str(0),  # Unknown size
+                "seed": seed,  # Store seed directly
                 "ttl": 60 * 60 * 24 * 30,  # Default to 30 days
                 "generated": time.time(),
             }
@@ -181,6 +184,7 @@ async def is_old_version(
             hotkey = md.pop(b"hotkey")
         except Exception as e:
             # No hotkey found, assume new version
+            bt.logging.error(f"received exception: {e}")
             return False
     # If it's the new version, will have the subkey == to hotkey, else old version
     return await r.hgetall(chunk_hash) and not await r.hget(chunk_hash, hotkey)
@@ -225,10 +229,15 @@ async def get_chunk_metadata(
         metadata = await r.hgetall(chunk_hash)
         if metadata:
             try:
-                metadata = {k.decode("utf-8"): v.decode("utf-8") for k, v in metadata.items()}
+                metadata = {
+                    k.decode("utf-8"): v.decode("utf-8")
+                    for k, v in metadata.items()
+                }
                 metadata["size"] = int(metadata.get("size", 0))
             except Exception as e:
-                bt.logging.error(f"Error getting metadata for {chunk_hash}: {e}")
+                bt.logging.error(
+                    f"Error getting metadata for {chunk_hash}: {e}"
+                )
                 metadata = None
     return metadata
 
@@ -312,7 +321,9 @@ async def get_total_storage_used(r: "aioredis.Strictredis") -> int:
     return total_size
 
 
-async def get_filepath(r: "aioredis.StrictRedis", chunk_hash: str, hotkey: str) -> str:
+async def get_filepath(
+    r: "aioredis.StrictRedis", chunk_hash: str, hotkey: str
+) -> str:
     """
     Retrieves the filepath for a specific chunk from the Redis database.
 
@@ -334,7 +345,9 @@ async def get_filepath(r: "aioredis.StrictRedis", chunk_hash: str, hotkey: str) 
 
 
 async def migrate_data_directory(
-    r: "aioredis.Strictredis", new_base_directory: str, return_failures: bool = False
+    r: "aioredis.Strictredis",
+    new_base_directory: str,
+    return_failures: bool = False,
 ) -> Optional[List[str]]:
     try:
         async for key in r.scan_iter("*"):

@@ -17,12 +17,17 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
-from redis import asyncio as aioredis
 import asyncio
+
 import bittensor as bt
-from rich.table import Table
+from redis import asyncio as aioredis
 from rich.console import Console
-from storage.validator.database import get_miner_statistics, total_hotkey_storage
+from rich.table import Table
+
+from storage.validator.database import (
+    get_miner_statistics,
+    total_hotkey_storage,
+)
 
 
 async def show_all_miner_statistics(r: aioredis.Redis):
@@ -114,7 +119,9 @@ class ListMinerStats:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        stats_parser = parser.add_parser("stats", help="""Show stats for hotkey.""")
+        stats_parser = parser.add_parser(
+            "stats", help="""Show stats for hotkey."""
+        )
         stats_parser.add_argument(
             "--index",
             type=int,

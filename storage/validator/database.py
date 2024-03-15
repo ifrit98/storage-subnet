@@ -18,10 +18,10 @@
 
 import json
 import time
-from redis import asyncio as aioredis
-import asyncio
+from typing import Any, Dict, List, Optional, Union
+
 import bittensor as bt
-from typing import Dict, List, Any, Union, Optional
+from redis import asyncio as aioredis
 
 
 async def set_ttl_for_hash_and_hotkey(
@@ -161,10 +161,14 @@ async def add_metadata_to_hotkey(
     # Use HSET to associate the data hash with the hotkey
     key = f"hotkey:{ss58_address}"
     await database.hset(key, data_hash, metadata_json)
-    bt.logging.trace(f"Associated data hash {data_hash} with hotkey {ss58_address}.")
+    bt.logging.trace(
+        f"Associated data hash {data_hash} with hotkey {ss58_address}."
+    )
 
     if ttl:
-        await set_ttl_for_hash_and_hotkey(data_hash, ss58_address, database, ttl)
+        await set_ttl_for_hash_and_hotkey(
+            data_hash, ss58_address, database, ttl
+        )
 
 
 async def remove_metadata_from_hotkey(
@@ -182,7 +186,9 @@ async def remove_metadata_from_hotkey(
     key = f"hotkey:{ss58_address}"
     await database.hdel(key, data_hash)
     await database.hdel(key, f"ttl:{data_hash}")  # delete the TTL as well
-    bt.logging.trace(f"Removed data hash {data_hash} from hotkey {ss58_address}.")
+    bt.logging.trace(
+        f"Removed data hash {data_hash} from hotkey {ss58_address}."
+    )
 
 
 async def get_metadata_for_hotkey(
@@ -233,7 +239,8 @@ async def get_hashes_for_hotkey(
 
     # Deserialize the metadata for each data hash
     return [
-        data_hash.decode("utf-8") for data_hash, metadata in all_data_hashes.items()
+        data_hash.decode("utf-8")
+        for data_hash, metadata in all_data_hashes.items()
     ]
 
 
@@ -258,7 +265,10 @@ async def remove_hashes_for_hotkey(
 
 
 async def update_metadata_for_data_hash(
-    ss58_address: str, data_hash: str, new_metadata: dict, database: aioredis.Redis
+    ss58_address: str,
+    data_hash: str,
+    new_metadata: dict,
+    database: aioredis.Redis,
 ):
     """
     Updates the metadata for a specific data hash associated with a hotkey.
@@ -279,7 +289,10 @@ async def update_metadata_for_data_hash(
 
 
 async def get_metadata_for_hotkey_and_hash(
-    ss58_address: str, data_hash: str, database: aioredis.Redis, verbose: bool = False
+    ss58_address: str,
+    data_hash: str,
+    database: aioredis.Redis,
+    verbose: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     Retrieves specific metadata from a hash in Redis for the given field_key.
@@ -303,11 +316,15 @@ async def get_metadata_for_hotkey_and_hash(
         metadata = json.loads(metadata_json)
         return metadata
     else:
-        bt.logging.trace(f"No metadata found for {data_hash} in hash {ss58_address}.")
+        bt.logging.trace(
+            f"No metadata found for {data_hash} in hash {ss58_address}."
+        )
         return None
 
 
-async def get_all_chunk_hashes(database: aioredis.Redis) -> Dict[str, List[str]]:
+async def get_all_chunk_hashes(
+    database: aioredis.Redis,
+) -> Dict[str, List[str]]:
     """
     Retrieves all chunk hashes and associated metadata from the Redis instance.
 
@@ -331,7 +348,9 @@ async def get_all_chunk_hashes(database: aioredis.Redis) -> Dict[str, List[str]]
             data_hash = data_hash.decode("utf-8")
             if data_hash not in chunk_hash_hotkeys:
                 chunk_hash_hotkeys[data_hash] = []
-            chunk_hash_hotkeys[data_hash].append(hotkey.decode("utf-8").split(":")[1])
+            chunk_hash_hotkeys[data_hash].append(
+                hotkey.decode("utf-8").split(":")[1]
+            )
 
     return chunk_hash_hotkeys
 
@@ -445,7 +464,9 @@ async def hotkey_at_capacity(
         limit = int(byte_limit)
     except Exception as e:
         if verbose:
-            bt.logging.trace(f"Could not parse storage limit for {hotkey} | {e}.")
+            bt.logging.trace(
+                f"Could not parse storage limit for {hotkey} | {e}."
+            )
         return False
     if total_storage >= limit:
         if verbose:
@@ -489,7 +510,9 @@ async def cache_hotkeys_capacity(
             try:
                 limit = int(byte_limit)
             except Exception as e:
-                bt.logging.warning(f"Could not parse storage limit for {hotkey} | {e}.")
+                bt.logging.warning(
+                    f"Could not parse storage limit for {hotkey} | {e}."
+                )
                 limit = None
 
         hotkeys_capacity[hotkey] = (total_storage, limit)
@@ -497,7 +520,9 @@ async def cache_hotkeys_capacity(
     return hotkeys_capacity
 
 
-async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False):
+async def check_hotkeys_capacity(
+    hotkeys_capacity, hotkey: str, verbose: bool = False
+):
     """
     Checks if a hotkey is at capacity using the cached information.
 
@@ -550,7 +575,9 @@ async def total_validator_storage(database: aioredis.Redis) -> int:
     return total_storage
 
 
-async def get_miner_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, str]]:
+async def get_miner_statistics(
+    database: aioredis.Redis,
+) -> Dict[str, Dict[str, str]]:
     """
     Retrieves statistics for all miners in the database.
     Parameters:
@@ -734,7 +761,9 @@ async def get_hotkeys_for_hash(
     return list(all_hotkeys)
 
 
-async def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: aioredis.Redis):
+async def add_hotkey_to_chunk(
+    chunk_hash: str, hotkey: str, database: aioredis.Redis
+):
     """
     Add a hotkey to the metadata of a specific chunk.
 
@@ -769,7 +798,10 @@ async def add_hotkey_to_chunk(chunk_hash: str, hotkey: str, database: aioredis.R
 
 
 async def remove_hotkey_from_chunk(
-    chunk_hash: str, hotkey: str, database: aioredis.Redis, verbose: bool = False
+    chunk_hash: str,
+    hotkey: str,
+    database: aioredis.Redis,
+    verbose: bool = False,
 ):
     """
     Remove a hotkey from the metadata of a specific chunk.
@@ -796,10 +828,14 @@ async def remove_hotkey_from_chunk(
                 chunk_metadata_key, "hotkeys", ",".join(existing_hotkeys)
             )
             if verbose:
-                bt.logging.trace(f"UID {hotkey} removed from chunk {chunk_hash}.")
+                bt.logging.trace(
+                    f"UID {hotkey} removed from chunk {chunk_hash}."
+                )
         else:
             if verbose:
-                bt.logging.trace(f"UID {hotkey} does not exist for chunk {chunk_hash}.")
+                bt.logging.trace(
+                    f"UID {hotkey} does not exist for chunk {chunk_hash}."
+                )
     else:
         if verbose:
             bt.logging.trace(f"No UIDs associated with chunk {chunk_hash}.")
@@ -888,8 +924,13 @@ async def retrieve_mutually_exclusive_hotkeys_full_hash(
         if chunk_info["chunk_hash"] not in mutually_exclusive_hotkeys:
             mutually_exclusive_hotkeys[chunk_info["chunk_hash"]] = []
         for hotkey in chunk_info["hotkeys"]:
-            if hotkey not in mutually_exclusive_hotkeys[chunk_info["chunk_hash"]]:
-                mutually_exclusive_hotkeys[chunk_info["chunk_hash"]].append(hotkey)
+            if (
+                hotkey
+                not in mutually_exclusive_hotkeys[chunk_info["chunk_hash"]]
+            ):
+                mutually_exclusive_hotkeys[chunk_info["chunk_hash"]].append(
+                    hotkey
+                )
 
     return mutually_exclusive_hotkeys
 
@@ -971,7 +1012,9 @@ async def get_all_challenge_hashes(database: aioredis.Redis) -> List[str]:
     return challenge_hashes
 
 
-async def get_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+async def get_challenges_for_hotkey(
+    ss58_address: str, database: aioredis.Redis
+):
     """
     Retrieves a list of challenge hashes associated with a specific hotkey.
 
@@ -996,7 +1039,9 @@ async def get_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis)
     return challenges
 
 
-async def purge_challenges_for_hotkey(ss58_address: str, database: aioredis.Redis):
+async def purge_challenges_for_hotkey(
+    ss58_address: str, database: aioredis.Redis
+):
     """
     Purges (deletes) all challenge hashes associated with a specific hotkey.
 
@@ -1069,5 +1114,7 @@ def get_hash_keys(ss58_address, r):
     Filter out the ttl: hashes from the hotkey hashes and return the list of keys.
     """
     return [
-        key for key in r.hkeys(f"hotkey:{ss58_address}") if not key.startswith(b"ttl:")
+        key
+        for key in r.hkeys(f"hotkey:{ss58_address}")
+        if not key.startswith(b"ttl:")
     ]

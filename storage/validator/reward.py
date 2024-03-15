@@ -17,27 +17,27 @@
 # DEALINGS IN THE SOFTWARE.
 
 
-import torch
-import numpy as np
-import bittensor as bt
-from bittensor import Synapse
-from typing import Union, List
 from functools import partial
+from typing import List, Union
 
-from storage.validator.verify import (
-    verify_store_with_seed,
-    verify_challenge_with_seed,
-    verify_retrieve_with_seed,
-)
-from storage.validator.bonding import update_statistics, get_tier_factor
-from storage.validator.event import EventSchema
+import bittensor as bt
+import numpy as np
+import torch
+from bittensor import Synapse
 
 from storage.constants import (
-    STORE_FAILURE_REWARD,
-    RETRIEVAL_FAILURE_REWARD,
     CHALLENGE_FAILURE_REWARD,
+    RETRIEVAL_FAILURE_REWARD,
+    STORE_FAILURE_REWARD,
 )
-from storage.protocol import Store, Retrieve, Challenge
+from storage.protocol import Challenge, Retrieve, Store
+from storage.validator.bonding import get_tier_factor, update_statistics
+from storage.validator.event import EventSchema
+from storage.validator.verify import (
+    verify_challenge_with_seed,
+    verify_retrieve_with_seed,
+    verify_store_with_seed,
+)
 
 
 def adjusted_sigmoid(x, steepness=1, shift=0):
@@ -144,7 +144,9 @@ def scale_rewards(
     Returns:
         List[float]: A list of scaled rewards for each axon.
     """
-    sorted_axon_times = get_sorted_response_times(uids, responses, timeout=timeout)
+    sorted_axon_times = get_sorted_response_times(
+        uids, responses, timeout=timeout
+    )
 
     # Extract only the process times
     process_times = [proc_time for _, proc_time in sorted_axon_times]
@@ -158,7 +160,9 @@ def scale_rewards(
     bt.logging.trace(f"Normalized data sizes: {normalized_log_data_sizes}")
 
     # Scale initial rewards by normalized data sizes
-    data_size_scaled_rewards = rewards.to(device) * normalized_log_data_sizes.to(device)
+    data_size_scaled_rewards = rewards.to(
+        device
+    ) * normalized_log_data_sizes.to(device)
 
     # Normalize the response times
     normalized_times = sigmoid_normalize(process_times, timeout)
@@ -166,7 +170,9 @@ def scale_rewards(
     # Create a dictionary mapping UIDs to normalized times
     uid_to_normalized_time = {
         uid: normalized_time
-        for (uid, _), normalized_time in zip(sorted_axon_times, normalized_times)
+        for (uid, _), normalized_time in zip(
+            sorted_axon_times, normalized_times
+        )
     }
 
     # Scale the data size-scaled rewards with normalized times
@@ -240,10 +246,13 @@ def apply_reward_scores(
     # Update moving_averaged_scores with rewards produced by this step.
     # shape: [ metagraph.n ]
     alpha: float = 0.05
-    self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-        1 - alpha
-    ) * self.moving_averaged_scores.to(self.device)
-    bt.logging.trace(f"Updated moving avg scores: {self.moving_averaged_scores}")
+    self.moving_averaged_scores: torch.FloatTensor = (
+        alpha * scattered_rewards
+        + (1 - alpha) * self.moving_averaged_scores.to(self.device)
+    )
+    bt.logging.trace(
+        f"Updated moving avg scores: {self.moving_averaged_scores}"
+    )
 
 
 async def create_reward_vector(
@@ -304,7 +313,9 @@ async def create_reward_vector(
 
         # Apply reward for this task
         tier_factor = await get_tier_factor(hotkey, self.database)
-        rewards[idx] = 1.0 * tier_factor if success else failure_reward * tier_factor
+        rewards[idx] = (
+            1.0 * tier_factor if success else failure_reward * tier_factor
+        )
 
         event.successful.append(success)
         event.uids.append(uid)

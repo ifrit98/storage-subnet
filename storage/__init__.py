@@ -55,11 +55,8 @@ __version__ = "2.0.1"
 version = StorageVersion.from_string(__version__)
 __spec_version__ = version.to_spec_version()
 
-# Import all submodules.
-from . import protocol
-from . import validator
-from . import miner
-from . import cli
-from .api.store import StoreUserAPI
-from .api.retrieve import RetrieveUserAPI
+# Import all submodules. Not sure if these are used?
+from . import cli, miner, protocol, validator
 from .api.get_query_axons import get_query_api_axons
+from .api.retrieve import RetrieveUserAPI
+from .api.store import StoreUserAPI

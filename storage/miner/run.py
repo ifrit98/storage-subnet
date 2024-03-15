@@ -17,20 +17,16 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
-import time
-import wandb
-import asyncio
-import subprocess
-import bittensor as bt
-
 from pprint import pformat
-from substrateinterface import SubstrateInterface
+
+import bittensor as bt
+import wandb
 from scalecodec import ScaleBytes
 from scalecodec.exceptions import RemainingScaleBytesNotEmptyException
+from substrateinterface import SubstrateInterface
 
-from .utils import update_storage_stats, run_async_in_sync_context
 from .database import convert_all_to_hotkey_format
-
+from .utils import run_async_in_sync_context, update_storage_stats
 
 tagged_tx_queue_registry = {
     "types": {
@@ -77,16 +73,20 @@ tagged_tx_queue_registry = {
 
 
 def runtime_call(
-    substrate: SubstrateInterface, api: str, method: str, params: list, block_hash: str
+    substrate: SubstrateInterface,
+    api: str,
+    method: str,
+    params: list,
+    block_hash: str,
 ):
     substrate.runtime_config.update_type_registry(tagged_tx_queue_registry)
-    runtime_call_def = substrate.runtime_config.type_registry["runtime_api"][api][
-        "methods"
-    ][method]
+    runtime_call_def = substrate.runtime_config.type_registry["runtime_api"][
+        api
+    ]["methods"][method]
     # TODO: review is this variable is needed
-    runtime_api_types = substrate.runtime_config.type_registry["runtime_api"][api].get(
-        "types", {}
-    )
+    runtime_api_types = substrate.runtime_config.type_registry["runtime_api"][
+        api
+    ].get("types", {})
 
     # Encode params
     param_data = ScaleBytes(bytes())
@@ -96,7 +96,9 @@ def runtime_call(
             param_data += scale_obj.encode(params[idx])
         else:
             if param["name"] not in params:
-                raise ValueError(f"Runtime Call param '{param['name']}' is missing")
+                raise ValueError(
+                    f"Runtime Call param '{param['name']}' is missing"
+                )
 
             param_data += scale_obj.encode(params[param["name"]])
 
@@ -106,14 +108,22 @@ def runtime_call(
     )
 
     # Decode result
-    result_obj = substrate.runtime_config.create_scale_object(runtime_call_def["type"])
+    result_obj = substrate.runtime_config.create_scale_object(
+        runtime_call_def["type"]
+    )
     try:
-        result_obj.decode(ScaleBytes(result_data["result"]), check_remaining=False)
+        result_obj.decode(
+            ScaleBytes(result_data["result"]), check_remaining=False
+        )
     except RemainingScaleBytesNotEmptyException:
-        bt.logging.error(f"BytesNotEmptyException: result_data could not be decoded {result_data}")
+        bt.logging.error(
+            f"BytesNotEmptyException: result_data could not be decoded {result_data}"
+        )
         result_obj = "Dry run failed. Could not decode result."
     except Exception as e:
-        bt.logging.error(f"Exception: result_data could not be decoded {e} {result_data}")
+        bt.logging.error(
+            f"Exception: result_data could not be decoded {e} {result_data}"
+        )
         result_obj = "Dry run failed. Could not decode result."
 
     return result_obj
@@ -171,7 +181,9 @@ def run(self):
     last_extrinsic_hash = None
     checked_extrinsics_count = 0
     should_retry = False
-    account_nonce = block_handler_substrate.get_account_nonce(self.wallet.hotkey.ss58_address)
+    account_nonce = block_handler_substrate.get_account_nonce(
+        self.wallet.hotkey.ss58_address
+    )
 
     def handler(obj, update_nr, subscription_id):
         current_block = obj["header"]["number"]
@@ -198,14 +210,16 @@ def run(self):
                 checked_extrinsics_count = 0
             except Exception:
                 checked_extrinsics_count += 1
-                bt.logging.trace("An error occurred, extrinsic not found in block.")
+                bt.logging.trace(
+                    "An error occurred, extrinsic not found in block."
+                )
             finally:
                 if checked_extrinsics_count >= 20:
                     should_retry = True
                     last_extrinsic_hash = None
                     checked_extrinsics_count = 0
 
-        new_epoch = ((current_block + netuid + 1) % (tempo + 1) == 0)
+        new_epoch = (current_block + netuid + 1) % (tempo + 1) == 0
         if new_epoch or should_retry:
             bt.logging.info("Saving request log")
             try:
@@ -231,7 +245,10 @@ def run(self):
 
                 # Period dictates how long the extrinsic will stay as part of waiting pool
                 extrinsic = substrate.create_signed_extrinsic(
-                    call=call, keypair=self.wallet.hotkey, era={"period": 10}, nonce=account_nonce
+                    call=call,
+                    keypair=self.wallet.hotkey,
+                    era={"period": 10},
+                    nonce=account_nonce,
                 )
 
                 dry_run = runtime_call(
@@ -250,17 +267,26 @@ def run(self):
                         wait_for_finalization=False,
                     )
 
-                    result_data = substrate.rpc_request("author_pendingExtrinsics", [])
+                    result_data = substrate.rpc_request(
+                        "author_pendingExtrinsics", []
+                    )
                     for extrinsic_data in result_data["result"]:
-                        extrinsic = substrate.runtime_config.create_scale_object(
-                            "Extrinsic", metadata=substrate.metadata
+                        extrinsic = (
+                            substrate.runtime_config.create_scale_object(
+                                "Extrinsic", metadata=substrate.metadata
+                            )
                         )
                         extrinsic.decode(
                             ScaleBytes(extrinsic_data),
-                            check_remaining=substrate.config.get("strict_scale_decode"),
+                            check_remaining=substrate.config.get(
+                                "strict_scale_decode"
+                            ),
                         )
 
-                        if extrinsic.value["extrinsic_hash"] == response.extrinsic_hash:
+                        if (
+                            extrinsic.value["extrinsic_hash"]
+                            == response.extrinsic_hash
+                        ):
                             bt.logging.debug(
                                 "Weights transaction is in the pending transaction pool"
                             )
@@ -270,7 +296,9 @@ def run(self):
                     account_nonce = account_nonce + 1
 
                 except BaseException as e:
-                    bt.logging.warning(f"Error while submitting set weights extrinsic: {e}. Retrying...")
+                    bt.logging.warning(
+                        f"Error while submitting set weights extrinsic: {e}. Retrying..."
+                    )
                     should_retry = True
 
             # --- Update the miner storage information periodically.

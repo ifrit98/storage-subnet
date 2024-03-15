@@ -16,30 +16,32 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import json
-import time
-import torch
-import base64
-import typing
 import asyncio
-from redis import asyncio as aioredis
-import traceback
-import bittensor as bt
+import base64
+import json
 import threading
+import time
+import traceback
+import typing
+
+import bittensor as bt
+import torch
+from redis import asyncio as aioredis
 
 from storage import protocol
-from storage.shared.ecc import hash_data
 from storage.shared.checks import check_environment
-from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
-from storage.validator.config import config, check_config, add_args
-from storage.validator.state import should_checkpoint
-from storage.validator.encryption import encrypt_data, setup_encryption_wallet
-from storage.validator.store import store_broadband
-from storage.validator.retrieve import retrieve_broadband
-from storage.validator.database import retrieve_encryption_payload
+from storage.shared.utils import get_redis_password
 from storage.validator.cid import generate_cid_string
-from storage.validator.encryption import decrypt_data_with_private_key
+from storage.validator.config import add_args, check_config, config
+from storage.validator.database import retrieve_encryption_payload
+from storage.validator.encryption import (
+    decrypt_data_with_private_key,
+    encrypt_data,
+    setup_encryption_wallet,
+)
+from storage.validator.retrieve import retrieve_broadband
+from storage.validator.store import store_broadband
 
 
 def MockDendrite():
@@ -109,7 +111,8 @@ class neuron:
 
         if not self.config.wallet._mock:
             if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
+                hotkey_ss58=self.wallet.hotkey.ss58_address,
+                netuid=self.config.netuid,
             ):
                 raise Exception(
                     f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
@@ -129,9 +132,13 @@ class neuron:
         # Init metagraph.
         bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
-            netuid=self.config.netuid, network=self.subtensor.network, sync=False
+            netuid=self.config.netuid,
+            network=self.subtensor.network,
+            sync=False,
         )  # Make sure not to sync without passing subtensor
-        self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
+        self.metagraph.sync(
+            subtensor=self.subtensor
+        )  # Sync metagraph with subtensor.
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
@@ -149,7 +156,9 @@ class neuron:
 
         # Init Weights.
         bt.logging.debug("loading moving_averaged_scores")
-        self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(self.device)
+        self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(
+            self.device
+        )
         bt.logging.debug(str(self.moving_averaged_scores))
 
         self.my_subnet_uid = self.metagraph.hotkeys.index(
@@ -208,7 +217,9 @@ class neuron:
 
         self.step = 0
 
-    async def store_user_data(self, synapse: protocol.StoreUser) -> protocol.StoreUser:
+    async def store_user_data(
+        self, synapse: protocol.StoreUser
+    ) -> protocol.StoreUser:
         """
         Asynchronously handles the storage of user data by processing a store user request. It stores the
         encrypted user data on the network and updates the request with the resulting data hash.
@@ -242,7 +253,9 @@ class neuron:
         content_id = generate_cid_string(decoded_data)
 
         if isinstance(validator_encryption_payload, dict):
-            validator_encryption_payload = json.dumps(validator_encryption_payload)
+            validator_encryption_payload = json.dumps(
+                validator_encryption_payload
+            )
 
         await self.database.set(
             f"payload:validator:{content_id}", validator_encryption_payload
@@ -307,9 +320,10 @@ class neuron:
             verification based on the provided data hash.
             - The method logs the retrieval process and the resulting data for monitoring and debugging.
         """
-        validator_encrypted_data, user_encryption_payload = await retrieve_broadband(
-            self, synapse.data_hash
-        )
+        (
+            validator_encrypted_data,
+            user_encryption_payload,
+        ) = await retrieve_broadband(self, synapse.data_hash)
 
         validator_encryption_payload = await retrieve_encryption_payload(
             "validator:" + synapse.data_hash, self.database

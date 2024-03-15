@@ -16,10 +16,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import math
 import asyncio
-from redis import asyncio as aioredis
+import math
+
 import bittensor as bt
+from redis import asyncio as aioredis
+
 from storage.constants import *
 
 
@@ -133,8 +135,13 @@ async def rollover_storage_stats(database: aioredis.Redis):
     Args:
         database (redis.Redis): The Redis client instance for database operations.
     """
-    miner_stats_keys = [stats_key async for stats_key in database.scan_iter("stats:*")]
-    tasks = [reset_storage_stats(stats_key, database) for stats_key in miner_stats_keys]
+    miner_stats_keys = [
+        stats_key async for stats_key in database.scan_iter("stats:*")
+    ]
+    tasks = [
+        reset_storage_stats(stats_key, database)
+        for stats_key in miner_stats_keys
+    ]
     await asyncio.gather(*tasks)
 
 
@@ -206,7 +213,9 @@ async def update_statistics(
             await database.hincrby(stats_key, f"{task_type}_successes", 1)
 
     # Transition retireval -> retrieve successes (legacy)
-    legacy_retrieve_successes = await database.hget(stats_key, "retrieval_successes")
+    legacy_retrieve_successes = await database.hget(
+        stats_key, "retrieval_successes"
+    )
     if legacy_retrieve_successes is not None:
         await database.hset(
             stats_key, "retrieve_successes", int(legacy_retrieve_successes)
@@ -214,7 +223,9 @@ async def update_statistics(
         await database.hdel(stats_key, "retrieval_successes")
 
     # Transition retireval -> retrieve attempts (legacy)
-    legacy_retrieve_attempts = await database.hget(stats_key, "retrieval_attempts")
+    legacy_retrieve_attempts = await database.hget(
+        stats_key, "retrieval_attempts"
+    )
     if legacy_retrieve_attempts is not None:
         await database.hset(
             stats_key, "retrieve_attempts", int(legacy_retrieve_attempts)
@@ -226,32 +237,46 @@ async def update_statistics(
         store_successes = await database.hget(stats_key, "store_successes")
         if store_succeses is None:
             store_successes = 0
-            database.hset(stats_key, "store_successes", 0) # ensure field exists
+            database.hset(
+                stats_key, "store_successes", 0
+            )  # ensure field exists
         else:
             store_successes = int(store_successes)
 
-        challenge_successes = await database.hget(stats_key, "challenge_successes")
+        challenge_successes = await database.hget(
+            stats_key, "challenge_successes"
+        )
         if challenge_successes is None:
             challenge_successes = 0
-            database.hset(stats_key, "challenge_successes", 0) # ensure field exists
+            database.hset(
+                stats_key, "challenge_successes", 0
+            )  # ensure field exists
         else:
             challenge_successes = int(challenge_successes)
 
-        retrieval_successes = await database.hget(stats_key, "retrieve_successes")
+        retrieval_successes = await database.hget(
+            stats_key, "retrieve_successes"
+        )
         if retrieval_successes is None:
             retrieval_successes = 0
-            database.hset(stats_key, "retrieve_successes", 0) # ensure field exists
+            database.hset(
+                stats_key, "retrieve_successes", 0
+            )  # ensure field exists
         else:
             retrieval_successes = int(retrieval_successes)
 
-        total_successes = store_successes + retrieval_successes + challenge_successes
+        total_successes = (
+            store_successes + retrieval_successes + challenge_successes
+        )
         await database.hset(stats_key, "total_successes", total_successes)
 
     if success:
         await database.hincrby(stats_key, "total_successes", 1)
 
 
-async def compute_tier(stats_key: str, database: aioredis.Redis, confidence=0.95):
+async def compute_tier(
+    stats_key: str, database: aioredis.Redis, confidence=0.95
+):
     if not await database.exists(stats_key):
         bt.logging.warning(f"Miner key {stats_key} is not registered!")
         return
@@ -260,14 +285,26 @@ async def compute_tier(stats_key: str, database: aioredis.Redis, confidence=0.95
     challenge_successes = int(
         await database.hget(stats_key, "challenge_successes") or 0
     )
-    challenge_attempts  = int(await database.hget(stats_key, "challenge_attempts") or 0)
-    retrieval_successes = int(await database.hget(stats_key, "retrieve_successes") or 0)
-    retrieval_attempts  = int(await database.hget(stats_key, "retrieve_attempts") or 0)
-    store_successes     = int(await database.hget(stats_key, "store_successes") or 0)
-    store_attempts      = int(await database.hget(stats_key, "store_attempts") or 0)
-    total_successes     = int(await database.hget(stats_key, "total_successes") or 0)
+    challenge_attempts = int(
+        await database.hget(stats_key, "challenge_attempts") or 0
+    )
+    retrieval_successes = int(
+        await database.hget(stats_key, "retrieve_successes") or 0
+    )
+    retrieval_attempts = int(
+        await database.hget(stats_key, "retrieve_attempts") or 0
+    )
+    store_successes = int(
+        await database.hget(stats_key, "store_successes") or 0
+    )
+    store_attempts = int(await database.hget(stats_key, "store_attempts") or 0)
+    total_successes = int(
+        await database.hget(stats_key, "total_successes") or 0
+    )
 
-    total_current_attempts  = challenge_attempts + retrieval_attempts + store_attempts
+    total_current_attempts = (
+        challenge_attempts + retrieval_attempts + store_attempts
+    )
     total_current_successes = (
         challenge_successes + retrieval_successes + store_successes
     )
@@ -327,7 +364,9 @@ async def compute_tier(stats_key: str, database: aioredis.Redis, confidence=0.95
     current_limit = await database.hget(stats_key, "storage_limit")
     if current_limit is None:
         current_limit = STORAGE_LIMIT_BRONZE
-        await database.hset(stats_key, "storage_limit", current_limit) # Ensure field exists
+        await database.hset(
+            stats_key, "storage_limit", current_limit
+        )  # Ensure field exists
     else:
         current_limit = int(current_limit.decode())
 

@@ -16,69 +16,56 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import asyncio
+import base64
+import json
 import os
 import sys
-import json
-import time
-import torch
-import typing
-import base64
-import asyncio
 import threading
+import time
 import traceback
-import bittensor as bt
-from typing import Dict
-from redis import asyncio as aioredis
-
+import typing
 from pprint import pformat
+from typing import Dict
+
+import bittensor as bt
+import torch
+from redis import asyncio as aioredis
 
 # import this repo
 import storage
-from storage.shared.ecc import (
-    hash_data,
-    ECCommitment,
-    ecc_point_to_hex,
-    hex_to_ecc_point,
-)
-
-from storage.shared.utils import (
-    b64_encode,
-    chunk_data,
-    safe_key_search,
-    get_redis_password,
-)
-
-from storage.shared.checks import check_environment
-
-from storage.miner import (
-    run,
-)
-
-from storage.miner.utils import (
-    compute_subsequent_commitment,
-    save_data_to_filesystem,
-    load_from_filesystem,
-    commit_data_with_seed,
-    init_wandb,
-    update_storage_stats,
-    load_request_log,
-    log_request,
-    RateLimiter,
-    get_purge_ttl_script_path,
-)
-
-from storage.miner.config import (
-    config,
-    check_config,
-    add_args,
-)
-
+from storage.miner import run
+from storage.miner.config import add_args, check_config, config
 from storage.miner.database import (
-    store_chunk_metadata,
-    update_seed_info,
     get_chunk_metadata,
     get_filepath,
     store_or_update_chunk_metadata,
+    update_seed_info,
+)
+from storage.miner.utils import (
+    RateLimiter,
+    commit_data_with_seed,
+    compute_subsequent_commitment,
+    get_purge_ttl_script_path,
+    init_wandb,
+    load_from_filesystem,
+    load_request_log,
+    log_request,
+    save_data_to_filesystem,
+    update_storage_stats,
+)
+from storage.shared.checks import check_environment
+from storage.shared.ecc import (
+    ECCommitment,
+    ecc_point_to_hex,
+    hash_data,
+    hex_to_ecc_point,
+)
+from storage.shared.utils import (
+    b64_encode,
+    chunk_data,
+    get_redis_password,
+    safe_key_search,
 )
 
 
@@ -156,7 +143,8 @@ class miner:
         self.wallet.create_if_non_existent()
         if not self.config.wallet._mock:
             if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
+                hotkey_ss58=self.wallet.hotkey.ss58_address,
+                netuid=self.config.netuid,
             ):
                 raise Exception(
                     f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
@@ -167,9 +155,13 @@ class miner:
         # Init metagraph.
         bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
-            netuid=self.config.netuid, network=self.subtensor.network, sync=False
+            netuid=self.config.netuid,
+            network=self.subtensor.network,
+            sync=False,
         )  # Make sure not to sync without passing subtensor
-        self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
+        self.metagraph.sync(
+            subtensor=self.subtensor
+        )  # Sync metagraph with subtensor.
         bt.logging.debug(str(self.metagraph))
 
         # Setup database
@@ -225,7 +217,9 @@ class miner:
         self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
         # Start  starts the miner's axon, making it active on the network.
-        bt.logging.info(f"Starting axon server on port: {self.config.axon.port}")
+        bt.logging.info(
+            f"Starting axon server on port: {self.config.axon.port}"
+        )
         self.axon.start()
 
         # Init the event loop.
@@ -263,7 +257,9 @@ class miner:
         Usage:
             Should be called during the initialization of the miner to start tracking requests per hour.
         """
-        self.request_count_timer = threading.Timer(3600, self.reset_request_count)
+        self.request_count_timer = threading.Timer(
+            3600, self.reset_request_count
+        )
         self.request_count_timer.start()
 
     def reset_request_count(self):
@@ -285,7 +281,9 @@ class miner:
         self.average_requests_per_hour = sum(self.requests_per_hour) / len(
             self.requests_per_hour
         )
-        bt.logging.info(f"Average requests per hour: {self.average_requests_per_hour}")
+        bt.logging.info(
+            f"Average requests per hour: {self.average_requests_per_hour}"
+        )
         self.request_count = 0
         self.start_request_count_timer()
 
@@ -317,6 +315,7 @@ class miner:
                 size = int(json.loads(key_dict[first_hotkey]).get("size", 0))
             except Exception as e:
                 size = 0
+                bt.logging.error(f"got exception: {e}")
             total_size += size
         return total_size
 
@@ -462,7 +461,9 @@ class miner:
         bt.logging.trace(f"Not Blacklisting recognized hotkey {caller}")
         return False, "Hotkey recognized!"
 
-    def challenge_priority_fn(self, synapse: storage.protocol.Challenge) -> float:
+    def challenge_priority_fn(
+        self, synapse: storage.protocol.Challenge
+    ) -> float:
         """
         Assigns a priority to a given synapse based on the stake of the calling entity
         in the metagraph. This function is crucial for prioritizing network requests
@@ -581,7 +582,9 @@ class miner:
         )
         return prirority
 
-    async def store(self, synapse: storage.protocol.Store) -> storage.protocol.Store:
+    async def store(
+        self, synapse: storage.protocol.Store
+    ) -> storage.protocol.Store:
         """
         Processes the storage request from a synapse by securely storing the provided data and returning
         a proof of storage. The data is committed using elliptic curve cryptography, stored on the filesystem,
@@ -612,7 +615,9 @@ class miner:
             Assuming an initialized 'committer' object and 'synapse' with necessary data:
             >>> updated_synapse = self.store(synapse)
         """
-        bt.logging.info(f"received store request: {synapse.encrypted_data[:24]}")
+        bt.logging.info(
+            f"received store request: {synapse.encrypted_data[:24]}"
+        )
         self.request_count += 1
 
         # Decode the data from base64 to raw bytes
@@ -625,15 +630,20 @@ class miner:
 
         # If already storing this hash, simply update the validator seeds and return challenge
         bt.logging.trace("checking if data already exists...")
-        
+
         if not await self.database.hexists(data_hash, synapse.dendrite.hotkey):
             # Store the data in the filesystem
             filepath = save_data_to_filesystem(
-                encrypted_byte_data, self.config.database.directory, synapse.dendrite.hotkey, str(data_hash)
+                encrypted_byte_data,
+                self.config.database.directory,
+                synapse.dendrite.hotkey,
+                str(data_hash),
             )
             bt.logging.trace(f"stored data {data_hash} in filepath: {filepath}")
         else:
-            filepath = await get_filepath(self.database, data_hash, synapse.dendrite.hotkey)
+            filepath = await get_filepath(
+                self.database, data_hash, synapse.dendrite.hotkey
+            )
 
         # Add the initial chunk, size, and validator seed information
         # If data exists and is the same hotkey caller, overwrite prev seed, otherwise add a new entry
@@ -654,7 +664,9 @@ class miner:
             hex_to_ecc_point(synapse.h, synapse.curve),
         )
         bt.logging.trace("entering commit()")
-        c, m_val, r = committer.commit(encrypted_byte_data + str(synapse.seed).encode())
+        c, m_val, r = committer.commit(
+            encrypted_byte_data + str(synapse.seed).encode()
+        )
         if self.config.miner.verbose:
             bt.logging.debug(f"committer: {committer}")
             bt.logging.debug(f"encrypted_byte_data: {encrypted_byte_data}")
@@ -673,14 +685,18 @@ class miner:
         if self.config.miner.verbose:
             bt.logging.debug(f"signed m_val: {synapse.signature.hex()}")
             bt.logging.debug(f"type(seed): {type(synapse.seed)}")
-            bt.logging.debug(f"initial commitment_hash: {synapse.commitment_hash}")
+            bt.logging.debug(
+                f"initial commitment_hash: {synapse.commitment_hash}"
+            )
 
         bt.logging.info(
             f"stored data hash {data_hash} with commitment: {synapse.commitment}"
         )
 
         # Don't send data back, no need.
-        synapse.encrypted_data = base64.b64encode(b"").decode()  # Empty b64 response
+        synapse.encrypted_data = base64.b64encode(
+            b""
+        ).decode()  # Empty b64 response
         return synapse
 
     async def challenge(
@@ -787,7 +803,10 @@ class miner:
         bt.logging.trace("entering comput_subsequent_commitment()...")
         new_seed = synapse.seed.encode()
         next_commitment, proof = compute_subsequent_commitment(
-            encrypted_data_bytes, prev_seed, new_seed, verbose=self.config.miner.verbose
+            encrypted_data_bytes,
+            prev_seed,
+            new_seed,
+            verbose=self.config.miner.verbose,
         )
         if self.config.miner.verbose:
             bt.logging.debug(f"prev seed : {prev_seed}")
@@ -821,7 +840,8 @@ class miner:
         randomness, chunks, commitments, merkle_tree = commit_data_with_seed(
             committer,
             data_chunks=data_chunks,
-            n_chunks=sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size + 1,
+            n_chunks=sys.getsizeof(encrypted_data_bytes) // synapse.chunk_size
+            + 1,
             seed=synapse.seed,
         )
 
@@ -843,7 +863,9 @@ class miner:
             bt.logging.debug(f"merkle_proof: {str(synapse.merkle_proof[:24])}")
             bt.logging.debug(f"merkle_root: {str(synapse.merkle_root)[:24]}")
 
-        bt.logging.info(f"returning challenge data {synapse.data_chunk[:24]}...")
+        bt.logging.info(
+            f"returning challenge data {synapse.data_chunk[:24]}..."
+        )
         return synapse
 
     async def retrieve(
@@ -885,7 +907,9 @@ class miner:
         # Fetch the data from the miner database
         bt.logging.trace("entering get_chunk_metadata()")
         data = await get_chunk_metadata(
-            r=self.database, chunk_hash=synapse.data_hash, hotkey=synapse.dendrite.hotkey
+            r=self.database,
+            chunk_hash=synapse.data_hash,
+            hotkey=synapse.dendrite.hotkey,
         )
 
         # Decode the data + metadata from bytes to json

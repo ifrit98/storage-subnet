@@ -16,12 +16,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import time
-import torch
 import argparse
 import datetime
+import os
+
 import bittensor as bt
+import torch
 from loguru import logger
 
 
@@ -115,7 +115,9 @@ def check_config(cls, config: "bt.Config"):
 
 def add_args(cls, parser):
     # Netuid Arg
-    parser.add_argument("--netuid", type=int, help="Storage network netuid", default=21)
+    parser.add_argument(
+        "--netuid", type=int, help="Storage network netuid", default=21
+    )
 
     parser.add_argument(
         "--neuron.name",
@@ -240,7 +242,9 @@ def add_args(cls, parser):
 
     # Redis arguments
     parser.add_argument(
-        "--database.host", default="localhost", help="The host of the redis database."
+        "--database.host",
+        default="localhost",
+        help="The host of the redis database.",
     )
     parser.add_argument(
         "--database.port", default=6379, help="The port of the redis database."
@@ -265,7 +269,10 @@ def add_args(cls, parser):
 
     # Wandb args
     parser.add_argument(
-        "--wandb.off", action="store_true", help="Turn off wandb.", default=False
+        "--wandb.off",
+        action="store_true",
+        help="Turn off wandb.",
+        default=False,
     )
     parser.add_argument(
         "--wandb.project_name",

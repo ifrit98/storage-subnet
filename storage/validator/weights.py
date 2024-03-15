@@ -18,8 +18,8 @@
 
 # Utils for weights setting on chain.
 
-import torch
 import bittensor as bt
+import torch
 
 from storage import __spec_version__ as spec_version
 from storage.shared.weights import set_weights
@@ -68,7 +68,7 @@ def set_weights_for_validator(
     moving_averaged_scores_no_nan = torch.where(
         torch.isnan(moving_averaged_scores),
         torch.zeros_like(moving_averaged_scores),
-        moving_averaged_scores
+        moving_averaged_scores,
     )
     # Gather negative indices
     neg_idxs = torch.where(moving_averaged_scores_no_nan < 0)[0]
@@ -81,10 +81,12 @@ def set_weights_for_validator(
 
     # Make all values positive
     if minimum < 0:
-        positive_moving_averaged_scores = moving_averaged_scores_no_nan - minimum
+        positive_moving_averaged_scores = (
+            moving_averaged_scores_no_nan - minimum
+        )
     else:
         positive_moving_averaged_scores = moving_averaged_scores_no_nan
-    bt.logging.debug(f"Positive scores", positive_moving_averaged_scores)
+    bt.logging.debug(f"Positive scores: {positive_moving_averaged_scores}")
 
     # Push all orinally negative indices to zero
     positive_moving_averaged_scores[neg_idxs] = 0
@@ -93,7 +95,9 @@ def set_weights_for_validator(
     sum_scores = positive_moving_averaged_scores.sum()
     bt.logging.info(f"Score sum: {sum_scores}")
     if sum_scores > 0:
-        raw_weights = torch.nn.functional.normalize(positive_moving_averaged_scores, p=1, dim=0)
+        raw_weights = torch.nn.functional.normalize(
+            positive_moving_averaged_scores, p=1, dim=0
+        )
     else:
         raw_weights = torch.zeros_like(positive_moving_averaged_scores)
 
@@ -122,7 +126,10 @@ def set_weights_for_validator(
     bt.logging.debug("processed_weight_uids", processed_weight_uids)
 
     # Convert to uint16 weights and uids.
-    uint_uids, uint_weights = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
+    (
+        uint_uids,
+        uint_weights,
+    ) = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
         uids=processed_weight_uids, weights=processed_weights
     )
     bt.logging.debug("uint_weights", uint_weights)

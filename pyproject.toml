@@ -1,0 +1,18 @@
+[tool.black]
+line-length = 80
+target_version = ['py39','py310','py311']
+
+[tool.bandit]
+# No additional configuration needed by default
+
+[tool.isort]
+profile = "black"
+line_length = 80
+
+
+
+[tool.pytest]
+minversion = "6.0"
+testpaths = [
+  "tests",  # Replace with your test directory
+]

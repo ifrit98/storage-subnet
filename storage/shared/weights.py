@@ -1,9 +1,9 @@
+from typing import Tuple
+
 import wandb
 from bittensor import logging as bt_logging
-from bittensor import subtensor
-from bittensor import wallet
+from bittensor import subtensor, wallet
 from torch import Tensor
-from typing import Tuple
 
 
 def should_wait_to_set_weights(current_block, last_epoch_block, tempo):
@@ -87,5 +87,7 @@ def set_weights(
     except Exception as e:
         if wandb_on:
             wandb.log({"set_weights": 0})
-        bt_logging.error(f"Failed to set weights on chain with exception: { e }")
+        bt_logging.error(
+            f"Failed to set weights on chain with exception: { e }"
+        )
         return False, message

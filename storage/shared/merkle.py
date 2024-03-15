@@ -16,9 +16,10 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import json
-import hashlib
 import binascii
+import hashlib
+import json
+import sys
 
 
 class MerkleTree(object):
@@ -104,9 +105,9 @@ class MerkleTree(object):
         return self.serialize() == other.serialize()
 
     def _to_hex(self, x):
-        try:  # python3
+        if sys.version_info.major >= 3:
             return x.hex()
-        except:  # python2 # TODO: do not use bare except
+        else:
             return binascii.hexlify(x)
 
     def reset_tree(self):
@@ -317,17 +318,23 @@ class MerkleTree(object):
         m_tree = cls(hash_type)
 
         # Convert the hex strings back to bytearrays and set the leaves and levels
-        m_tree.leaves = [bytearray.fromhex(leaf) for leaf in merkle_tree_data["leaves"]]
+        m_tree.leaves = [
+            bytearray.fromhex(leaf) for leaf in merkle_tree_data["leaves"]
+        ]
         if merkle_tree_data["levels"] is not None:
             m_tree.levels = []
             for level in merkle_tree_data["levels"]:
-                m_tree.levels.append([bytearray.fromhex(item) for item in level])
+                m_tree.levels.append(
+                    [bytearray.fromhex(item) for item in level]
+                )
         m_tree.is_ready = merkle_tree_data["is_ready"]
 
         return m_tree
 
 
-def validate_merkle_proof(proof, target_hash, merkle_root, hash_type="sha3_256"):
+def validate_merkle_proof(
+    proof, target_hash, merkle_root, hash_type="sha3_256"
+):
     """
     Validates a Merkle proof, verifying that a target element is part of a Merkle tree with a given root.
 
@@ -376,7 +383,7 @@ def validate_merkle_proof(proof, target_hash, merkle_root, hash_type="sha3_256")
                 # the sibling is a left node
                 sibling = bytearray.fromhex(p["left"])
                 proof_hash = hash_func(sibling + proof_hash).digest()
-            except:  # TODO: do not use bare except
+            except Exception:  # TODO: do not use bare except
                 # the sibling is a right node
                 sibling = bytearray.fromhex(p["right"])
                 proof_hash = hash_func(proof_hash + sibling).digest()

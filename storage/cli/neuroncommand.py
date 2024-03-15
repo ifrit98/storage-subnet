@@ -17,20 +17,20 @@
 # DEALINGS IN THE SOFTWARE.
 
 from argparse import ArgumentParser
+
 from bittensor import config as bt_config
 
+from neurons.api import run_api
 from neurons.miner import run_miner
 from neurons.validator import run_validator
-from neurons.api import run_api
 
 
 class RunApi:
-
     @staticmethod
     def run(cli):
         r"""Run api neuron"""
         run_api()
-    
+
     @staticmethod
     def check_config(config: "bt_config"):
         pass
@@ -41,12 +41,11 @@ class RunApi:
 
 
 class RunMiner:
-
     @staticmethod
     def run(cli):
         r"""Run miner neuron"""
         run_miner()
-    
+
     @staticmethod
     def check_config(config: "bt_config"):
         pass
@@ -57,12 +56,11 @@ class RunMiner:
 
 
 class RunValidator:
-
     @staticmethod
     def run(cli):
         r"""Run validator neuron"""
         run_validator()
-    
+
     @staticmethod
     def check_config(config: "bt_config"):
         pass

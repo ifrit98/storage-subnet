@@ -16,23 +16,21 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import math
-import time
-import torch
 import functools
-import numpy as np
+import math
+import os
 import random as pyrandom
-
-from Crypto.Random import random
+import time
 from itertools import combinations, cycle
 from typing import List, Union
 
+import bittensor as bt
+import numpy as np
+import torch
+from Crypto.Random import random
+
 from storage.shared.ecc import hash_data
 from storage.validator.database import hotkey_at_capacity
-
-import bittensor as bt
-
 
 MIN_CHUNK_SIZE = 64 * 1024 * 1024  # 128 MB
 MAX_CHUNK_SIZE = 512 * 1024 * 1024  # 512 MB
@@ -75,7 +73,9 @@ def generate_file_size_with_lognormal(
     return scaled_file_size
 
 
-def make_random_file(name: str = None, maxsize: int = None) -> Union[bytes, str]:
+def make_random_file(
+    name: str = None, maxsize: int = None
+) -> Union[bytes, str]:
     """
     Creates a file with random binary data or returns a bytes object with random data if no name is provided.
 
@@ -175,12 +175,17 @@ def current_block_hash(self):
         str: The current block hash.
     """
     try:
-        block_hash: str = self.subtensor.get_block_hash(self.subtensor.get_current_block())
+        block_hash: str = self.subtensor.get_block_hash(
+            self.subtensor.get_current_block()
+        )
         if block_hash is not None:
             return block_hash
     except Exception as e:
-        bt.logging.warning(f"Failed to get block hash: {e}. Returning a random hash value.")
+        bt.logging.warning(
+            f"Failed to get block hash: {e}. Returning a random hash value."
+        )
     return int(str(random.randint(2 << 32, 2 << 64)))
+
 
 def get_block_seed(self):
     """
@@ -269,7 +274,8 @@ def get_random_uids(
         additional_uids_needed = k - len(candidate_uids)
         filtered_avail_uids = [uid for uid in avail_uids if uid not in exclude]
         additional_uids = random.sample(
-            filtered_avail_uids, min(additional_uids_needed, len(filtered_avail_uids))
+            filtered_avail_uids,
+            min(additional_uids_needed, len(filtered_avail_uids)),
         )
         candidate_uids.extend(additional_uids)
 
@@ -300,10 +306,15 @@ def get_all_validators_vtrust(
         List[str]: A list of hotkeys corresponding to all the validators in the network.
     """
     vtrusted_uids = [
-        uid for uid in torch.where(self.metagraph.validator_trust > vtrust_threshold)[0]
+        uid
+        for uid in torch.where(
+            self.metagraph.validator_trust > vtrust_threshold
+        )[0]
     ]
     stake_uids = [
-        uid for uid in vtrusted_uids if self.metagraph.S[uid] > vpermit_tao_limit
+        uid
+        for uid in vtrusted_uids
+        if self.metagraph.S[uid] > vpermit_tao_limit
     ]
     return (
         [self.metagraph.hotkeys[uid] for uid in stake_uids]
@@ -400,7 +411,9 @@ async def get_available_query_miners(
         muids_nonfull = [
             uid
             for uid in muids
-            if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+            if not await hotkey_at_capacity(
+                self.metagraph.hotkeys[uid], self.database
+            )
         ]
         bt.logging.debug(f"available uids nonfull: {muids_nonfull}")
     return get_pseudorandom_uids(self, muids, k=k)
@@ -564,7 +577,12 @@ def optimal_chunk_size(
 
 
 def compute_chunk_distribution(
-    self, data, R, k, min_chunk_size=MIN_CHUNK_SIZE, max_chunk_size=MAX_CHUNK_SIZE
+    self,
+    data,
+    R,
+    k,
+    min_chunk_size=MIN_CHUNK_SIZE,
+    max_chunk_size=MAX_CHUNK_SIZE,
 ):
     """
     Computes the distribution of data chunks to UIDs for data distribution.
@@ -618,7 +636,10 @@ def partition_uids(available_uids, R):
     Returns:
         list of tuples: A list where each tuple contains a unique group of UIDs.
     """
-    return [tuple(available_uids[i : i + R]) for i in range(0, len(available_uids), R)]
+    return [
+        tuple(available_uids[i : i + R])
+        for i in range(0, len(available_uids), R)
+    ]
 
 
 def adjust_uids_to_multiple(available_uids, R):
@@ -693,7 +714,11 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids_yield(
     data_chunks = chunk_data_generator(data, chunk_size)
     for chunk, uid_group in zip(data_chunks, uid_groups):
         chunk_hash = hash_data(chunk)
-        yield {"chunk_hash": chunk_hash, "chunk": chunk, "uids": uid_group.tolist()}
+        yield {
+            "chunk_hash": chunk_hash,
+            "chunk": chunk,
+            "uids": uid_group.tolist(),
+        }
 
 
 def calculate_chunk_indices(data_size, chunk_size):
@@ -727,7 +752,9 @@ def calculate_chunk_indices_from_num_chunks(data_size, num_chunks):
     :param num_chunks: The desired number of chunks.
     :return: A list of tuples, each tuple containing the start and end index of a chunk.
     """
-    chunk_size = max(1, data_size // num_chunks)  # Determine the size of each chunk
+    chunk_size = max(
+        1, data_size // num_chunks
+    )  # Determine the size of each chunk
     indices = []
 
     for i in range(num_chunks):
@@ -772,8 +799,12 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
           the redundancy requirements are met.
     """
 
-    available_uids = await get_available_query_miners(self, k=k, exclude=exclude)
-    chunk_size = chunk_size or optimal_chunk_size(data_size, len(available_uids), R)
+    available_uids = await get_available_query_miners(
+        self, k=k, exclude=exclude
+    )
+    chunk_size = chunk_size or optimal_chunk_size(
+        data_size, len(available_uids), R
+    )
     available_uids = adjust_uids_to_multiple(available_uids, R)
     chunk_indices = calculate_chunk_indices(data_size, chunk_size)
 
@@ -794,7 +825,9 @@ async def compute_chunk_distribution_mut_exclusive_numpy_reuse_uids(
                 break
             uid_groups.append(group)
 
-    for i, ((start, end), uid_group) in enumerate(zip(chunk_indices, uid_groups)):
+    for i, ((start, end), uid_group) in enumerate(
+        zip(chunk_indices, uid_groups)
+    ):
         yield {
             "chunk_size": chunk_size,
             "start_idx": start,
@@ -819,7 +852,9 @@ def get_rebalance_script_path(current_dir: str):
     """
     project_root = os.path.join(current_dir, "..")
     project_root = os.path.normpath(project_root)
-    script_path = os.path.join(project_root, "scripts", "rebalance_deregistration.sh")
+    script_path = os.path.join(
+        project_root, "scripts", "rebalance_deregistration.sh"
+    )
     return script_path
 
 

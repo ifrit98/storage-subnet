@@ -1,10 +1,10 @@
-import base58
-import typing
 import hashlib
-import multibase
-import multihash
-import multicodec
+import typing
 
+import base58
+import multibase
+import multicodec
+import multihash
 from ipfs_cid import cid_sha256_hash as compute_cidv1
 from morphys import ensure_bytes, ensure_unicode
 
@@ -43,7 +43,9 @@ class BaseCID(object):
                 "version should be 1, {} was provided".format(version)
             )
         if not multicodec.is_codec(codec):
-            raise ValueError("invalid codec {} provided, please check".format(codec))
+            raise ValueError(
+                "invalid codec {} provided, please check".format(codec)
+            )
         if not (isinstance(multihash, str) or isinstance(multihash, bytes)):
             raise ValueError(
                 "invalid type for multihash provided, should be str or bytes"
@@ -80,13 +82,11 @@ class BaseCID(object):
             return s[:length] + b".." if len(s) > length else s
 
         truncate_length = 20
-        return (
-            "{class_}(version={version}, codec={codec}, multihash={multihash})".format(
-                class_=self.__class__.__name__,
-                version=self._version,
-                codec=self._codec,
-                multihash=truncate(self._multihash, truncate_length),
-            )
+        return "{class_}(version={version}, codec={codec}, multihash={multihash})".format(
+            class_=self.__class__.__name__,
+            version=self._version,
+            codec=self._codec,
+            multihash=truncate(self._multihash, truncate_length),
         )
 
     def __str__(self):
@@ -115,7 +115,10 @@ class CIDv1(BaseCID):
         :rtype: bytes
         """
         return b"".join(
-            [bytes([self.version]), multicodec.add_prefix(self.codec, self.multihash)]
+            [
+                bytes([self.version]),
+                multicodec.add_prefix(self.codec, self.multihash),
+            ]
         )
 
     def encode(self, encoding="base58btc") -> bytes:
@@ -182,7 +185,9 @@ def decode_cid(cid_input) -> bytes:
             return decoded_multihash.digest
 
     else:
-        raise ValueError("Invalid CID input type. Must be a CID object or a string.")
+        raise ValueError(
+            "Invalid CID input type. Must be a CID object or a string."
+        )
 
 
 def generate_cid_string(data: typing.Union[str, bytes]) -> str:

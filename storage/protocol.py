@@ -17,8 +17,9 @@
 # DEALINGS IN THE SOFTWARE.
 
 import typing
-import pydantic
+
 import bittensor as bt
+import pydantic
 
 
 # Basically setup for a given piece of data

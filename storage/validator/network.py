@@ -16,13 +16,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import torch
 import typing
-import bittensor as bt
 
-from storage.validator.utils import get_available_query_miners
-from storage.validator.bonding import update_statistics
+import bittensor as bt
+import torch
+
 from storage.constants import MONITOR_FAILURE_REWARD
+from storage.validator.bonding import update_statistics
+from storage.validator.utils import get_available_query_miners
 
 
 async def ping_uids(self, uids):
@@ -83,14 +84,19 @@ async def compute_and_ping_chunks(self, distributions):
         retries = 0
         successful_uids = set()
 
-        while len(successful_uids) < target_number_of_uids and retries < max_retries:
+        while (
+            len(successful_uids) < target_number_of_uids
+            and retries < max_retries
+        ):
             # Ping all UIDs
             current_successful_uids, _ = await ping_uids(self, dist["uids"])
             successful_uids.update(current_successful_uids)
 
             # If enough UIDs are successful, select the first k items
             if len(successful_uids) >= target_number_of_uids:
-                dist["uids"] = tuple(sorted(successful_uids)[:target_number_of_uids])
+                dist["uids"] = tuple(
+                    sorted(successful_uids)[:target_number_of_uids]
+                )
                 break
 
             # Reroll for k UIDs excluding the successful ones
@@ -141,13 +147,18 @@ async def reroll_distribution(self, distribution, failed_uids):
 
 
 async def ping_and_retry_uids(
-    self, k: int = None, max_retries: int = 3, exclude_uids: typing.List[int] = []
+    self,
+    k: int = None,
+    max_retries: int = 3,
+    exclude_uids: typing.List[int] = [],
 ):
     """
     Fetch available uids to minimize waiting for timeouts if they're going to fail anyways...
     """
     # Select initial subset of miners to query
-    uids = await get_available_query_miners(self, k=k or 4, exclude=exclude_uids)
+    uids = await get_available_query_miners(
+        self, k=k or 4, exclude=exclude_uids
+    )
     bt.logging.debug("initial ping_and_retry() uids:", uids)
 
     retries = 0
@@ -155,7 +166,9 @@ async def ping_and_retry_uids(
     failed_uids = set()
     while len(successful_uids) < k and retries < max_retries:
         # Ping all UIDs
-        current_successful_uids, current_failed_uids = await ping_uids(self, uids)
+        current_successful_uids, current_failed_uids = await ping_uids(
+            self, uids
+        )
         successful_uids.update(current_successful_uids)
         failed_uids.update(current_failed_uids)
 
@@ -204,7 +217,9 @@ async def monitor(self):
 
     if down_uids:
         # Negatively reward
-        rewards = torch.zeros(len(down_uids), dtype=torch.float32).to(self.device)
+        rewards = torch.zeros(len(down_uids), dtype=torch.float32).to(
+            self.device
+        )
 
         for i, uid in enumerate(down_uids):
             await update_statistics(
@@ -216,13 +231,16 @@ async def monitor(self):
             rewards[i] = MONITOR_FAILURE_REWARD
 
         bt.logging.debug(f"monitor() rewards: {rewards}")
-        scattered_rewards: torch.FloatTensor = self.moving_averaged_scores.scatter(
-            0, torch.tensor(down_uids).to(self.device), rewards
-        ).to(self.device)
+        scattered_rewards: torch.FloatTensor = (
+            self.moving_averaged_scores.scatter(
+                0, torch.tensor(down_uids).to(self.device), rewards
+            ).to(self.device)
+        )
 
         alpha: float = 0.05
-        self.moving_averaged_scores: torch.FloatTensor = alpha * scattered_rewards + (
-            1 - alpha
-        ) * self.moving_averaged_scores.to(self.device)
+        self.moving_averaged_scores: torch.FloatTensor = (
+            alpha * scattered_rewards
+            + (1 - alpha) * self.moving_averaged_scores.to(self.device)
+        )
 
     return down_uids

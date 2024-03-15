@@ -1,7 +1,7 @@
 import time
-from math import floor
 from functools import lru_cache, update_wrapper
-from typing import Callable, Any
+from math import floor
+from typing import Any, Callable
 
 
 def _ttl_hash_gen(seconds: int):

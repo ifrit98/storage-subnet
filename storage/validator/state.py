@@ -16,20 +16,20 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import copy
+from dataclasses import asdict
+
+import bittensor as bt
+
 # Utils for checkpointing and saving the model.
 import torch
 import wandb
-import copy
-
 from loguru import logger
-from dataclasses import asdict
 
-from storage import __version__ as THIS_VERSION
-from storage import __spec_version__ as THIS_SPEC_VERSION
 import storage.validator as validator
+from storage import __spec_version__ as THIS_SPEC_VERSION
+from storage import __version__ as THIS_VERSION
 from storage.validator.event import EventSchema
-
-import bittensor as bt
 
 
 def should_reinit_wandb(self):
@@ -110,8 +110,12 @@ def resync_metagraph(self: "validator.neuron.neuron"):
     self.metagraph.sync(subtensor=self.subtensor)
 
     # Check if the metagraph axon info has changed.
-    metagraph_axon_info_updated = previous_metagraph.axons != self.metagraph.axons
-    bt.logging.debug(f"metagraph_axon_info_updated: {metagraph_axon_info_updated}")
+    metagraph_axon_info_updated = (
+        previous_metagraph.axons != self.metagraph.axons
+    )
+    bt.logging.debug(
+        f"metagraph_axon_info_updated: {metagraph_axon_info_updated}"
+    )
 
     if metagraph_axon_info_updated:
         bt.logging.info(
@@ -134,7 +138,9 @@ def resync_metagraph(self: "validator.neuron.neuron"):
             )
             # Update the size of the moving average scores.
             new_moving_average = torch.zeros((self.metagraph.n)).to(self.device)
-            min_len = min(len(self.metagraph.hotkeys), len(self.moving_averaged_scores))
+            min_len = min(
+                len(self.metagraph.hotkeys), len(self.moving_averaged_scores)
+            )
             new_moving_average[:min_len] = self.moving_averaged_scores[:min_len]
             self.moving_averaged_scores = new_moving_average
 
@@ -148,7 +154,9 @@ def save_state(self):
             "last_purged_epoch": self.last_purged_epoch,
             "monitor_lookup": self.monitor_lookup,
         }
-        torch.save(neuron_state_dict, f"{self.config.neuron.full_path}/model.torch")
+        torch.save(
+            neuron_state_dict, f"{self.config.neuron.full_path}/model.torch"
+        )
         bt.logging.success(
             prefix="Saved model",
             sufix=f"<blue>{ self.config.neuron.full_path }/model.torch</blue>",
@@ -186,9 +194,9 @@ def load_state(self):
                 f"Neuron weights shape {neuron_weights.shape} does not match metagraph n {self.metagraph.n.item()}"
                 "Populating new moving_averaged_scores IDs with zeros"
             )
-            self.moving_averaged_scores[: len(neuron_weights)] = neuron_weights.to(
-                self.device
-            )
+            self.moving_averaged_scores[
+                : len(neuron_weights)
+            ] = neuron_weights.to(self.device)
         # Check for nans in saved state dict
         elif not torch.isnan(neuron_weights).any():
             self.moving_averaged_scores = neuron_weights.to(self.device)

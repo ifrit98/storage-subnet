@@ -16,31 +16,31 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import csv
 import json
+import os
 import time
+from pprint import pformat
+
 import bittensor as bt
 
-from pprint import pformat
-from storage.validator.state import log_event
 from storage.validator.bonding import compute_all_tiers
 from storage.validator.database import (
-    total_validator_storage,
     get_all_chunk_hashes,
     get_miner_statistics,
-    purge_expired_ttl_keys,
     purge_challenges_for_all_hotkeys,
+    purge_expired_ttl_keys,
+    total_validator_storage,
 )
-from storage.validator.state import save_state
+from storage.validator.state import log_event, save_state
 from storage.validator.utils import get_current_epoch
 
 from .challenge import challenge_data
-from .retrieve import retrieve_data
-from .rebalance import rebalance_data
-from .store import store_random_data
 from .distribute import distribute_data
 from .network import monitor
+from .rebalance import rebalance_data
+from .retrieve import retrieve_data
+from .store import store_random_data
 
 
 async def forward(self):
@@ -132,7 +132,9 @@ async def forward(self):
 
     # Update the total network storage
     total_storage = await total_validator_storage(self.database)
-    bt.logging.info(f"Total validator storage (GB): {int(total_storage) // (1024**3)}")
+    bt.logging.info(
+        f"Total validator storage (GB): {int(total_storage) // (1024**3)}"
+    )
 
     # Get the current local time
     current_time = time.localtime()
@@ -149,7 +151,9 @@ async def forward(self):
     file_exists = os.path.isfile(self.config.neuron.total_storage_path)
 
     # Open the CSV file in append mode
-    with open(self.config.neuron.total_storage_path, "a", newline="") as csvfile:
+    with open(
+        self.config.neuron.total_storage_path, "a", newline=""
+    ) as csvfile:
         # Define the field names
         fieldnames = ["total_storage", "timestamp"]
 

@@ -16,46 +16,46 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sys
-import copy
-import time
-import torch
-import base64
-import typing
 import asyncio
-import websocket
-import bittensor as bt
-
+import base64
+import copy
+import sys
+import time
+import typing
 from pprint import pformat
-from pyinstrument import Profiler
-from Crypto.Random import get_random_bytes
 
-from storage.validator.event import EventSchema
+import bittensor as bt
+import torch
+import websocket
+from Crypto.Random import get_random_bytes
+from pyinstrument import Profiler
+
 from storage import protocol
-from storage.shared.ecc import (
-    hash_data,
-    setup_CRS,
-    ecc_point_to_hex,
-)
-from storage.validator.utils import (
-    make_random_file,
-    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
-)
-from storage.validator.encryption import encrypt_data
-from storage.validator.verify import verify_store_with_seed
-from storage.validator.reward import apply_reward_scores
+from storage.shared.ecc import ecc_point_to_hex, hash_data, setup_CRS
+from storage.validator.bonding import update_statistics
+from storage.validator.cid import generate_cid_string
 from storage.validator.database import (
     add_metadata_to_hotkey,
-    store_chunk_metadata,
-    store_file_chunk_mapping_ordered,
     get_ordered_metadata,
     hotkey_at_capacity,
+    store_chunk_metadata,
+    store_file_chunk_mapping_ordered,
 )
-from storage.validator.cid import generate_cid_string
-from storage.validator.bonding import update_statistics
+from storage.validator.encryption import encrypt_data
+from storage.validator.event import EventSchema
+from storage.validator.reward import apply_reward_scores
+from storage.validator.utils import (
+    compute_chunk_distribution_mut_exclusive_numpy_reuse_uids,
+    make_random_file,
+)
+from storage.validator.verify import verify_store_with_seed
 
+from .network import (
+    compute_and_ping_chunks,
+    ping_and_retry_uids,
+    reroll_distribution,
+)
 from .reward import create_reward_vector
-from .network import ping_and_retry_uids, compute_and_ping_chunks, reroll_distribution
 
 
 async def store_encrypted_data(
@@ -149,10 +149,14 @@ async def store_encrypted_data(
             # Prepare storage for the data for particular miner
             response_storage = {
                 "prev_seed": synapse.seed,
-                "size": sys.getsizeof(encrypted_data),  # in bytes, not len(data)
+                "size": sys.getsizeof(
+                    encrypted_data
+                ),  # in bytes, not len(data)
                 "encryption_payload": encryption_payload,
             }
-            bt.logging.trace(f"Storing UID {uid} data {pformat(response_storage)}")
+            bt.logging.trace(
+                f"Storing UID {uid} data {pformat(response_storage)}"
+            )
 
             # Store in the database according to the data hash and the miner hotkey
             await add_metadata_to_hotkey(
@@ -209,7 +213,9 @@ async def store_encrypted_data(
 
     # Determine the best UID based on rewards
     if event.rewards:
-        best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+        best_index = max(
+            range(len(event.rewards)), key=event.rewards.__getitem__
+        )
         event.best_uid = event.uids[best_index]
         event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
@@ -240,7 +246,9 @@ async def store_random_data(self):
 
     # Encrypt the data
     # TODO: create and use a throwaway wallet (never decrypable)
-    encrypted_data, encryption_payload = encrypt_data(data, self.encryption_wallet)
+    encrypted_data, encryption_payload = encrypt_data(
+        data, self.encryption_wallet
+    )
 
     return await store_encrypted_data(
         self,
@@ -333,7 +341,9 @@ async def store_broadband(
         uids = [
             uid
             for uid in uids
-            if not await hotkey_at_capacity(self.metagraph.hotkeys[uid], self.database)
+            if not await hotkey_at_capacity(
+                self.metagraph.hotkeys[uid], self.database
+            )
         ]
 
         axons = [self.metagraph.axons[uid] for uid in uids]
@@ -376,7 +386,9 @@ async def store_broadband(
 
         # Determine the best UID based on rewards
         if event.rewards:
-            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            best_index = max(
+                range(len(event.rewards)), key=event.rewards.__getitem__
+            )
             event.best_uid = event.uids[best_index]
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
@@ -405,7 +417,9 @@ async def store_broadband(
         )
 
         end = time.time()
-        bt.logging.debug(f"verify_store_with_seed time for uid {uid} : {end-start}")
+        bt.logging.debug(
+            f"verify_store_with_seed time for uid {uid} : {end-start}"
+        )
         if verified:
             # Prepare storage for the data for particular miner
             response_storage = {
@@ -427,7 +441,9 @@ async def store_broadband(
                 f"Stored data in database for uid: {uid} | {str(chunk_hash)}"
             )
         else:
-            bt.logging.error(f"Failed to verify store commitment from UID: {uid}")
+            bt.logging.error(
+                f"Failed to verify store commitment from UID: {uid}"
+            )
 
         # Update the storage statistics
         await update_statistics(
@@ -436,7 +452,9 @@ async def store_broadband(
             task_type="store",
             database=self.database,
         )
-        bt.logging.debug(f"handle_uid_operations time for uid {uid} : {time.time()-ss}")
+        bt.logging.debug(
+            f"handle_uid_operations time for uid {uid} : {time.time()-ss}"
+        )
 
         return {"chunk_hash": chunk_hash, "uid": uid, "verified": verified}
 
@@ -545,10 +563,14 @@ async def store_broadband(
     retries = 0
     while retries < 3:
         try:
-            distributions = await create_initial_distributions(encrypted_data, R, k)
+            distributions = await create_initial_distributions(
+                encrypted_data, R, k
+            )
             break
         except websocket._exceptions.WebSocketConnectionClosedException:
-            bt.logging.warning("Failed to create initial distributions, retrying...")
+            bt.logging.warning(
+                "Failed to create initial distributions, retrying..."
+            )
             retries += 1
         except Exception as e:
             bt.logging.warning(
@@ -568,7 +590,9 @@ async def store_broadband(
             # Updated distributions now contain responses from the network
             updated_distributions = await semaphore_query_miners(distributions)
             # Verify the responses and store the metadata for each verified response
-            verifications = await semaphore_query_uid_operations(updated_distributions)
+            verifications = await semaphore_query_uid_operations(
+                updated_distributions
+            )
             if (
                 chunk_hashes == []
             ):  # First time only. Grab all hashes in order after processed.
@@ -587,11 +611,17 @@ async def store_broadband(
                 # Check if any UID in the distribution failed verification
                 if any(not v["verified"] for v in verifications):
                     # Extract failed UIDs
-                    failed_uids = [v["uid"] for v in verifications if not v["verified"]]
+                    failed_uids = [
+                        v["uid"] for v in verifications if not v["verified"]
+                    ]
                     bt.logging.trace(f"failed uids: {pformat(failed_uids)}")
                     # Reroll distribution with failed UIDs
-                    rerolled_dist = await reroll_distribution(self, dist, failed_uids)
-                    bt.logging.trace(f"rerolled uids: {pformat(rerolled_dist['uids'])}")
+                    rerolled_dist = await reroll_distribution(
+                        self, dist, failed_uids
+                    )
+                    bt.logging.trace(
+                        f"rerolled uids: {pformat(rerolled_dist['uids'])}"
+                    )
                     # Replace the original distribution with the rerolled one
                     distributions.append(rerolled_dist)
 

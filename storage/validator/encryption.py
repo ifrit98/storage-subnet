@@ -16,8 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
 import json
+import os
 import typing
 
 import bittensor as bt
@@ -59,7 +59,9 @@ def encrypt_aes(filename: typing.Union[bytes, str], key: bytes) -> bytes:
     return cipher_text, cipher.nonce, tag
 
 
-def decrypt_aes(cipher_text: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
+def decrypt_aes(
+    cipher_text: bytes, key: bytes, nonce: bytes, tag: bytes
+) -> bytes:
     """
     Decrypt the data using AES-GCM.
 
@@ -137,7 +139,9 @@ def decrypt_data_with_coldkey_private_key(
     that was previously encrypted by the `encrypt_data_with_wallet` function.
     """
     password_bytes = (
-        bytes(private_key, "utf-8") if isinstance(private_key, str) else private_key
+        bytes(private_key, "utf-8")
+        if isinstance(private_key, str)
+        else private_key
     )
 
     kdf = pwhash.argon2i.kdf
@@ -317,10 +321,14 @@ def decrypt_data_and_deserialize_with_coldkey_private_key(
 
 
 decrypt_data = decrypt_data_and_deserialize
-decrypt_data_with_private_key = decrypt_data_and_deserialize_with_coldkey_private_key
+decrypt_data_with_private_key = (
+    decrypt_data_and_deserialize_with_coldkey_private_key
+)
 
 
-def serialize_nacl_encrypted_message(encrypted_message: EncryptedMessage) -> str:
+def serialize_nacl_encrypted_message(
+    encrypted_message: EncryptedMessage,
+) -> str:
     """
     Serializes an EncryptedMessage object to a JSON string.
 
@@ -336,12 +344,16 @@ def serialize_nacl_encrypted_message(encrypted_message: EncryptedMessage) -> str
     """
     data = {
         "nonce": HexEncoder.encode(encrypted_message.nonce).decode("utf-8"),
-        "ciphertext": HexEncoder.encode(encrypted_message.ciphertext).decode("utf-8"),
+        "ciphertext": HexEncoder.encode(encrypted_message.ciphertext).decode(
+            "utf-8"
+        ),
     }
     return json.dumps(data)
 
 
-def deserialize_nacl_encrypted_message(serialized_data: str) -> EncryptedMessage:
+def deserialize_nacl_encrypted_message(
+    serialized_data: str,
+) -> EncryptedMessage:
     """
     Deserializes a JSON string back into an EncryptedMessage object.
 
@@ -389,8 +401,13 @@ def setup_encryption_wallet(
     w = bt.wallet(wallet_name, wallet_hotkey)
 
     # Check if wallet exists on device
-    if w.coldkey_file.exists_on_device() or w.coldkeypub_file.exists_on_device():
-        bt.logging.info(f"Wallet {w} already exists on device. Not overwriting wallet.")
+    if (
+        w.coldkey_file.exists_on_device()
+        or w.coldkeypub_file.exists_on_device()
+    ):
+        bt.logging.info(
+            f"Wallet {w} already exists on device. Not overwriting wallet."
+        )
         return w
 
     # Generate mnemonic and create keypair
@@ -400,13 +417,19 @@ def setup_encryption_wallet(
     # Set coldkeypub
     w._coldkeypub = bt.Keypair(ss58_address=keypair.ss58_address)
     w.coldkeypub_file.set_keypair(
-        w._coldkeypub, encrypt=use_encryption, overwrite=overwrite, password=password
+        w._coldkeypub,
+        encrypt=use_encryption,
+        overwrite=overwrite,
+        password=password,
     )
 
     # Set coldkey
     w._coldkey = keypair
     w.coldkey_file.set_keypair(
-        w._coldkey, encrypt=use_encryption, overwrite=overwrite, password=password
+        w._coldkey,
+        encrypt=use_encryption,
+        overwrite=overwrite,
+        password=password,
     )
 
     # Write cold keyfile data to file with specified password

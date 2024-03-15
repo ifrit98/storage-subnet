@@ -16,34 +16,32 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import asyncio
+import base64
 import sys
 import time
-import torch
-import base64
 import typing
-import asyncio
-import bittensor as bt
-
 from pprint import pformat
+
+import bittensor as bt
+import torch
 from Crypto.Random import get_random_bytes, random
 
 from storage import protocol
 from storage.constants import RETRIEVAL_FAILURE_REWARD
 from storage.shared.ecc import hash_data
-from storage.validator.event import EventSchema
-from storage.validator.verify import verify_retrieve_with_seed
-from storage.validator.reward import apply_reward_scores
+from storage.validator.bonding import get_tier_factor, update_statistics
 from storage.validator.database import (
     get_metadata_for_hotkey,
     get_metadata_for_hotkey_and_hash,
-    update_metadata_for_data_hash,
     get_ordered_metadata,
     retrieve_encryption_payload,
+    update_metadata_for_data_hash,
 )
-from storage.validator.bonding import update_statistics, get_tier_factor
-
-from storage.validator.network import ping_uids, ping_and_retry_uids
-from storage.validator.reward import create_reward_vector
+from storage.validator.event import EventSchema
+from storage.validator.network import ping_and_retry_uids, ping_uids
+from storage.validator.reward import apply_reward_scores, create_reward_vector
+from storage.validator.verify import verify_retrieve_with_seed
 
 
 async def handle_retrieve(self, uid):
@@ -89,8 +87,12 @@ async def handle_retrieve(self, uid):
 
         # If we reach here, this miner has passed verification. Update the validator storage.
         data["prev_seed"] = synapse.seed
-        await update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
-        bt.logging.trace(f"Updated metadata for UID: {uid} with data: {pformat(data)}")
+        await update_metadata_for_data_hash(
+            hotkey, data_hash, data, self.database
+        )
+        bt.logging.trace(
+            f"Updated metadata for UID: {uid} with data: {pformat(data)}"
+        )
         # TODO: get a temp link from the server to send back to the client instead
 
     except Exception as e:
@@ -138,7 +140,9 @@ async def retrieve_data(
     uids = [
         uid
         for uid in uids
-        if await get_metadata_for_hotkey(self.metagraph.hotkeys[uid], self.database)
+        if await get_metadata_for_hotkey(
+            self.metagraph.hotkeys[uid], self.database
+        )
         != {}
     ]
     bt.logging.debug(f"retrieve() UIDs to query   : {uids}")
@@ -252,7 +256,9 @@ async def retrieve_data(
 
     # Determine the best UID based on rewards
     if event.rewards:
-        best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+        best_index = max(
+            range(len(event.rewards)), key=event.rewards.__getitem__
+        )
         event.best_uid = event.uids[best_index]
         event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
@@ -342,7 +348,9 @@ async def retrieve_broadband(self, full_hash: str):
 
         # Determine the best UID based on rewards
         if event.rewards:
-            best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+            best_index = max(
+                range(len(event.rewards)), key=event.rewards.__getitem__
+            )
             event.best_uid = event.uids[best_index]
             event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 
@@ -379,7 +387,9 @@ async def retrieve_broadband(self, full_hash: str):
             tasks.append(
                 asyncio.create_task(
                     retrieve_chunk_group(
-                        chunk_metadata["chunk_hash"], chunk_metadata["size"], uids
+                        chunk_metadata["chunk_hash"],
+                        chunk_metadata["size"],
+                        uids,
                     )
                 )
             )
@@ -407,15 +417,21 @@ async def retrieve_broadband(self, full_hash: str):
                         f"Failed to verify store commitment from UID: {uid}"
                     )
 
-    bt.logging.trace(f"chunks after: {[chunk[:12] for chunk in chunks.values()]}")
-    bt.logging.trace(f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}")
+    bt.logging.trace(
+        f"chunks after: {[chunk[:12] for chunk in chunks.values()]}"
+    )
+    bt.logging.trace(
+        f"len(chunks) after: {[len(chunk) for chunk in chunks.values()]}"
+    )
 
     # Reconstruct the data
     encrypted_data = b"".join(chunks.values())
     bt.logging.trace(f"retrieved data: {encrypted_data[:12]}")
 
     # Retrieve user encryption payload (if exists)
-    encryption_payload = await retrieve_encryption_payload(full_hash, self.database)
+    encryption_payload = await retrieve_encryption_payload(
+        full_hash, self.database
+    )
     bt.logging.debug(f"retrieved encryption_payload: {encryption_payload}")
 
     return encrypted_data, encryption_payload

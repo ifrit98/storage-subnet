@@ -18,8 +18,9 @@
 
 import binascii
 import hashlib
-from Crypto.Random import random
+
 from Crypto.PublicKey import ECC
+from Crypto.Random import random
 
 
 def hash_data(data):

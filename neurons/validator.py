@@ -16,44 +16,39 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import sys
-import time
-import torch
 import asyncio
-from redis import asyncio as aioredis
-import threading
-import bittensor as bt
+import os
 import subprocess
-from shlex import quote
+import threading
+import time
 from copy import deepcopy
 from pprint import pformat
+from shlex import quote
 from traceback import print_exception
+
+import bittensor as bt
+import torch
+from redis import asyncio as aioredis
 from substrateinterface.base import SubstrateInterface
 
-from storage.shared.utils import get_redis_password
-from storage.shared.subtensor import get_current_block
-from storage.shared.weights import should_set_weights
-from storage.validator.utils import (
-    get_current_validtor_uid_round_robin,
-    get_rebalance_script_path,
-)
 from storage.shared.checks import check_environment
-from storage.validator.config import config, check_config, add_args
-from storage.validator.state import (
-    should_checkpoint,
-    checkpoint,
-    should_reinit_wandb,
-    reinit_wandb,
-    load_state,
-    save_state,
-    init_wandb,
-)
-from storage.validator.weights import (
-    set_weights_for_validator,
-)
-from storage.validator.forward import forward
+from storage.shared.subtensor import get_current_block
+from storage.shared.utils import get_redis_password
+from storage.shared.weights import should_set_weights
+from storage.validator.config import add_args, check_config, config
 from storage.validator.encryption import setup_encryption_wallet
+from storage.validator.forward import forward
+from storage.validator.state import (
+    checkpoint,
+    init_wandb,
+    load_state,
+    reinit_wandb,
+    save_state,
+    should_checkpoint,
+    should_reinit_wandb,
+)
+from storage.validator.utils import get_rebalance_script_path
+from storage.validator.weights import set_weights_for_validator
 
 
 def MockDendrite():
@@ -126,7 +121,8 @@ class neuron:
 
         if not self.config.wallet._mock:
             if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
+                hotkey_ss58=self.wallet.hotkey.ss58_address,
+                netuid=self.config.netuid,
             ):
                 raise Exception(
                     f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
@@ -146,9 +142,13 @@ class neuron:
         # Init metagraph.
         bt.logging.debug("loading metagraph")
         self.metagraph = bt.metagraph(
-            netuid=self.config.netuid, network=self.subtensor.network, sync=False
+            netuid=self.config.netuid,
+            network=self.subtensor.network,
+            sync=False,
         )  # Make sure not to sync without passing subtensor
-        self.metagraph.sync(subtensor=self.subtensor)  # Sync metagraph with subtensor.
+        self.metagraph.sync(
+            subtensor=self.subtensor
+        )  # Sync metagraph with subtensor.
         bt.logging.debug(str(self.metagraph))
 
         # Get initial block
@@ -167,7 +167,9 @@ class neuron:
 
         # Init Weights.
         bt.logging.debug("loading moving_averaged_scores")
-        self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(self.device)
+        self.moving_averaged_scores = torch.zeros((self.metagraph.n)).to(
+            self.device
+        )
         bt.logging.debug(str(self.moving_averaged_scores))
 
         self.my_subnet_uid = self.metagraph.hotkeys.index(
@@ -232,7 +234,10 @@ class neuron:
                     current_block = self.subtensor.get_current_block()
 
                 time.sleep(5)
-                if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
+                if (
+                    self.wallet.hotkey.ss58_address
+                    not in self.metagraph.hotkeys
+                ):
                     raise Exception(
                         f"Validator is not registered - hotkey {self.wallet.hotkey.ss58_address} not in metagraph"
                     )
@@ -245,7 +250,9 @@ class neuron:
                 async def run_forward():
                     coroutines = [
                         forward(self)
-                        for _ in range(self.config.neuron.num_concurrent_forwards)
+                        for _ in range(
+                            self.config.neuron.num_concurrent_forwards
+                        )
                     ]
                     await asyncio.gather(*coroutines)
 
@@ -267,7 +274,9 @@ class neuron:
                 bt.logging.debug(
                     f"should_checkpoint() params: (current block) {current_block} (prev block) {self.prev_step_block} (checkpoint_block_length) {self.config.neuron.checkpoint_block_length}"
                 )
-                bt.logging.debug(f"should checkpoint ? {should_checkpoint_validator}")
+                bt.logging.debug(
+                    f"should checkpoint ? {should_checkpoint_validator}"
+                )
                 if should_checkpoint_validator:
                     bt.logging.info("Checkpointing...")
                     checkpoint(self)
@@ -284,7 +293,9 @@ class neuron:
                     f"Should validator check weights? -> {validator_should_set_weights}"
                 )
                 if validator_should_set_weights:
-                    bt.logging.debug(f"Setting weights {self.moving_averaged_scores}")
+                    bt.logging.debug(
+                        f"Setting weights {self.moving_averaged_scores}"
+                    )
                     set_weights_for_validator(
                         subtensor=self.subtensor,
                         wallet=self.wallet,
@@ -303,8 +314,12 @@ class neuron:
 
                 self.prev_step_block = get_current_block(self.subtensor)
                 if self.config.neuron.verbose:
-                    bt.logging.debug(f"block at end of step: {self.prev_step_block}")
-                    bt.logging.debug(f"Step took {time.time() - start_epoch} seconds")
+                    bt.logging.debug(
+                        f"block at end of step: {self.prev_step_block}"
+                    )
+                    bt.logging.debug(
+                        f"Step took {time.time() - start_epoch} seconds"
+                    )
                 self.step += 1
 
         except Exception as err:
@@ -344,7 +359,9 @@ class neuron:
         )
         self.subscription_substrate = substrate
 
-        def neuron_registered_subscription_handler(obj, update_nr, subscription_id):
+        def neuron_registered_subscription_handler(
+            obj, update_nr, subscription_id
+        ):
             block_no = obj["header"]["number"]
             block_hash = substrate.get_block_hash(block_id=block_no)
             bt.logging.debug(f"subscription block hash: {block_hash}")
@@ -370,7 +387,9 @@ class neuron:
             ):
                 hotkeys = deepcopy(self.rebalance_queue)
                 self.rebalance_queue.clear()
-                self.log(f"Running rebalance in separate process on hotkeys {hotkeys}")
+                self.log(
+                    f"Running rebalance in separate process on hotkeys {hotkeys}"
+                )
 
                 # Fire off the script
                 hotkeys_str = ",".join(map(str, hotkeys))
@@ -384,7 +403,9 @@ class neuron:
                     ]
                 )
 
-        substrate.subscribe_block_headers(neuron_registered_subscription_handler)
+        substrate.subscribe_block_headers(
+            neuron_registered_subscription_handler
+        )
 
     def run_subscription_thread(self):
         """

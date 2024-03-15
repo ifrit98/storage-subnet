@@ -18,14 +18,11 @@
 
 import torch
 import wandb
-
 from bittensor import logging as bt_logging
-from bittensor import subtensor
-from bittensor import wallet
-from bittensor import metagraph
+from bittensor import metagraph, subtensor, wallet
 
-from storage.shared.weights import set_weights, should_set_weights
 from storage import __spec_version__ as spec_version
+from storage.shared.weights import set_weights, should_set_weights
 
 
 def set_weights_for_miner(

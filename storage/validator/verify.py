@@ -19,21 +19,16 @@
 import base64
 from pprint import pformat
 
+import bittensor as bt
+
 from ..shared.ecc import (
+    ECCommitment,
+    ecc_point_to_hex,
     hash_data,
     hex_to_ecc_point,
-    ecc_point_to_hex,
-    ECCommitment,
 )
-from ..shared.merkle import (
-    validate_merkle_proof,
-)
-
-from ..shared.utils import (
-    b64_decode,
-)
-
-import bittensor as bt
+from ..shared.merkle import validate_merkle_proof
+from ..shared.utils import b64_decode
 
 
 def verify_chained_commitment(proof, seed, commitment, verbose=True):
@@ -81,9 +76,14 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
         return False
 
     if not verify_chained_commitment(
-        synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
+        synapse.commitment_proof,
+        seed,
+        synapse.commitment_hash,
+        verbose=verbose,
     ):
-        bt.logging.error(f"Initial commitment hash does not match expected result.")
+        bt.logging.error(
+            "Initial commitment hash does not match expected result."
+        )
         bt.logging.error(f"synapse {pformat(synapse.axon.dict())}")
         return False
 
@@ -116,7 +116,9 @@ def verify_challenge_with_seed(synapse, seed, verbose=False):
             bt.logging.error("Merkle proof validation failed!")
             bt.logging.error(f"commitment  : {synapse.commitment[:100]}")
             bt.logging.error(f"merkle root : {synapse.merkle_root}")
-            bt.logging.error(f"merkle proof: {pformat(synapse.merkle_proof)[-1]}")
+            bt.logging.error(
+                f"merkle proof: {pformat(synapse.merkle_proof)[-1]}"
+            )
             bt.logging.error(f"synapse     : {pformat(synapse.axon.dict())}")
         return False
 
@@ -163,7 +165,7 @@ def verify_store_with_seed(synapse, b64_encrypted_data, seed, verbose=False):
         hash_data(encrypted_data + str(seed).encode()),
         synapse.randomness,
     ):
-        bt.logging.error(f"Opening commitment failed")
+        bt.logging.error("Opening commitment failed")
         bt.logging.error(f"synapse: {synapse.axon.dict()}")
         return False
 
@@ -181,9 +183,14 @@ def verify_retrieve_with_seed(synapse, seed, verbose=False):
         bool: True if the retrieval process is verified successfully, False otherwise.
     """
     if not verify_chained_commitment(
-        synapse.commitment_proof, seed, synapse.commitment_hash, verbose=verbose
+        synapse.commitment_proof,
+        seed,
+        synapse.commitment_hash,
+        verbose=verbose,
     ):
-        bt.logging.error("Initial commitment hash does not match expected result.")
+        bt.logging.error(
+            "Initial commitment hash does not match expected result."
+        )
         if verbose:
             bt.logging.error(f"synapse {synapse.axon.dict()}")
             bt.logging.error(f"commitment_proof: {synapse.commitment_proof}")

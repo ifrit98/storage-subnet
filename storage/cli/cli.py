@@ -16,18 +16,20 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sys
 import argparse
-import storage
-import bittensor
-from rich import print
+import sys
 from typing import List, Optional
 
-from .retrievecommand import RetrieveData
-from .storecommand import StoreData
+import bittensor
+from rich import print
+
+import storage
+
 from .listcommand import ListLocalHashes
+from .neuroncommand import RunApi, RunMiner, RunValidator
+from .retrievecommand import RetrieveData
 from .statscommand import ListMinerStats
-from .neuroncommand import RunMiner, RunValidator, RunApi
+from .storecommand import StoreData
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -73,15 +75,15 @@ COMMANDS = {
         },
     },
     "run": {
-         "name": "run",
-         "aliases": ["n", "run"],
-         "help": "Commands for running neurons in this subnetwork.",
-         "commands": {
-             "miner": RunMiner,
-             "validator": RunValidator,
-             "api": RunApi,
-         },
-     },
+        "name": "run",
+        "aliases": ["n", "run"],
+        "help": "Commands for running neurons in this subnetwork.",
+        "commands": {
+            "miner": RunMiner,
+            "validator": RunValidator,
+            "api": RunApi,
+        },
+    },
 }
 
 
@@ -114,7 +116,9 @@ class cli:
         if self.config.command in ALIAS_TO_COMMAND:
             self.config.command = ALIAS_TO_COMMAND[self.config.command]
         else:
-            print(f":cross_mark:[red]Unknown command: {self.config.command}[/red]")
+            print(
+                f":cross_mark:[red]Unknown command: {self.config.command}[/red]"
+            )
             sys.exit()
 
         # Check if the config is valid.
@@ -125,7 +129,7 @@ class cli:
             try:
                 bittensor.utils.version_checking()
             # TODO: replace bare except with 'expected' exceptions
-            except:
+            except Exception:
                 # If version checking fails, inform user with an exception.
                 raise RuntimeError(
                     "To avoid internet-based version checking, pass --no_version_checking while running the CLI."
@@ -201,7 +205,9 @@ class cli:
             command_data = COMMANDS[command]
             if isinstance(command_data, dict):
                 if config["subcommand"] is not None:
-                    command_data["commands"][config["subcommand"]].check_config(config)
+                    command_data["commands"][config["subcommand"]].check_config(
+                        config
+                    )
                 else:
                     print(
                         f":cross_mark:[red]Missing subcommand for: {config.command}[/red]"
@@ -228,7 +234,9 @@ class cli:
             else:
                 command_data.run(self)
         else:
-            print(f":cross_mark:[red]Unknown command: {self.config.command}[/red]")
+            print(
+                f":cross_mark:[red]Unknown command: {self.config.command}[/red]"
+            )
             sys.exit()
 
 

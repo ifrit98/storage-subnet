@@ -17,17 +17,18 @@
 # DEALINGS IN THE SOFTWARE.
 
 import typing
+
 import bittensor as bt
 
+from storage.validator.bonding import register_miner
 from storage.validator.database import (
-    is_file_chunk,
     get_metadata_for_hotkey,
     get_ordered_metadata,
-    retrieve_encryption_payload,
-    remove_hotkey_from_chunk,
+    is_file_chunk,
     purge_challenges_for_hotkey,
+    remove_hotkey_from_chunk,
+    retrieve_encryption_payload,
 )
-from storage.validator.bonding import register_miner
 
 from .retrieve import retrieve_data
 from .store import store_encrypted_data
@@ -73,12 +74,16 @@ async def rebalance_data_for_hotkey(
         await register_miner(source_hotkey, self.database)
         # Update index for full and chunk hashes for retrieve
         # Iterate through ordered metadata for all full hashses this miner had
-        bt.logging.debug(f"Removing all challenge metadata for hotkey {source_hotkey}")
+        bt.logging.debug(
+            f"Removing all challenge metadata for hotkey {source_hotkey}"
+        )
         async for file_key in self.database.scan_iter("file:*"):
             file_key = file_key.decode("utf-8")
             file_hash = file_key.split(":")[1]
             # Get all ordered metadata for this file
-            ordered_metadata = await get_ordered_metadata(file_hash, self.database)
+            ordered_metadata = await get_ordered_metadata(
+                file_hash, self.database
+            )
             bt.logging.debug(
                 f"Length of removed ordered metadata: {len(ordered_metadata)} for hotkey: {source_hotkey}"
             )
@@ -88,7 +93,9 @@ async def rebalance_data_for_hotkey(
                     chunk_metadata, source_hotkey, self.database
                 )
         # Purge challenge hashes so new miner doesn't get hosed
-        bt.logging.debug(f"Purging all challenge hashes for hotkey {source_hotkey}")
+        bt.logging.debug(
+            f"Purging all challenge hashes for hotkey {source_hotkey}"
+        )
         await purge_challenges_for_hotkey(source_hotkey, self.database)
 
     bt.logging.debug(

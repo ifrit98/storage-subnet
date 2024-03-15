@@ -16,24 +16,22 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import json
-import base64
 import argparse
-
-import storage
-from storage.validator.encryption import encrypt_data
-from storage.validator.cid import generate_cid_string
-from storage.shared.ecc import hash_data
+import base64
+import json
+import os
+from typing import List
 
 import bittensor
-
-from typing import List
 from rich.prompt import Prompt
+
+import storage
+from storage.shared.ecc import hash_data
+from storage.validator.cid import generate_cid_string
+from storage.validator.encryption import encrypt_data
 from storage.validator.utils import get_all_validators
 
 from .default_values import defaults
-
 
 bittensor.trace()
 
@@ -144,7 +142,9 @@ class StoreData:
 
         if cli.config.encrypt:
             encrypted_data, encryption_payload = encrypt_data(
-                bytes(raw_data, "utf-8") if isinstance(raw_data, str) else raw_data,
+                bytes(raw_data, "utf-8")
+                if isinstance(raw_data, str)
+                else raw_data,
                 wallet,
             )
         else:
@@ -170,7 +170,9 @@ class StoreData:
         try:
             sub = bittensor.subtensor(network=cli.config.subtensor.network)
             bittensor.logging.debug("subtensor:", sub)
-            StoreData._run(cli, synapse, sub, wallet, hash_filepath, expected_cid)
+            StoreData._run(
+                cli, synapse, sub, wallet, hash_filepath, expected_cid
+            )
         finally:
             if "sub" in locals():
                 sub.close()
@@ -197,7 +199,9 @@ class StoreData:
 
         with bittensor.__console__.status(":satellite: Storing data..."):
             # Query axons
-            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
+            responses = dendrite.query(
+                axons, synapse, timeout=270, deserialize=False
+            )
             bittensor.logging.debug(
                 "axon responses:", [resp.dendrite.dict() for resp in responses]
             )
@@ -207,7 +211,9 @@ class StoreData:
             for response in responses:
                 if response.dendrite.status_code != 200:
                     failure_modes["code"].append(response.dendrite.status_code)
-                    failure_modes["message"].append(response.dendrite.status_message)
+                    failure_modes["message"].append(
+                        response.dendrite.status_message
+                    )
                     continue
 
                 data_hash = (
@@ -215,7 +221,9 @@ class StoreData:
                     if isinstance(response.data_hash, bytes)
                     else response.data_hash
                 )
-                bittensor.logging.debug("received data hash: {}".format(data_hash))
+                bittensor.logging.debug(
+                    "received data hash: {}".format(data_hash)
+                )
 
                 if data_hash != expected_cid:
                     bittensor.logging.warning(
@@ -227,12 +235,16 @@ class StoreData:
         if success:
             # Save hash mapping after successful storage
             filename = os.path.basename(cli.config.filepath)
-            save_hash_mapping(hash_filepath, filename=filename, data_hash=data_hash)
+            save_hash_mapping(
+                hash_filepath, filename=filename, data_hash=data_hash
+            )
             bittensor.logging.info(
                 f"Stored {filename} on the Bittensor network with hash {data_hash}"
             )
         else:
-            bittensor.logging.error(f"Failed to store data at {cli.config.filepath}.")
+            bittensor.logging.error(
+                f"Failed to store data at {cli.config.filepath}."
+            )
             bittensor.logging.error(
                 f"Response failure codes & messages {failure_modes}"
             )
@@ -257,7 +269,9 @@ class StoreData:
             config.netuid = str(netuid)
 
         if not config.is_set("wallet.name") and not config.no_prompt:
-            wallet_name = Prompt.ask("Enter wallet name", default=defaults.wallet.name)
+            wallet_name = Prompt.ask(
+                "Enter wallet name", default=defaults.wallet.name
+            )
             config.wallet.name = str(wallet_name)
 
         if not config.is_set("wallet.hotkey") and not config.no_prompt:

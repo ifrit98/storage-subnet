@@ -16,12 +16,13 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import json
 import argparse
+import json
+import os
+from typing import List
+
 import bittensor
 from rich.console import Console
-from typing import List
 from rich.table import Table
 from tqdm import tqdm
 
@@ -132,7 +133,9 @@ class ListLocalHashes:
 
         try:
             # TODO: review if this is needed
-            wallets = next(os.walk(os.path.expanduser(cli.config.wallet.path)))[1]
+            wallets = next(os.walk(os.path.expanduser(cli.config.wallet.path)))[
+                1
+            ]
         except StopIteration:
             # No wallet files found.
             wallets = []
@@ -151,7 +154,8 @@ class ListLocalHashes:
                 and not cold_wallet.coldkeypub_file.is_encrypted()
             ):
                 hash_file = (
-                    os.path.join(cli.config.hash_basepath, cold_wallet.name) + ".json"
+                    os.path.join(cli.config.hash_basepath, cold_wallet.name)
+                    + ".json"
                 )
                 hashes_dict = list_all_hashes(hash_file)
                 unified_data[cold_wallet.name] = hashes_dict

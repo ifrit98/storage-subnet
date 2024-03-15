@@ -16,15 +16,15 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import bittensor as bt
-
 from pprint import pformat
+
+import bittensor as bt
 from Crypto.Random import random
 
 from storage.validator.database import get_ordered_metadata
 
-from .store import store_broadband
 from .retrieve import retrieve_broadband
+from .store import store_broadband
 
 
 async def distribute_data(self, k: int):
@@ -67,7 +67,9 @@ async def distribute_data(self, k: int):
         exclude_uids.update(uids)
 
     # Use primitives to retrieve and store all the chunks:
-    retrieved_data, retrieved_payload = await retrieve_broadband(self, full_hash)
+    retrieved_data, retrieved_payload = await retrieve_broadband(
+        self, full_hash
+    )
 
     # Pick random new UIDs
     await store_broadband(

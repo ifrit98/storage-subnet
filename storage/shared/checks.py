@@ -1,8 +1,6 @@
-import subprocess
-import time
 import asyncio
-import re
-import os
+import subprocess
+
 from redis import asyncio as aioredis
 
 
@@ -19,7 +17,9 @@ def _check_redis_config(path):
     try:
         subprocess.run(["sudo", "test", "-f", path], check=True)
     except subprocess.CalledProcessError:
-        raise AssertionError(f"Redis config file path: '{path}' does not exist.")
+        raise AssertionError(
+            f"Redis config file path: '{path}' does not exist."
+        )
 
 
 def _check_redis_settings(redis_conf_path):
@@ -55,7 +55,9 @@ async def _check_data_persistence(redis_conf_path, port):
     await client.set("testkey", "Hello, Redis!")
 
     # Restart Redis server
-    subprocess.run(["sudo", "systemctl", "restart", "redis-server.service"], check=True)
+    subprocess.run(
+        ["sudo", "systemctl", "restart", "redis-server.service"], check=True
+    )
 
     # Wait a bit to ensure Redis has restarted
     await asyncio.sleep(5)
@@ -89,7 +91,9 @@ def _check_redis_setting(file_path, setting, expected_values):
 
 def _assert_setting_exists(file_path, setting):
     actual_values = _get_redis_setting(file_path, setting)
-    assert actual_values is not None, f"Redis config missing setting '{setting}'"
+    assert (
+        actual_values is not None
+    ), f"Redis config missing setting '{setting}'"
     return actual_values
 
 

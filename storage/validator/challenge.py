@@ -16,35 +16,36 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import asyncio
 import sys
 import time
-import torch
 import typing
-import asyncio
-import bittensor as bt
-
 from pprint import pformat
+
+import bittensor as bt
+import torch
 from Crypto.Random import get_random_bytes, random
 
 from storage import protocol
 from storage.constants import CHALLENGE_FAILURE_REWARD
-from storage.validator.event import EventSchema
-from storage.shared.ecc import setup_CRS, ecc_point_to_hex
-from storage.validator.utils import get_random_chunksize, get_available_query_miners
-from storage.validator.verify import verify_challenge_with_seed
-from storage.validator.reward import apply_reward_scores
+from storage.shared.ecc import ecc_point_to_hex, setup_CRS
+from storage.validator.bonding import get_tier_factor, update_statistics
 from storage.validator.database import (
     get_metadata_for_hotkey_and_hash,
     update_metadata_for_data_hash,
 )
-
-from storage.validator.bonding import (
-    update_statistics,
-    get_tier_factor,
+from storage.validator.event import EventSchema
+from storage.validator.reward import apply_reward_scores
+from storage.validator.utils import (
+    get_available_query_miners,
+    get_random_chunksize,
 )
+from storage.validator.verify import verify_challenge_with_seed
 
 
-async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challenge]:
+async def handle_challenge(
+    self, uid: int
+) -> typing.Tuple[bool, protocol.Challenge]:
     """
     Handles a challenge sent to a miner and verifies the response.
 
@@ -73,10 +74,14 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
             challenge_index=0,
             seed="",
         )
-        return None, [dummy_response]  # no data found associated with this miner hotkey
+        return None, [
+            dummy_response
+        ]  # no data found associated with this miner hotkey
 
     data_hash = random.choice(keys).decode("utf-8")
-    data = await get_metadata_for_hotkey_and_hash(hotkey, data_hash, self.database)
+    data = await get_metadata_for_hotkey_and_hash(
+        hotkey, data_hash, self.database
+    )
 
     bt.logging.trace(f"Challenge lookup key: {data_hash}")
     bt.logging.trace(f"Challenge data: {pformat(data)}")
@@ -89,14 +94,16 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
                 data["size"] // self.config.neuron.chunk_factor,
             ),
         )
-    except:  # TODO: do not use bare except
+    except Exception as e:
         bt.logging.error(
-            f"Failed to get chunk size {self.config.neuron.min_chunk_size} | {self.config.neuron.chunk_factor} | {data['size'] // self.config.neuron.chunk_factor}"
+            f"Failed to get chunk size {self.config.neuron.min_chunk_size} | {self.config.neuron.chunk_factor} | {data['size'] // self.config.neuron.chunk_factor} | error: {e}"
         )
         chunk_size = 0
 
     num_chunks = (
-        data["size"] // chunk_size if data["size"] > chunk_size else data["size"]
+        data["size"] // chunk_size
+        if data["size"] > chunk_size
+        else data["size"]
     )
     if self.config.neuron.verbose:
         bt.logging.trace(f"challenge data size : {data['size']}")
@@ -128,7 +135,9 @@ async def handle_challenge(self, uid: int) -> typing.Tuple[bool, protocol.Challe
 
     if verified:
         data["prev_seed"] = synapse.seed
-        await update_metadata_for_data_hash(hotkey, data_hash, data, self.database)
+        await update_metadata_for_data_hash(
+            hotkey, data_hash, data, self.database
+        )
 
     # Record the time taken for the challenge
     return verified, response
@@ -172,14 +181,16 @@ async def challenge_data(self):
     responses = await asyncio.gather(*tasks)
 
     # Compute the rewards for the responses given the prompt.
-    rewards: torch.FloatTensor = torch.zeros(len(responses), dtype=torch.float32).to(
-        self.device
-    )
+    rewards: torch.FloatTensor = torch.zeros(
+        len(responses), dtype=torch.float32
+    ).to(self.device)
 
     remove_reward_idxs = []
     data_sizes = []
     for idx, (uid, (verified, response)) in enumerate(zip(uids, responses)):
-        response_dict = response[0].axon.dict() if response[0] is not None else None
+        response_dict = (
+            response[0].axon.dict() if response[0] is not None else None
+        )
         bt.logging.trace(
             f"Challenge idx {idx} uid {uid} verified {verified} response {str(response_dict)}"
         )
@@ -208,7 +219,9 @@ async def challenge_data(self):
 
         # Apply reward for this challenge
         tier_factor = await get_tier_factor(hotkey, self.database)
-        rewards[idx] = 1.0 * tier_factor if verified else CHALLENGE_FAILURE_REWARD
+        rewards[idx] = (
+            1.0 * tier_factor if verified else CHALLENGE_FAILURE_REWARD
+        )
 
         # Log the event data for this specific challenge
         event.uids.append(uid)
@@ -226,7 +239,9 @@ async def challenge_data(self):
     event.step_length = time.time() - start_time
 
     if len(responses) == 0:
-        bt.logging.debug("Received zero hashes from miners, returning event early.")
+        bt.logging.debug(
+            "Received zero hashes from miners, returning event early."
+        )
         return event
 
     # Remove UIDs without hashes (don't punish new miners that have no challenges yet)
@@ -253,7 +268,9 @@ async def challenge_data(self):
 
     # Determine the best UID based on rewards
     if event.rewards:
-        best_index = max(range(len(event.rewards)), key=event.rewards.__getitem__)
+        best_index = max(
+            range(len(event.rewards)), key=event.rewards.__getitem__
+        )
         event.best_uid = event.uids[best_index]
         event.best_hotkey = self.metagraph.hotkeys[event.best_uid]
 

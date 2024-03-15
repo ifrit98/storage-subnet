@@ -16,13 +16,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import base64
+import json
 import os
 import re
-import json
-import base64
 import subprocess
-import bittensor as bt
 from typing import List, Union
+
+import bittensor as bt
 from redis import asyncio as aioredis
 
 
@@ -74,7 +75,9 @@ def b64_decode(data: bytes, decode_hex: bool = False, encrypted: bool = False):
     """
     data = data.decode("utf-8") if isinstance(data, bytes) else data
     decoded_data = json.loads(
-        base64.b64decode(data) if encrypted else base64.b64decode(data).decode("utf-8")
+        base64.b64decode(data)
+        if encrypted
+        else base64.b64decode(data).decode("utf-8")
     )
     if decode_hex:
         try:
@@ -83,8 +86,8 @@ def b64_decode(data: bytes, decode_hex: bool = False, encrypted: bool = False):
                 if isinstance(decoded_data, list)
                 else {k: bytes.fromhex(v) for k, v in decoded_data.items()}
             )
-        except:  # TODO: do not use bare except
-            pass
+        except Exception as e:
+            bt.logging.error(f"Error decoding hex: {e}")
     return decoded_data
 
 
@@ -142,7 +145,7 @@ def get_redis_password(
             ).strip()
         except Exception as e:
             bt.logging.error(
-                f"No Redis password set in Redis config file: {redis_conf}"
+                f"No Redis password set in Redis config file: {redis_conf}. Error: {e}"
             )
     if redis_password == "" or redis_password is None:
         bt.logging.error(

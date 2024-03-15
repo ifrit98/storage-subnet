@@ -16,22 +16,20 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import os
-import json
-import torch
-import base64
 import argparse
+import base64
+import json
+import os
+from typing import List
+
+import bittensor
+import torch
+from rich.prompt import Prompt
 
 import storage
 from storage.validator.encryption import decrypt_data_with_private_key
 
-import bittensor
-
-from typing import List
-from rich.prompt import Prompt
-
 from .default_values import defaults
-
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -103,7 +101,9 @@ class RetrieveData:
         )
         bittensor.logging.debug("wallet:", wallet)
 
-        cli.config.storage_basepath = os.path.expanduser(cli.config.storage_basepath)
+        cli.config.storage_basepath = os.path.expanduser(
+            cli.config.storage_basepath
+        )
 
         if not os.path.exists(cli.config.storage_basepath):
             bittensor.logging.info(
@@ -118,7 +118,8 @@ class RetrieveData:
                 and not wallet.coldkeypub_file.is_encrypted()
             ):
                 hash_file = (
-                    os.path.join(cli.config.hash_basepath, wallet.name) + ".json"
+                    os.path.join(cli.config.hash_basepath, wallet.name)
+                    + ".json"
                 )
                 hashes_dict = list_all_hashes(hash_file)
                 bittensor.logging.debug(f"hashes dict: {hashes_dict}")
@@ -165,7 +166,9 @@ class RetrieveData:
 
         with bittensor.__console__.status(":satellite: Retreiving data..."):
             # Query axons
-            responses = dendrite.query(axons, synapse, timeout=270, deserialize=False)
+            responses = dendrite.query(
+                axons, synapse, timeout=270, deserialize=False
+            )
             success = False
             for response in responses:
                 bittensor.logging.trace(f"response: {response.dendrite.dict()}")
@@ -198,7 +201,9 @@ class RetrieveData:
                         response.encryption_payload,
                         bytes(wallet.coldkey.private_key.hex(), "utf-8"),
                     )
-                bittensor.logging.trace(f"decrypted_data: {decrypted_data[:100]}")
+                bittensor.logging.trace(
+                    f"decrypted_data: {decrypted_data[:100]}"
+                )
                 success = True
                 break  # No need to keep going if we returned data.
 
@@ -207,7 +212,9 @@ class RetrieveData:
             with open(outpath, "wb") as f:
                 f.write(decrypted_data)
 
-            bittensor.logging.info("Saved retrieved data to: {}".format(outpath))
+            bittensor.logging.info(
+                "Saved retrieved data to: {}".format(outpath)
+            )
         else:
             bittensor.logging.error("Failed to retrieve data.")
 
@@ -231,7 +238,9 @@ class RetrieveData:
             config.netuid = str(netuid)
 
         if not config.is_set("wallet.name") and not config.no_prompt:
-            wallet_name = Prompt.ask("Enter wallet name", default=defaults.wallet.name)
+            wallet_name = Prompt.ask(
+                "Enter wallet name", default=defaults.wallet.name
+            )
             config.wallet.name = str(wallet_name)
 
         if not config.is_set("wallet.hotkey") and not config.no_prompt:

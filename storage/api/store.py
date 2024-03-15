@@ -17,15 +17,15 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import torch
 import base64
-import bittensor as bt
-from abc import ABC, abstractmethod
 from typing import Any, List, Union
+
+import bittensor as bt
+
+from storage.api import SubnetsAPI
 from storage.protocol import StoreUser
 from storage.validator.cid import generate_cid_string
 from storage.validator.encryption import encrypt_data
-from storage.api import SubnetsAPI
 
 
 class StoreUserAPI(SubnetsAPI):
@@ -34,7 +34,11 @@ class StoreUserAPI(SubnetsAPI):
         self.netuid = 21
 
     def prepare_synapse(
-        self, data: bytes, encrypt=False, ttl=60 * 60 * 24 * 30, encoding="utf-8"
+        self,
+        data: bytes,
+        encrypt=False,
+        ttl=60 * 60 * 24 * 30,
+        encoding="utf-8",
     ) -> StoreUser:
         data = bytes(data, encoding) if isinstance(data, str) else data
         encrypted_data, encryption_payload = (
@@ -51,13 +55,17 @@ class StoreUserAPI(SubnetsAPI):
 
         return synapse
 
-    def process_responses(self, responses: List[Union["bt.Synapse", Any]]) -> str:
+    def process_responses(
+        self, responses: List[Union["bt.Synapse", Any]]
+    ) -> str:
         success = False
         failure_modes = {"code": [], "message": []}
         for response in responses:
             if response.dendrite.status_code != 200:
                 failure_modes["code"].append(response.dendrite.status_code)
-                failure_modes["message"].append(response.dendrite.status_message)
+                failure_modes["message"].append(
+                    response.dendrite.status_message
+                )
                 continue
 
             stored_cid = (
