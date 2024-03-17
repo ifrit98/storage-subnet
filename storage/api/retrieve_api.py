@@ -23,10 +23,10 @@ import bittensor as bt
 from typing import Any, List, Union
 from storage.protocol import RetrieveUser
 from storage.validator.encryption import decrypt_data_with_private_key
-from storage.api import SubnetsAPI
+from storage.api.utils import get_query_api_axons
 
 
-class RetrieveUserAPI(SubnetsAPI):
+class RetrieveUserAPI(bt.SubnetsAPI):
     def __init__(self, wallet: "bt.wallet"):
         super().__init__(wallet)
         self.netuid = 21
@@ -70,3 +70,32 @@ class RetrieveUserAPI(SubnetsAPI):
             bt.logging.error("Failed to retrieve data.")
 
         return decrypted_data
+
+
+async def retrieve(
+    cid: str,
+    wallet: "bt.wallet",
+    subtensor: "bt.subtensor" = None,
+    chain_endpoint: str = "finney",
+    netuid: int = 21,
+    timeout: int = 60,
+    uids: List[int] = None,
+    hotkeys: List[str] = None,
+) -> bytes:
+    retrieve_handler = RetrieveUserAPI(wallet)
+
+    subtensor = subtensor or bt.subtensor(chain_endpoint)
+    metagraph = subtensor.metagraph(netuid=netuid)
+
+    if uids is None and hotkeys is not None:
+        uids = [metagraph.hotkeys.index(hotkey) for hotkey in hotkeys]
+
+    axons = await get_query_api_axons(wallet=wallet, metagraph=metagraph, uids=uids)
+
+    data = await retrieve_handler(
+        axons=axons,
+        cid=cid,
+        timeout=timeout,
+    )
+
+    return data

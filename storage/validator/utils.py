@@ -817,9 +817,25 @@ def get_rebalance_script_path(current_dir: str):
     Returns:
     str: The full path to the 'rebalance_deregistration.sh' script.
     """
+    if os.getenv("REBALANCE_SCRIPT_PATH"):
+        assert os.path.isfile(os.getenv("REBALANCE_SCRIPT_PATH")), (
+            "The 'rebalance_deregistration.sh' script was not found at the expected location: "
+            f"{os.getenv('REBALANCE_SCRIPT_PATH')}. Please set the `REBALANCE_SCRIPT_PATH` environment variable "
+            "to your correct absolute path to: `storage-subnet/scripts/rebalance_deregistration.sh`"
+        )
+        return os.getenv("REBALANCE_SCRIPT_PATH")
+
     project_root = os.path.join(current_dir, "..")
     project_root = os.path.normpath(project_root)
     script_path = os.path.join(project_root, "scripts", "rebalance_deregistration.sh")
+
+    if not os.path.isfile(script_path):
+        raise FileNotFoundError(
+            f"The 'rebalance_deregistration.sh' script was not found at the expected location: {script_path}. "
+            "Please set the `REBALANCE_SCRIPT_PATH` environment variable to your correct absolute path to: "
+            "`storage-subnet/scripts/rebalance_deregistration.sh`"
+        )
+
     return script_path
 
 
