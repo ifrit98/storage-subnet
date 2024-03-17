@@ -12,7 +12,7 @@ We consider this system to be an important stepping stone so that bittensor can 
 
 **NOTICE**: Using this software, you **must** agree to the Terms and Agreements provided in the [terms and conditions](TERMS.md) document. By downloading and running this software, you implicitly agree to these terms and conditions.
 
-Currently supporting `python>=3.9,<3.11`.
+Currently supporting `python>=3.9,<3.12`.
 
 > Note: The storage subnet is in an alpha stage and is subject to rapid development.
 
