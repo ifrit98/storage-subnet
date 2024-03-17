@@ -37,7 +37,7 @@ from storage.validator.state import should_checkpoint
 from storage.validator.encryption import encrypt_data, setup_encryption_wallet
 from storage.validator.store import store_broadband
 from storage.validator.retrieve import retrieve_broadband
-from storage.validator.database import retrieve_encryption_payload
+from storage.validator.database import retrieve_encryption_payload, get_ordered_metadata
 from storage.validator.cid import generate_cid_string
 from storage.validator.encryption import decrypt_data_with_private_key
 
@@ -241,6 +241,12 @@ class neuron:
         # Hash the original data to avoid data confusion
         content_id = generate_cid_string(decoded_data)
 
+        # Check and see if hash already exists, reject if so.
+        if await get_ordered_metadata(content_id, self.database):
+            bt.logging.warning(f"Hash {content_id} already exists on the network.")
+            synapse.data_hash = content_id
+            return synapse
+
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)
 
@@ -261,8 +267,12 @@ class neuron:
         self, synapse: protocol.StoreUser
     ) -> typing.Tuple[bool, str]:
         # If debug mode, whitelist everything (NOT RECOMMENDED)
+
         if self.config.api.open_access:
             return False, "Open access: WARNING all whitelisted"
+
+        if synapse.dendrite.hotkey in self.config.api.blacklisted_hotkeys:
+            return True, f"Hotkey {synapse.dendrite.hotkey} blacklisted."
 
         # If explicitly whitelisted hotkey, allow.
         if synapse.dendrite.hotkey in self.config.api.whitelisted_hotkeys:

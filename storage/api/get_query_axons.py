@@ -71,8 +71,6 @@ async def get_query_api_nodes(dendrite, metagraph, n=0.1, timeout=3):
     bt.logging.debug(
         f"Available API node UIDs for subnet {metagraph.netuid}: {query_uids}"
     )
-    if len(query_uids) > 3:
-        query_uids = random.sample(query_uids, 3)
     return query_uids
 
 

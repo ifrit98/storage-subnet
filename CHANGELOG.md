@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.1 / 2024-02-22
+
+## What's Changed
+* Validator stability fix for update_stats by @ifrit98 in https://github.com/ifrit98/storage-subnet/pull/151
+
+
+**Full Changelog**: https://github.com/ifrit98/storage-subnet/compare/v2.0.0...v2.0.1
+
+
 ## 2.0.0 / 2024-02-18
 
 ## What's Changed

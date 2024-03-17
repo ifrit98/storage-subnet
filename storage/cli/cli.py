@@ -27,6 +27,7 @@ from .retrievecommand import RetrieveData
 from .storecommand import StoreData
 from .listcommand import ListLocalHashes
 from .statscommand import ListMinerStats
+from .neuroncommand import RunMiner, RunValidator, RunApi
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -71,6 +72,16 @@ COMMANDS = {
             "stats": ListMinerStats,  # lists all miner stats associated with hotkey
         },
     },
+    "run": {
+         "name": "run",
+         "aliases": ["n", "run"],
+         "help": "Commands for running neurons in this subnetwork.",
+         "commands": {
+             "miner": RunMiner,
+             "validator": RunValidator,
+             "api": RunApi,
+         },
+     },
 }
 
 

@@ -252,7 +252,7 @@ class neuron:
                 self.loop.run_until_complete(run_forward())
 
                 # Init wandb.
-                if not self.config.wandb.off:
+                if not self.config.wandb.off and self.wandb is not None:
                     bt.logging.debug("loading wandb")
                     init_wandb(self)
 
