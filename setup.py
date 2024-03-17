@@ -72,7 +72,7 @@ setup(
     include_package_data=True,
     author_email="ifrit98@gmail.com",
     license="MIT",
-    python_requires=">=3.9,<3.11",
+    python_requires=">=3.9,<3.12",
     entry_points={
         "console_scripts": [
             "filetao=storage.cli.cli:filetao"
@@ -88,6 +88,7 @@ setup(
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering",
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
