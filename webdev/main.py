@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
-from storage import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
+from storage.api import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
 from database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
 from database import Token, TokenData, User, UserInDB
 
