@@ -102,12 +102,16 @@ def get_file_metadata(filename: str) -> Optional[dict]:
 def get_metagraph(netuid: int = 22, network: str = "test") -> bt.metagraph:
     metagraph_str = redis_db.get(f"metagraph:{netuid}")
     if metagraph_str:
-        return deserialize_metagraph(metagraph_str.decode())
-    else:
-        metagraph = bt.subtensor(network).metagraph(netuid)
-        metagraph_str = serialize_metagraph(metagraph, dump=True)
-        redis_db.set(f"metagraph:{netuid}", metagraph_str)
-        return metagraph
+        metagraph = deserialize_metagraph(metagraph_str.decode())
+        last_block = metagraph.block.item()
+        current_block = bt.subtensor(network).get_current_block()
+        if current_block - last_block < 100:
+            return metagraph
+
+    metagraph = bt.subtensor(network).metagraph(netuid)
+    metagraph_str = serialize_metagraph(metagraph, dump=True)
+    redis_db.set(f"metagraph:{netuid}", metagraph_str)
+    return metagraph
 
 def serialize_metagraph(metagraph_obj: bt.metagraph, dump=False) -> Union[str, dict]:
     serialized_data = {}
