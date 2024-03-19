@@ -13,7 +13,7 @@ from typing import List, Optional, Dict
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage.api import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
 from database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
-from database import Token, TokenData, User, UserInDB
+from database import Token, TokenData, User, UserInDB, store_file_metadata
 
 # Load the env configuration
 load_dotenv()
@@ -149,7 +149,7 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
             # Don't encrypt for testing right now
             encrypted_data, encryption_payload = raw_data, {}
 
-        cid = await store_handler(
+        cid, hotkeys = await store_handler(
             axons=axons,
             data=encrypted_data,
             encrypt=False, # We already encrypted the data (and don't want to double encrypt it)
@@ -157,9 +157,11 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
             encoding="utf-8",
             timeout=60,
         )
+        if not len(hotkeys):
+            raise HTTPException(status_code=500, detail="No hotkeys returned from store_handler. Data not stored.")
 
         # Store the encrpyiton payload in the user db for later retrieval
-        store_file_metadata(file.filename, cid, encryption_payload)
+        store_file_metadata(file.filename, cid, hotkeys, encryption_payload)
 
     return cid
 
@@ -173,8 +175,10 @@ async def retrieve_user_data(filename: str, outpath: str, current_user: User = D
     wallet_hotkey = current_user.wallet_hotkey
     user_wallet = bt.wallet(name = wallet_name, hotkey = wallet_hotkey)
 
+    metadata = get_file_metadata(filename)
+
     # Fetch the axons of the available API nodes, or specify UIDs directly
-    axons = await get_query_api_axons(wallet=server_wallet, metagraph=metagraph)
+    axons = await get_query_api_axons(wallet=server_wallet, metagraph=metagraph, hotkeys=hotkeys)
 
     metadata = get_file_metadata(filename)
     cid = metadata["cid"]

@@ -6,7 +6,7 @@ from os import getenv
 from redis import StrictRedis
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 redis_db = None
 
@@ -91,8 +91,8 @@ def create_user(user: UserInDB):
     user_str = serialize_model(user)
     redis_db.set(username, user_str)
 
-def store_file_metadata(filename: str, cid: str, payload: dict):
-    redis_db.set(filename, json.dumps({"cid": cid, "encryption_payload": payload}))
+def store_file_metadata(filename: str, cid: str, hotkeys: List[str], payload: dict):
+    redis_db.set(filename, json.dumps({"cid": cid, "hotkeys": hotkeys, "encryption_payload": payload}))
 
 def get_file_metadata(filename: str) -> Optional[dict]:
     if redis_db.get(filename) is None:
