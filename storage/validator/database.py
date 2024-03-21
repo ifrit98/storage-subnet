@@ -463,7 +463,7 @@ async def hotkey_at_capacity(
 
 async def cache_hotkeys_capacity(
     hotkeys: List[str], database: aioredis.Redis, verbose: bool = False
-):
+) -> Dict[str, Tuple[int, Optional[int]]]:
     """
     Caches the capacity information for a list of hotkeys.
 
@@ -497,7 +497,7 @@ async def cache_hotkeys_capacity(
     return hotkeys_capacity
 
 
-async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False):
+async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False) -> bool:
     """
     Checks if a hotkey is at capacity using the cached information.
 
@@ -1064,10 +1064,43 @@ async def delete_file_from_database(file_hash: str, database: aioredis.Redis):
         await database.delete(f"file:{file_hash}")
 
 
-def get_hash_keys(ss58_address, r):
+async def get_hash_keys(ss58_address: str, database: aioredis.Redis) -> List[str]:
     """
     Filter out the ttl: hashes from the hotkey hashes and return the list of keys.
     """
     return [
-        key for key in r.hkeys(f"hotkey:{ss58_address}") if not key.startswith(b"ttl:")
+        key for key in await database.hkeys(f"hotkey:{ss58_address}") if not key.startswith(b"ttl:")
     ]
+
+
+async def active_hotkeys(database: aioredis.Redis) -> List[str]:
+    """
+    Returns a list of all active hotkeys in the database.
+    """
+    return [
+        x.decode().split(":")[-1] async for x in database.scan_iter("hotkey:*")
+    ]
+
+
+async def get_network_capacity(database) -> int:
+    """
+    Get the total storage capacity of the network in bytes.
+    """
+    cap = 0
+    for k,v in (await get_miner_statistics(database)).items():
+        cap += int(v.get('storage_limit', 0))
+
+    return cap
+
+
+async def current_validator_storage(database) -> int:
+    """
+    Get the total storage capacity of the network in bytes.
+    """
+    hotkeys = await active_hotkeys(database)
+
+    current_storage = 0
+    for k, (cur, _) in (await cache_hotkeys_capacity(hotkeys, database)).items():
+        current_storage += cur
+
+    return current_storage
