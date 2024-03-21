@@ -21,7 +21,7 @@ import time
 from redis import asyncio as aioredis
 import asyncio
 import bittensor as bt
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union, Optional, Tuple
 
 
 async def set_ttl_for_hash_and_hotkey(
@@ -470,6 +470,7 @@ async def cache_hotkeys_capacity(
     Parameters:
         hotkeys (list): List of hotkey strings to check.
         database (aioredis.Redis): The Redis client instance.
+        verbose (bool): A flag indicating if verbose logging is enabled.
 
     Returns:
         dict: A dictionary with hotkeys as keys and a tuple of (total_storage, limit) as values.
@@ -1104,3 +1105,44 @@ async def current_validator_storage(database) -> int:
         current_storage += cur
 
     return current_storage
+
+
+async def tier_statistics(databse: aioredis.Redis) -> Dict[str, Dict[str, int]]:
+    tier_counts = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    } 
+    tier_capacity = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    }
+    tier_usage = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    }
+
+    for k,v in (await get_miner_statistics(database)).items():
+        tier = v.get('tier', None)
+        if tier:
+            hotkey = k.split(":")[-1]
+            tier_counts[tier] += 1
+            tier_capacity[tier] += int(v.get('storage_limit', 0))
+            tier_usage[tier] += await total_hotkey_storage(hotkey, database, False)
+
+    tier_percent_usage = {k: 100 * (v / tier_capacity[k]) if tier_capacity[k] > 0 else 0 for k,v in tier_usage.items()}
+
+    return {
+        "counts": tier_counts, 
+        "capacity": tier_capacity, 
+        "usage": tier_usage,
+        "percent_usage": tier_percent_usage
+    }
