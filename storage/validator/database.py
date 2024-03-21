@@ -594,7 +594,7 @@ async def get_redis_db_size(database: aioredis.Redis) -> int:
         int: Total size of all keys in bytes
     """
     total_size = 0
-    async for key in await database.scan_iter("*"):
+    async for key in database.scan_iter("*"):
         size = await database.execute_command("MEMORY USAGE", key)
         if size:
             total_size += size
