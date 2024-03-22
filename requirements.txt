@@ -19,3 +19,5 @@ python-jose==3.3.0
 passlib==1.7.4
 python-multipart==0.0.9
 python-dotenv==1.0.1
+uvicorn==0.22.0
+fastapi==0.99.1

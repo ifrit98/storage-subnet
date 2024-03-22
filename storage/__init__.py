@@ -62,3 +62,4 @@ from . import miner
 from . import plot
 from . import cli
 from . import api
+from . import webdev
