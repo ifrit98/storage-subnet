@@ -4,6 +4,7 @@ import base64
 import bittensor as bt
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -13,7 +14,7 @@ from typing import List, Optional, Dict
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage.api import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
 from database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
-from database import Token, TokenData, User, UserInDB, store_file_metadata
+from database import Token, TokenData, User, UserInDB, store_file_metadata, get_file_metadata
 
 # Load the env configuration
 load_dotenv()
@@ -167,7 +168,7 @@ async def create_upload_files(files: List[UploadFile] = File(...), current_user:
 
 # File Retrieval Endpoint
 @app.get("/retrieve/{filename}")
-async def retrieve_user_data(filename: str, outpath: str, current_user: User = Depends(get_current_user)):
+async def retrieve_user_data(filename: str, current_user: User = Depends(get_current_user)):
     # TODO: not sure if we should take CID or filename to get from the redis db?
 
     # Access wallet_name and wallet_hotkey from current_user
@@ -218,12 +219,13 @@ async def retrieve_user_data(filename: str, outpath: str, current_user: User = D
             break  # No need to keep going if we returned data.
 
         if success:
-            # Save the data
-            # TODO: send this back to the user in addition to saving it locally?
-            # Assuming the client will be expecting the file back?
-            with open(outpath, "wb") as f:
+            # Save the data to a temporary file on the server
+            temp_file_path = "/tmp/" + filename
+            with open(temp_file_path, "wb") as f:
                 f.write(decrypted_data)
-            return {"message": f"Data retrieved and saved to {outpath}"}
+
+            # Return a FileResponse to send the file for download
+            return FileResponse(temp_file_path, filename=filename)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
