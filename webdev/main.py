@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from storage.validator.encryption import encrypt_data, decrypt_data_with_private_key
 from storage.api import StoreUserAPI, RetrieveUserAPI, get_query_api_axons
-from database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
-from database import Token, TokenData, User, UserInDB, store_file_metadata, get_file_metadata
+from webdev.database import startup, get_database, get_user, create_user, get_server_wallet, get_metagraph
+from webdev.database import Token, TokenData, User, UserInDB, store_file_metadata, get_file_metadata
 
 # Load the env configuration
 load_dotenv()
