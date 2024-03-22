@@ -2,6 +2,7 @@ import json
 import torch
 import bittensor as bt
 
+import os
 from os import getenv
 from redis import StrictRedis
 from datetime import datetime
@@ -9,6 +10,10 @@ from pydantic import BaseModel
 from typing import Optional, Union, List
 
 redis_db = None
+
+os.environ["REDIS_URL"] = "localhost"
+os.environ["REDIS_DB"] = 2
+os.environ["REDIS_PORT"] = 6379
 
 METAGRAPH_ATTRIBUTES = [
     "n",
