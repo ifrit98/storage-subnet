@@ -26,7 +26,6 @@ def _check_redis_config(path):
 def _check_redis_settings(redis_conf_path):
     settings_to_check = [
         ("appendonly", ["appendonly yes"]),
-        ("save", ['save ""']),
     ]
 
     for setting, expected_values in settings_to_check:
