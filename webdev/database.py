@@ -12,6 +12,7 @@ from typing import Optional, Union, List
 redis_db = None
 
 os.environ["REDIS_URL"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
 os.environ["REDIS_DB"] = "2"
 os.environ["REDIS_PORT"] = "6379"
 
