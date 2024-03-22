@@ -1,6 +1,11 @@
+torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.2.0%2Bcpu.cxx11.abi-cp312-cp312-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'
+torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.2.1%2Bcpu.cxx11.abi-cp311-cp311-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.11'
+torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.abi-cp310-cp310-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.10'
+torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.abi-cp39-cp39-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.9'
+torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.abi-cp38-cp38-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.8'
+torch>=1.13.1 ; sys_platform != 'linux' or platform_machine != 'x86_64'
 bcrypt==4.1.2
-bittensor==6.7.2
-torch==2.0.1
+bittensor==6.9.3
 redis==5.0.1
 aioredis==2.0.1
 pycryptodome==3.19.1
@@ -12,9 +17,9 @@ py-multibase==1.0.3
 py-multicodec==0.2.1
 py-multihash==2.0.1
 ipfs-cid==1.0.0
-fastapi==0.99.1
+fastapi==0.109.2
 python-jose==3.3.0
-uvicorn==0.22.0
+uvicorn==0.27.1
 passlib==1.7.4
 aioredis==2.0.1
 pyinstrument==4.6.1
