@@ -29,7 +29,7 @@ import threading
 
 from storage import protocol
 from storage.shared.ecc import hash_data
-from storage.shared.checks import check_environment
+from storage.shared.checks import check_environment, check_registration
 from storage.shared.utils import get_redis_password
 from storage.shared.subtensor import get_current_block
 from storage.validator.config import config, check_config, add_args
@@ -108,12 +108,7 @@ class neuron:
         self.wallet.create_if_non_existent()
 
         if not self.config.wallet._mock:
-            if not self.subtensor.is_hotkey_registered_on_subnet(
-                hotkey_ss58=self.wallet.hotkey.ss58_address, netuid=self.config.netuid
-            ):
-                raise Exception(
-                    f"Wallet not currently registered on netuid {self.config.netuid}, please first register wallet before running"
-                )
+            check_registration(self.subtensor, self.wallet, self.config.netuid)
 
         bt.logging.debug(f"wallet: {str(self.wallet)}")
 
@@ -234,9 +229,6 @@ class neuron:
             if isinstance(decoded_data, str)
             else decoded_data
         )
-        validator_encrypted_data, validator_encryption_payload = encrypt_data(
-            decoded_data, self.encryption_wallet
-        )
 
         # Hash the original data to avoid data confusion
         content_id = generate_cid_string(decoded_data)
@@ -246,6 +238,10 @@ class neuron:
             bt.logging.warning(f"Hash {content_id} already exists on the network.")
             synapse.data_hash = content_id
             return synapse
+
+        validator_encrypted_data, validator_encryption_payload = encrypt_data(
+            decoded_data, self.encryption_wallet
+        )
 
         if isinstance(validator_encryption_payload, dict):
             validator_encryption_payload = json.dumps(validator_encryption_payload)
@@ -285,12 +281,15 @@ class neuron:
         )
 
     async def store_priority(self, synapse: protocol.StoreUser) -> float:
-        caller_uid = self.metagraph.hotkeys.index(
-            synapse.dendrite.hotkey
-        )  # Get the caller index.
-        priority = float(
-            self.metagraph.S[caller_uid]
-        )  # Return the stake as the priority.
+        if synapse.dendrite.hotkey in self.metagraph.hotkeys:
+            caller_uid = self.metagraph.hotkeys.index(
+                synapse.dendrite.hotkey
+            )  # Get the caller index.
+            priority = float(
+                self.metagraph.S[caller_uid]
+            )  # Return the stake as the priority.
+        else:
+            priority = 1 # TODO: find a good default value for this
         bt.logging.trace(
             f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority
         )

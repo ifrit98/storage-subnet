@@ -19,16 +19,17 @@
 
 import torch
 import base64
+import random
 import bittensor as bt
 from abc import ABC, abstractmethod
 from typing import Any, List, Union
 from storage.protocol import StoreUser
 from storage.validator.cid import generate_cid_string
 from storage.validator.encryption import encrypt_data
-from storage.api import SubnetsAPI
+from storage.api.utils import get_query_api_axons
 
 
-class StoreUserAPI(SubnetsAPI):
+class StoreUserAPI(bt.SubnetsAPI):
     def __init__(self, wallet: "bt.wallet"):
         super().__init__(wallet)
         self.netuid = 21
@@ -51,8 +52,9 @@ class StoreUserAPI(SubnetsAPI):
 
         return synapse
 
-    def process_responses(self, responses: List[Union["bt.Synapse", Any]]) -> str:
+    def process_responses(self, responses: List[Union["bt.Synapse", Any]], return_failures: bool = False) -> Union[str, List[str]]:
         success = False
+        successful_hotkeys = []
         failure_modes = {"code": [], "message": []}
         for response in responses:
             if response.dendrite.status_code != 200:
@@ -65,9 +67,9 @@ class StoreUserAPI(SubnetsAPI):
                 if isinstance(response.data_hash, bytes)
                 else response.data_hash
             )
-            bt.logging.debug("received data CID: {}".format(stored_cid))
             success = True
-            break
+            bt.logging.debug(f"Successfully stored CID {stored_cid} with hotkey {response.axon.hotkey}")
+            successful_hotkeys.append(response.axon.hotkey)
 
         if success:
             bt.logging.info(
@@ -79,4 +81,64 @@ class StoreUserAPI(SubnetsAPI):
             )
             stored_cid = ""
 
-        return stored_cid
+        if return_failures:
+            return stored_cid, successful_hotkeys, failure_modes
+
+        return stored_cid, successful_hotkeys
+
+
+async def store(
+    data: bytes,
+    wallet: "bt.wallet",
+    subtensor: "bt.subtensor" = None,
+    chain_endpoint: str = "finney",
+    netuid: int = 21,
+    ttl: int = 60 * 60 * 24 * 30,
+    encrypt: bool = False,
+    encoding: str = "utf-8",
+    timeout: int = 60,
+    uid: int = None,
+):
+
+    """
+    Stores data on the Bittensor network.
+    
+    Args:
+        data (bytes): The data to store.
+        wallet (bittensor.wallet): The wallet instance to use for storing data.
+        subtensor (bittensor.subtensor, optional): The subtensor instance to use for storing data. Defaults to None.
+        chain_endpoint (str, optional): The chain endpoint to use for storing data. Defaults to "finney".
+        netuid (int, optional): The netuid to use for storing data. Defaults to 21.
+        ttl (int, optional): The time-to-live for the stored data. Defaults to 60 * 60 * 24 * 30.
+        encrypt (bool, optional): Whether to encrypt the data. Defaults to False.
+        encoding (str, optional): The encoding of the data. Defaults to "utf-8".
+        timeout (int, optional): The timeout in seconds for storing data. Defaults to 60.
+        uid (int, optional): The UID of a specific API node to use for storing data. Defaults to None.
+
+    Returns:
+        str: The CID of the stored data.
+        hotkeys: The hotkeys of the successfully stored data.
+    """
+    store_handler = StoreUserAPI(wallet)
+
+    subtensor = subtensor or bt.subtensor(chain_endpoint)
+    metagraph = subtensor.metagraph(netuid=netuid)
+
+    uids = None
+    if uid is not None:
+        uids = [uid]
+
+    all_axons = await get_query_api_axons(wallet=wallet, metagraph=metagraph, uids=uids)
+    axons = random.choices(all_axons, k=3)
+
+    cid, hotkeys = await store_handler(
+        axons=axons,
+        data=data,
+        encrypt=encrypt,
+        ttl=ttl,
+        encoding=encoding,
+        uid=uid,
+        timeout=timeout,
+    )
+
+    return cid, hotkeys

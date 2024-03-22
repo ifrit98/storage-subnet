@@ -2,7 +2,7 @@ import os
 import redis
 import unittest
 from passlib.context import CryptContext
-from database import get_database, startup, UserInDB, redis_create_user, redis_get_user
+from database import get_database, startup, UserInDB, create_user, get_user
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -33,10 +33,10 @@ class UserRedisTestCase(unittest.TestCase):
             wallet_hotkey="default",
             wallet_mnemonic="ocean bean until sauce near place labor admit dismiss long asthma tunnel"
         )
-        redis_create_user(fake_user)
+        create_user(fake_user)
 
         # Retrieve the user
-        retrieved_user = redis_get_user("janedoe")
+        retrieved_user = get_user("janedoe")
 
         # Assert equality
         self.assertIsNotNone(retrieved_user)

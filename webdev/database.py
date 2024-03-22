@@ -6,7 +6,7 @@ from os import getenv
 from redis import StrictRedis
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 redis_db = None
 
@@ -91,8 +91,8 @@ def create_user(user: UserInDB):
     user_str = serialize_model(user)
     redis_db.set(username, user_str)
 
-def store_file_metadata(filename: str, cid: str, payload: dict):
-    redis_db.set(filename, json.dumps({"cid": cid, "encryption_payload": payload}))
+def store_file_metadata(filename: str, cid: str, hotkeys: List[str], payload: dict):
+    redis_db.set(filename, json.dumps({"cid": cid, "hotkeys": hotkeys, "encryption_payload": payload}))
 
 def get_file_metadata(filename: str) -> Optional[dict]:
     if redis_db.get(filename) is None:
@@ -102,12 +102,16 @@ def get_file_metadata(filename: str) -> Optional[dict]:
 def get_metagraph(netuid: int = 22, network: str = "test") -> bt.metagraph:
     metagraph_str = redis_db.get(f"metagraph:{netuid}")
     if metagraph_str:
-        return deserialize_metagraph(metagraph_str.decode())
-    else:
-        metagraph = bt.subtensor(network).metagraph(netuid)
-        metagraph_str = serialize_metagraph(metagraph, dump=True)
-        redis_db.set(f"metagraph:{netuid}", metagraph_str)
-        return metagraph
+        metagraph = deserialize_metagraph(metagraph_str.decode())
+        last_block = metagraph.block.item()
+        current_block = bt.subtensor(network).get_current_block()
+        if current_block - last_block < 100:
+            return metagraph
+
+    metagraph = bt.subtensor(network).metagraph(netuid)
+    metagraph_str = serialize_metagraph(metagraph, dump=True)
+    redis_db.set(f"metagraph:{netuid}", metagraph_str)
+    return metagraph
 
 def serialize_metagraph(metagraph_obj: bt.metagraph, dump=False) -> Union[str, dict]:
     serialized_data = {}

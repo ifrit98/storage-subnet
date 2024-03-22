@@ -1,5 +1,6 @@
 import requests
 import argparse
+from typing import List, Tuple
 
 def register_user(base_url, username: str, password: str):
     response = requests.post(f"{base_url}/register/", json={"username": username, "password": password})
@@ -11,7 +12,34 @@ def get_access_token(base_url, username: str, password: str):
     return response.json()['access_token']
 
 def upload_file(base_url, token: str, file_content: str):
-    files = {"file": ("test.txt", file_content)}
+    # Correctly format the files parameter to include the file content and filename
+    files = {'files': ('test.txt', file_content, 'text/plain')}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Make the POST request with the files and headers
+    response = requests.post(f"{base_url}/uploadfiles/", files=files, headers=headers)
+    return response.json()
+
+def upload_files(base_url, token: str, files_content: list):
+    """
+    Upload multiple files to the FastAPI server.
+
+    :param base_url: The base URL where the FastAPI app is running.
+    :param token: The access token for authorization.
+    :param files_content: A list of tuples, each containing the filename and the file content.
+    """
+    # The 'files' parameter is a list of tuples, each representing a file.
+    # Each tuple is in the format: ('files', (filename, content, 'MIME-Type'))
+    files = [('files', (filename, content, 'text/plain')) for filename, content in files_content]
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Make the POST request with the files and headers
+    response = requests.post(f"{base_url}/uploadfiles/", files=files, headers=headers)
+    return response.json()
+
+def upload_multiple_files(base_url, token: str, files_content: List[Tuple[str, str]]):
+    files = [('files', (file_name, content)) for file_name, content in files_content]
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{base_url}/uploadfiles/", files=files, headers=headers)
     return response.json()
@@ -82,5 +110,5 @@ def main():
     retrieved_data = retrieve_user_data(base_url, token, upload_response['file_hash'])
     print(retrieved_data)
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
