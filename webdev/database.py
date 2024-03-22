@@ -13,7 +13,7 @@ redis_db = None
 
 os.environ["REDIS_URL"] = "localhost"
 os.environ["REDIS_DB"] = "2"
-os.environ["REDIS_PORT"] = 6379
+os.environ["REDIS_PORT"] = "6379"
 
 METAGRAPH_ATTRIBUTES = [
     "n",
