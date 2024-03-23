@@ -347,8 +347,7 @@ async def get_all_full_hashes(database: aioredis.Redis) -> List[str]:
         A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
     """
     data_hashes = []
-    keys = await database.scan_iter("*")
-    for key in keys:
+    async for key in database.scan_iter("*"):
         if not key.startswith(b"file:"):
             continue
         data_hashes.append(key.decode("utf-8").split(":")[1])
@@ -1096,7 +1095,7 @@ async def get_network_capacity(database) -> int:
 
 async def current_validator_storage(database) -> int:
     """
-    Get the total storage capacity of the network in bytes.
+    Get the current storage capacity of the network in bytes.
     """
     hotkeys = await active_hotkeys(database)
 
@@ -1107,7 +1106,7 @@ async def current_validator_storage(database) -> int:
     return current_storage
 
 
-async def tier_statistics(databse: aioredis.Redis) -> Dict[str, Dict[str, int]]:
+async def tier_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, int]]:
     tier_counts = {
         "Super Saiyan": 0,
         "Diamond": 0,
@@ -1146,3 +1145,12 @@ async def tier_statistics(databse: aioredis.Redis) -> Dict[str, Dict[str, int]]:
         "usage": tier_usage,
         "percent_usage": tier_percent_usage
     }
+
+
+async def total_successful_requests(database: aioredis.Redis) -> int:
+    return sum(
+        [
+            int(v.get('total_successes', 0))
+            for k,v in (await get_miner_statistics(r)).items()
+        ]
+    )
