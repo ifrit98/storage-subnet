@@ -1160,6 +1160,8 @@ async def tier_statistics(database: aioredis.Redis, by_tier: bool = False) -> Di
 
         return inverted_dict
 
+    return type_dict
+
 async def total_successful_requests(database: aioredis.Redis) -> int:
     return sum(
         [
@@ -1167,3 +1169,52 @@ async def total_successful_requests(database: aioredis.Redis) -> int:
             for k,v in (await get_miner_statistics(database)).items()
         ]
     )
+
+
+async def compute_by_tier_stats(database):
+
+    stats = await get_miner_statistics(database)
+
+    tier_stats = {}
+
+    for _, d in stats.items():
+        tier = d['tier']
+
+        if tier not in tier_stats:
+            tier_stats[tier] = {
+                'store_attempts': 0,
+                'store_successes': 0,
+                'challenge_attempts': 0,
+                'challenge_successes': 0,
+                'retrieve_attempts': 0,
+                'retrieve_successes': 0,
+                'total_current_attempts': 0,
+                'total_current_successes': 0,
+                'total_global_successes': 0,
+            }
+
+        tier_stats[tier]['store_attempts'] += int(d['store_attempts'])
+        tier_stats[tier]['store_successes'] += int(d['store_successes'])
+        tier_stats[tier]['challenge_attempts'] += int(d['challenge_attempts'])
+        tier_stats[tier]['challenge_successes'] += int(d['challenge_successes'])
+        tier_stats[tier]['retrieve_attempts'] += int(d['retrieve_attempts'])
+        tier_stats[tier]['retrieve_successes'] += int(d['retrieve_successes'])
+
+        tier_stats[tier]['total_current_attempts'] = sum([
+            tier_stats[tier]['store_attempts'], 
+            tier_stats[tier]['challenge_attempts'], 
+            tier_stats[tier]['retrieve_attempts']
+        ])
+        tier_stats[tier]['total_current_successes'] = sum([
+            tier_stats[tier]['store_successes'], 
+            tier_stats[tier]['challenge_successes'], 
+            tier_stats[tier]['retrieve_successes']
+        ])
+        tier_stats[tier]['total_global_successes'] += int(d['total_successes'])
+
+        total_attempts = tier_stats[tier]['total_current_attempts']
+        total_successes = tier_stats[tier]['total_current_successes']
+        success_rate = (total_successes / total_attempts * 100) if total_attempts else 0
+        tier_stats[tier]['success_rate'] = success_rate
+
+    return tier_stats
