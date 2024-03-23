@@ -54,6 +54,7 @@ Currently supporting `python>=3.9,<3.12`.
    - [Retrieval Phase](#retrieval-phase)
 8. [Reward System](#reward-system)
    - [Speed and Reliability in Decentralized Storage Mining](#speed-and-reliability-in-decentralized-storage-mining)
+   - [Viewing Wandb Runs](#viewing-wandb-runs)
 9. [Epoch UID Selection](#epoch-uid-selection)
 10. [Running FileTAO](#running-filetao)
     - [Running a Miner](#running-a-miner)
@@ -771,6 +772,8 @@ reward
 
 The tier system in FileTAO's decentralized storage network plays a pivotal role in ensuring the network's efficiency and reliability. By setting clear performance benchmarks and rewarding miners accordingly, the system fosters a competitive yet fair environment. This encourages continuous improvement among miners, ultimately leading to a robust and trustworthy decentralized storage solution.
 
+### Viewing Wandb Runs
+You can view validator provided run data on wandb by viewing the project found at this [link](https://wandb.ai/philanthrope/philanthropic-thunder/table). This provides information on miner statistics and tier level available to the public.
 
 ## Epoch UID selection
 Miners are chosen pseudorandomly using the current block hash as a random seed. This allows for public verification of which miners are selected for each challenge round (3 blocks).
