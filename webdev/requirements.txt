@@ -4,17 +4,24 @@ torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.a
 torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.abi-cp39-cp39-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.9'
 torch @ https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.0.1%2Bcpu.cxx11.abi-cp38-cp38-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.8'
 torch>=1.13.1 ; sys_platform != 'linux' or platform_machine != 'x86_64'
-bittensor==6.9.3 # should install torch without cuda and bypass bittensor req
+bcrypt==4.1.2
+bittensor==6.9.3
+filetao==2.1.0
 redis==5.0.1
+aioredis==2.0.1
 pycryptodome==3.19.1
 pyinstrument==4.6.1
 wandb==0.16.0
 morphys==1.0
+python-multipart==0.0.9
 py-multibase==1.0.3
 py-multicodec==0.2.1
 py-multihash==2.0.1
 ipfs-cid==1.0.0
+fastapi==0.99.1
 python-jose==3.3.0
+uvicorn==0.22.0
 passlib==1.7.4
-python-multipart==0.0.9
+aioredis==2.0.1
+pyinstrument==4.6.1
 python-dotenv==1.0.1

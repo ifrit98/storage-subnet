@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Retrieve File</title>
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <div class="top-bar">
+        <div class="nav-links">
+        {% if not request.session.token %}
+            <a href="{% url 'register' %}">Register</a>
+            <a href="{% url 'login' %}">Login</a>
+        {% else %}
+            <a href="{% url 'upload_file' %}">Upload File</a>
+            <a href="{% url 'retrieve_file' %}">Retrieve File</a>
+        {% endif %}
+        </div>
+        {% if request.session.token %}
+        <form action="{% url 'logout' %}" method="post">
+            {% csrf_token %}
+            <input type="submit" name="submit" value="Logout">
+        </form>
+        {% endif %}
+    </div>
+
+    <form class="login-form" method="post">
+        {% csrf_token %}
+        <input type="filehash" name="authkey" placeholder="File Hash" required>
+        <input type="submit" name="submit" value="Get File">
+    </form>
+</body>
+</html>
