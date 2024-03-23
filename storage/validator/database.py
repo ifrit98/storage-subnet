@@ -1106,7 +1106,7 @@ async def current_validator_storage(database) -> int:
     return current_storage
 
 
-async def tier_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, int]]:
+async def tier_statistics(database: aioredis.Redis, by_tier: bool = False) -> Dict[str, Dict[str, int]]:
     tier_counts = {
         "Super Saiyan": 0,
         "Diamond": 0,
@@ -1137,20 +1137,33 @@ async def tier_statistics(database: aioredis.Redis) -> Dict[str, Dict[str, int]]
             tier_capacity[tier] += int(v.get('storage_limit', 0))
             tier_usage[tier] += await total_hotkey_storage(hotkey, database, False)
 
-    tier_percent_usage = {k: 100 * (v / tier_capacity[k]) if tier_capacity[k] > 0 else 0 for k,v in tier_usage.items()}
+    tier_percent_usage = {
+        k: 100 * (v / tier_capacity[k]) if tier_capacity[k] > 0 else 0
+        for k,v in tier_usage.items()
+    }
 
-    return {
+    type_dict = {
         "counts": tier_counts, 
         "capacity": tier_capacity, 
         "usage": tier_usage,
         "percent_usage": tier_percent_usage
     }
 
+    if by_tier:
+        inverted_dict = {}
+
+        for category, tier_dict in type_dict.items():
+            for tier, value in tier_dict.items():
+                if tier not in inverted_dict:
+                    inverted_dict[tier] = {}
+                inverted_dict[tier][category] = value
+
+        return inverted_dict
 
 async def total_successful_requests(database: aioredis.Redis) -> int:
     return sum(
         [
             int(v.get('total_successes', 0))
-            for k,v in (await get_miner_statistics(r)).items()
+            for k,v in (await get_miner_statistics(database)).items()
         ]
     )
