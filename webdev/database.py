@@ -11,10 +11,10 @@ from typing import Optional, Union, List
 
 redis_db = None
 
-os.environ["REDIS_URL"] = "localhost"
-os.environ["REDIS_HOST"] = "localhost"
+#os.environ["REDIS_URL"] = "localhost"
+#os.environ["REDIS_HOST"] = "localhost"
 os.environ["REDIS_DB"] = "2"
-os.environ["REDIS_PORT"] = "6379"
+# os.environ["REDIS_PORT"] = "6379"
 
 METAGRAPH_ATTRIBUTES = [
     "n",
@@ -37,7 +37,8 @@ METAGRAPH_ATTRIBUTES = [
 ]
 
 def get_database() -> StrictRedis:
-    return StrictRedis(host=getenv("REDIS_HOST"), port=getenv("REDIS_PORT"), db=getenv("REDIS_DB")) if redis_db == None else redis_db
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+    return StrictRedis.from_url(redis_url) if redis_db == None else redis_db
 
 def startup():
     global redis_db
