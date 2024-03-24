@@ -61,6 +61,7 @@ Currently supporting `python>=3.9,<3.12`.
     - [Running a Validator](#running-a-validator)
     - [Running the API](#running-the-api)
     - [Setup WandB](#setup-wandb)
+    - [Testnet](#testnet)
 11. [Local Subtensor](#local-subtensor)
 12. [Database Schema Migration](#database-schema-migration)
 13. [Disable RDB](#disable-rdb)
@@ -1053,6 +1054,14 @@ No GPU is currently required to run either a validator or miner. This may change
 
 See [`min_compute.yml`](min_compute.yml) for complete details on minimum and recommended requirements.
 
+
+### Testnet
+FileTao runs a testnet to deploy miners and try out miners on `netuid 22`. 
+
+You can access this testnet by adding these to your script:
+```
+--subtensor.network test --netuid 22
+```
 
 ### Local Subtensor
 
