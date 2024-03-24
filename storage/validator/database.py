@@ -21,7 +21,7 @@ import time
 from redis import asyncio as aioredis
 import asyncio
 import bittensor as bt
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union, Optional, Tuple
 
 
 async def set_ttl_for_hash_and_hotkey(
@@ -347,8 +347,7 @@ async def get_all_full_hashes(database: aioredis.Redis) -> List[str]:
         A dictionary where keys are data hashes and values are lists of hotkeys associated with each data hash.
     """
     data_hashes = []
-    keys = await database.scan_iter("*")
-    for key in keys:
+    async for key in database.scan_iter("*"):
         if not key.startswith(b"file:"):
             continue
         data_hashes.append(key.decode("utf-8").split(":")[1])
@@ -463,13 +462,14 @@ async def hotkey_at_capacity(
 
 async def cache_hotkeys_capacity(
     hotkeys: List[str], database: aioredis.Redis, verbose: bool = False
-):
+) -> Dict[str, Tuple[int, Optional[int]]]:
     """
     Caches the capacity information for a list of hotkeys.
 
     Parameters:
         hotkeys (list): List of hotkey strings to check.
         database (aioredis.Redis): The Redis client instance.
+        verbose (bool): A flag indicating if verbose logging is enabled.
 
     Returns:
         dict: A dictionary with hotkeys as keys and a tuple of (total_storage, limit) as values.
@@ -497,7 +497,7 @@ async def cache_hotkeys_capacity(
     return hotkeys_capacity
 
 
-async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False):
+async def check_hotkeys_capacity(hotkeys_capacity, hotkey: str, verbose: bool = False) -> bool:
     """
     Checks if a hotkey is at capacity using the cached information.
 
@@ -594,7 +594,7 @@ async def get_redis_db_size(database: aioredis.Redis) -> int:
         int: Total size of all keys in bytes
     """
     total_size = 0
-    async for key in await database.scan_iter("*"):
+    async for key in database.scan_iter("*"):
         size = await database.execute_command("MEMORY USAGE", key)
         if size:
             total_size += size
@@ -1064,10 +1064,157 @@ async def delete_file_from_database(file_hash: str, database: aioredis.Redis):
         await database.delete(f"file:{file_hash}")
 
 
-def get_hash_keys(ss58_address, r):
+async def get_hash_keys(ss58_address: str, database: aioredis.Redis) -> List[str]:
     """
     Filter out the ttl: hashes from the hotkey hashes and return the list of keys.
     """
     return [
-        key for key in r.hkeys(f"hotkey:{ss58_address}") if not key.startswith(b"ttl:")
+        key for key in await database.hkeys(f"hotkey:{ss58_address}") if not key.startswith(b"ttl:")
     ]
+
+
+async def active_hotkeys(database: aioredis.Redis) -> List[str]:
+    """
+    Returns a list of all active hotkeys in the database.
+    """
+    return [
+        x.decode().split(":")[-1] async for x in database.scan_iter("hotkey:*")
+    ]
+
+
+async def get_network_capacity(database) -> int:
+    """
+    Get the total storage capacity of the network in bytes.
+    """
+    cap = 0
+    for k,v in (await get_miner_statistics(database)).items():
+        cap += int(v.get('storage_limit', 0))
+
+    return cap
+
+
+async def current_validator_storage(database) -> int:
+    """
+    Get the current storage capacity of the network in bytes.
+    """
+    hotkeys = await active_hotkeys(database)
+
+    current_storage = 0
+    for k, (cur, _) in (await cache_hotkeys_capacity(hotkeys, database)).items():
+        current_storage += cur
+
+    return current_storage
+
+
+async def tier_statistics(database: aioredis.Redis, by_tier: bool = False) -> Dict[str, Dict[str, int]]:
+    tier_counts = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    } 
+    tier_capacity = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    }
+    tier_usage = {
+        "Super Saiyan": 0,
+        "Diamond": 0,
+        "Gold": 0,
+        "Silver": 0,
+        "Bronze": 0,
+    }
+
+    for k,v in (await get_miner_statistics(database)).items():
+        tier = v.get('tier', None)
+        if tier:
+            hotkey = k.split(":")[-1]
+            tier_counts[tier] += 1
+            tier_capacity[tier] += int(v.get('storage_limit', 0))
+            tier_usage[tier] += await total_hotkey_storage(hotkey, database, False)
+
+    tier_percent_usage = {
+        k: 100 * (v / tier_capacity[k]) if tier_capacity[k] > 0 else 0
+        for k,v in tier_usage.items()
+    }
+
+    type_dict = {
+        "counts": tier_counts, 
+        "capacity": tier_capacity, 
+        "usage": tier_usage,
+        "percent_usage": tier_percent_usage
+    }
+
+    if by_tier:
+        inverted_dict = {}
+
+        for category, tier_dict in type_dict.items():
+            for tier, value in tier_dict.items():
+                if tier not in inverted_dict:
+                    inverted_dict[tier] = {}
+                inverted_dict[tier][category] = value
+
+        return inverted_dict
+
+    return type_dict
+
+async def total_successful_requests(database: aioredis.Redis) -> int:
+    return sum(
+        [
+            int(v.get('total_successes', 0))
+            for k,v in (await get_miner_statistics(database)).items()
+        ]
+    )
+
+
+async def compute_by_tier_stats(database):
+
+    stats = await get_miner_statistics(database)
+
+    tier_stats = {}
+
+    for _, d in stats.items():
+        tier = d['tier']
+
+        if tier not in tier_stats:
+            tier_stats[tier] = {
+                'store_attempts': 0,
+                'store_successes': 0,
+                'challenge_attempts': 0,
+                'challenge_successes': 0,
+                'retrieve_attempts': 0,
+                'retrieve_successes': 0,
+                'total_current_attempts': 0,
+                'total_current_successes': 0,
+                'total_global_successes': 0,
+            }
+
+        tier_stats[tier]['store_attempts'] += int(d['store_attempts'])
+        tier_stats[tier]['store_successes'] += int(d['store_successes'])
+        tier_stats[tier]['challenge_attempts'] += int(d['challenge_attempts'])
+        tier_stats[tier]['challenge_successes'] += int(d['challenge_successes'])
+        tier_stats[tier]['retrieve_attempts'] += int(d['retrieve_attempts'])
+        tier_stats[tier]['retrieve_successes'] += int(d['retrieve_successes'])
+
+        tier_stats[tier]['total_current_attempts'] = sum([
+            tier_stats[tier]['store_attempts'], 
+            tier_stats[tier]['challenge_attempts'], 
+            tier_stats[tier]['retrieve_attempts']
+        ])
+        tier_stats[tier]['total_current_successes'] = sum([
+            tier_stats[tier]['store_successes'], 
+            tier_stats[tier]['challenge_successes'], 
+            tier_stats[tier]['retrieve_successes']
+        ])
+        tier_stats[tier]['total_global_successes'] += int(d['total_successes'])
+
+        total_attempts = tier_stats[tier]['total_current_attempts']
+        total_successes = tier_stats[tier]['total_current_successes']
+        success_rate = (total_successes / total_attempts * 100) if total_attempts else 0
+        tier_stats[tier]['success_rate'] = success_rate
+
+    return tier_stats
