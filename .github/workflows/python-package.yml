@@ -5,9 +5,13 @@ name: Python package
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main", "staging", "release/.*" ]
+    branches:
+      - main
+      - staging
+      - release/*
 
 jobs:
   build:

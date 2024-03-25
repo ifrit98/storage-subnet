@@ -1,0 +1,95 @@
+version: '3.8'
+
+volumes:
+  redis-prod-data:
+    name: "filetao-redis-data"
+
+services:
+  common: &common
+    #image: noimageyet
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ${BT_WALLETS_BASE_PATH}/.bittensor/wallets:/root/.bittensor/wallets
+      - ${REDIS_CONF}:/etc/redis/redis.conf
+      - ./scripts:/install/scripts
+
+  filetao-prod: &filetao-prod
+    <<: *common
+    build:
+      target: filetao-prod
+    network_mode: host
+    command:
+      - /bin/bash
+      - -c
+      - |
+        filetao run ${FILETAO_NODE} \
+          --wallet.name ${FILETAO_WALLET}  \
+          --wallet.hotkey ${FILETAO_HOTKEY} \
+          --netuid ${FILETAO_NETUID} \
+          --axon.port ${FILETAO_EXTERNAL_PORT} \
+          --axon.external_port ${FILETAO_EXTERNAL_PORT} \
+          --subtensor.network ${FILETAO_SUBTENSOR} \
+          --database.host localhost \
+          --database.port ${REDIS_PORT} \
+          --database.redis_password ${REDIS_PASSWORD} \
+          ${FILETAO_EXTRA_OPTIONS}
+
+  filetao-miner-prod:
+    <<: *filetao-prod
+    container_name: filetao-miner-prod
+    volumes:
+      - ${BT_WALLETS_BASE_PATH}/.bittensor/wallets:/root/.bittensor/wallets
+      - ${REDIS_CONF}:/etc/redis/redis.conf
+      - ${FILETAO_MINER_DATA_DIR}:/root/.data/
+
+  filetao-validator-prod:
+    <<: *filetao-prod
+    container_name: filetao-validator-prod
+    depends_on:
+      - filetao-api-prod
+
+  filetao-api-prod:
+    <<: *filetao-prod
+    container_name: filetao-api-prod
+    command:
+      - /bin/bash
+      - -c
+      - |
+        filetao run api \
+          --wallet.name ${FILETAO_WALLET}  \
+          --wallet.hotkey ${FILETAO_HOTKEY} \
+          --netuid ${FILETAO_NETUID} \
+          --axon.port ${FILETAO_EXTERNAL_PORT} \
+          --axon.external_port ${FILETAO_API_EXTERNAL_PORT} \
+          --subtensor.network ${FILETAO_SUBTENSOR} \
+          --database.host localhost \
+          --database.port ${REDIS_PORT} \
+          --database.redis_password ${REDIS_PASSWORD} \
+          ${FILETAO_EXTRA_OPTIONS}
+
+  redis:
+    build:
+      context: .
+      args:
+        REDIS_CONF: ${REDIS_CONF}
+      dockerfile: Dockerfile.redis
+    container_name: filetao-redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--raw", "incr", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+    command:
+      - redis-server
+      - /etc/redis/redis.conf
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis-prod-data:/var/lib/redis

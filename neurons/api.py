@@ -79,8 +79,14 @@ class neuron:
         bt.logging(config=self.config, logging_dir=self.config.neuron.full_path)
         print(self.config)
 
+        redis_password = get_redis_password(self.config.database.redis_password)
         try:
-            asyncio.run(check_environment(self.config.database.redis_conf_path))
+            asyncio.run(check_environment(
+                self.config.database.redis_conf_path,
+                self.config.database.host,
+                self.config.database.port,
+                redis_password
+            ))
         except AssertionError as e:
             bt.logging.warning(
                 f"Something is missing in your environment: {e}. Please check your configuration, use the README for help, and try again."
@@ -131,7 +137,6 @@ class neuron:
 
         # Setup database
         bt.logging.info("loading database")
-        redis_password = get_redis_password(self.config.database.redis_password)
         self.database = aioredis.StrictRedis(
             host=self.config.database.host,
             port=self.config.database.port,
@@ -150,7 +155,7 @@ class neuron:
         self.my_subnet_uid = self.metagraph.hotkeys.index(
             self.wallet.hotkey.ss58_address
         )
-        bt.logging.info(f"Running validator on uid: {self.my_subnet_uid}")
+        bt.logging.info(f"Running validator (api) on uid: {self.my_subnet_uid}")
 
         bt.logging.debug("serving ip to chain...")
         try:

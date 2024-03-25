@@ -74,15 +74,15 @@ COMMANDS = {
         },
     },
     "run": {
-         "name": "run",
-         "aliases": ["n", "run"],
-         "help": "Commands for running neurons in this subnetwork.",
-         "commands": {
-             "miner": RunMiner,
-             "validator": RunValidator,
-             "api": RunApi,
-         },
-     },
+        "name": "run",
+        "aliases": ["n", "run"],
+        "help": "Commands for running neurons in this subnetwork.",
+        "commands": {
+            "miner": RunMiner,
+            "validator": RunValidator,
+            "api": RunApi,
+        },
+    },
 }
 
 
